@@ -1,35 +1,336 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ===========================================================
+// BILLIARDS ERP – MULTI‑TENANT + POS SCHEMA
+// ===========================================================
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
+// ---------------------------
+// ENUMS
+// ---------------------------
+
 enum UserRole {
-  USER
-  SUPERADMIN
+  USER        // Legacy role - will be migrated to SELLER
+  SELLER      // Regular staff user
+  ADMIN       // Venue manager
+  SUPERADMIN  // Platform‑level operator (no company)
 }
 
-model Profile {
-  id            String               @id @default(cuid())
-  userId        String               @unique
-  avatarUrl     String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  active        Boolean              @default(true)
-  firstName     String?              @map("first_name")
-  lastName      String?              @map("last_name")
-  role          UserRole             @default(USER)
+enum InventoryTransactionType {
+  INCOMING    // Stock‑in, purchase, return
+  OUTGOING    // Sale, usage, loss
+  ADJUSTMENT  // Manual correction
+}
 
-  @@index([userId])
+enum FinanceCategoryType {
+  INCOME
+  EXPENSE
+}
+
+// ---------------------------
+// TENANT – COMPANY
+// ---------------------------
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   // trading name
+  address   String?  @db.Text
+  phone     String?
+  timezone  String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  profiles             Profile[]
+  tables              Table[]
+  tableSessions       TableSession[]
+  tableMaintenances   TableMaintenance[]
+  tableReservations   TableReservation[]
+  activityLogs        TableActivityLog[]
+  inventoryCategories InventoryCategory[]
+  inventoryItems      InventoryItem[]
+  posOrders           PosOrder[]
+  inventoryTransactions InventoryTransaction[]
+  financeCategories   FinanceCategory[]
+  financeTransactions FinanceTransaction[]
+
+  @@map("companies")
+}
+
+// ---------------------------
+// USER & STAFF
+// ---------------------------
+
+model Profile {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @unique @db.Uuid
+  companyId String?   @map("company_id") @db.Uuid
+  avatarUrl String?   @db.Text
+  firstName String?   @map("first_name")
+  lastName  String?   @map("last_name")
+  role      UserRole  @default(USER)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company              Company?              @relation(fields: [companyId], references: [id])
+  tableSessions        TableSession[]
+  activityLogs         TableActivityLog[]
+  inventoryTransactions InventoryTransaction[]
+  financeTransactions  FinanceTransaction[]
+
+  @@index([companyId, userId])
   @@map("profiles")
+}
+
+// ---------------------------
+// TABLE & SESSION MANAGEMENT
+// ---------------------------
+
+model Table {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  name       String
+  status     String?  // AVAILABLE / BUSY / MAINTENANCE
+  hourlyRate Decimal? @map("hourly_rate") @db.Decimal(10, 2)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company         Company           @relation(fields: [companyId], references: [id])
+  sessions        TableSession[]
+  maintenances    TableMaintenance[]
+  reservations    TableReservation[]
+
+  @@map("tables")
+}
+
+model TableSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  tableId     String    @map("table_id") @db.Uuid
+  staffId     String?   @map("staff_id") @db.Uuid
+  startedAt   DateTime  @map("started_at") @db.Timestamptz()
+  endedAt     DateTime? @map("ended_at") @db.Timestamptz()
+  durationMin Int?      @map("duration_min")
+  totalCost   Decimal?  @map("total_cost") @db.Decimal(10, 2)
+  status      String?   // ACTIVE / CLOSED / CANCELLED
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company    Company     @relation(fields: [companyId], references: [id])
+  table      Table      @relation(fields: [tableId], references: [id])
+  staff      Profile?   @relation(fields: [staffId], references: [id])
+  posOrders  PosOrder[]
+
+  @@map("table_sessions")
+}
+
+model TableMaintenance {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  tableId       String   @map("table_id") @db.Uuid
+  description   String?  @db.Text
+  maintenanceAt DateTime @map("maintenance_at") @db.Timestamptz()
+  cost          Decimal? @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company    Company    @relation(fields: [companyId], references: [id])
+  table      Table     @relation(fields: [tableId], references: [id])
+
+  @@map("table_maintenance")
+}
+
+model TableReservation {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  tableId       String   @map("table_id") @db.Uuid
+  customerName  String?  @map("customer_name")
+  customerPhone String?  @map("customer_phone")
+  reservedFrom  DateTime @map("reserved_from") @db.Timestamptz()
+  reservedTo    DateTime @map("reserved_to") @db.Timestamptz()
+  status        String?  // PENDING / CONFIRMED / CANCELLED
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company    Company    @relation(fields: [companyId], references: [id])
+  table      Table     @relation(fields: [tableId], references: [id])
+
+  @@map("table_reservations")
+}
+
+// ---------------------------
+// ACTIVITY LOG
+// ---------------------------
+
+model TableActivityLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  company    Company    @relation(fields: [companyId], references: [id])
+  user       Profile?   @relation(fields: [userId], references: [id])
+
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, userId])
+  @@map("table_activity_log")
+}
+
+// ---------------------------
+// INVENTORY
+// ---------------------------
+
+model InventoryCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company    Company         @relation(fields: [companyId], references: [id])
+  items      InventoryItem[]
+
+  @@map("inventory_categories")
+}
+
+model InventoryItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  categoryId        String?  @map("category_id") @db.Uuid
+  name              String
+  sku               String?  @unique
+  quantity          Int      @default(0)
+  criticalThreshold Int      @default(5) @map("critical_threshold")
+  price             Decimal? @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company           Company                 @relation(fields: [companyId], references: [id])
+  category          InventoryCategory?      @relation(fields: [categoryId], references: [id])
+  transactions      InventoryTransaction[]
+  posOrderItems     PosOrderItem[]
+
+  @@map("inventory_items")
+}
+
+// ---------------------------
+// POS – SALES
+// ---------------------------
+
+model PosOrder {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  orderNumber     String   @map("order_number")
+  staffId         String?  @map("staff_id") @db.Uuid
+  tableSessionId  String?  @map("table_session_id") @db.Uuid
+  totalAmount     Decimal? @map("total_amount") @db.Decimal(10, 2)
+  paidAmount      Decimal? @map("paid_amount") @db.Decimal(10, 2)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company       Company        @relation(fields: [companyId], references: [id])
+  tableSession  TableSession?  @relation(fields: [tableSessionId], references: [id])
+  orderItems    PosOrderItem[]
+
+  @@unique([companyId, orderNumber])
+  @@map("pos_orders")
+}
+
+model PosOrderItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  quantity   Int
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(10, 2)
+  lineTotal  Decimal  @map("line_total") @db.Decimal(10, 2)
+
+  // Relations
+  order               PosOrder              @relation(fields: [orderId], references: [id])
+  item                InventoryItem         @relation(fields: [itemId], references: [id])
+  inventoryTransaction InventoryTransaction?
+
+  @@map("pos_order_items")
+}
+
+// ---------------------------
+// INVENTORY ↔ POS LINK
+// ---------------------------
+
+model InventoryTransaction {
+  id              String                   @id @default(uuid()) @db.Uuid
+  companyId       String                   @map("company_id") @db.Uuid
+  itemId          String                   @map("item_id") @db.Uuid
+  posOrderItemId  String?                  @unique @map("pos_order_item_id") @db.Uuid
+  transactionType InventoryTransactionType @map("transaction_type")
+  quantityDelta   Int                      @map("quantity_delta")
+  note            String?                  @db.Text
+  staffId         String?                  @map("staff_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  company       Company      @relation(fields: [companyId], references: [id])
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+  posOrderItem  PosOrderItem? @relation(fields: [posOrderItemId], references: [id])
+  staff         Profile?      @relation(fields: [staffId], references: [id])
+
+  @@map("inventory_transactions")
+}
+
+// ---------------------------
+// FINANCE
+// ---------------------------
+
+model FinanceCategory {
+  id           String              @id @default(uuid()) @db.Uuid
+  companyId    String             @map("company_id") @db.Uuid
+  name         String
+  categoryType FinanceCategoryType @map("category_type")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company       Company              @relation(fields: [companyId], references: [id])
+  transactions  FinanceTransaction[]
+
+  @@map("finance_categories")
+}
+
+model FinanceTransaction {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  categoryId      String   @map("category_id") @db.Uuid
+  amount          Decimal  @db.Decimal(10, 2)
+  transactionDate DateTime @map("transaction_date") @db.Date
+  description     String?  @db.Text
+  staffId         String?  @map("staff_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  company   Company         @relation(fields: [companyId], references: [id])
+  category  FinanceCategory @relation(fields: [categoryId], references: [id])
+  staff     Profile?       @relation(fields: [staffId], references: [id])
+
+  @@map("finance_transactions")
 }
