@@ -86,8 +86,15 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const { userId, firstName, lastName, avatarUrl } = data;
 
+    if (!userId) {
+      return NextResponse.json(
+        { error: "User ID is required" },
+        { status: 400 }
+      );
+    }
+
     // If userId is provided directly (during signup flow)
-    if (userId) {
+    try {
       // Check if profile already exists
       const existingProfile = await prisma.profile.findUnique({
         where: { userId },
@@ -104,61 +111,29 @@ export async function POST(request: NextRequest) {
       const newProfile = await prisma.profile.create({
         data: {
           userId,
-          firstName,
-          lastName,
-          avatarUrl,
-          active: true,
-          role: "USER",
+          firstName: firstName || null,
+          lastName: lastName || null,
+          avatarUrl: avatarUrl || null,
+          role: "USER", // This field has a default in the schema but we set it explicitly
+          active: true, // This field has a default in the schema but we set it explicitly
         },
       });
 
       return NextResponse.json(newProfile, { status: 201 });
-    }
-
-    // Normal flow requiring authentication
-    const supabase = createRouteHandlerClient({ cookies });
-
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const authenticatedUserId = session.user.id;
-
-    // Check if profile already exists
-    const existingProfile = await prisma.profile.findUnique({
-      where: { userId: authenticatedUserId },
-    });
-
-    if (existingProfile) {
+    } catch (dbError) {
+      console.error("Database error creating profile:", dbError);
+      const errorMessage =
+        dbError instanceof Error ? dbError.message : String(dbError);
       return NextResponse.json(
-        { error: "Profile already exists" },
-        { status: 409 }
+        { error: "Database error creating profile", details: errorMessage },
+        { status: 500 }
       );
     }
-
-    // Create profile in the database
-    const newProfile = await prisma.profile.create({
-      data: {
-        userId: authenticatedUserId,
-        firstName,
-        lastName,
-        avatarUrl,
-        active: true,
-        role: "USER",
-      },
-    });
-
-    return NextResponse.json(newProfile, { status: 201 });
   } catch (error) {
-    console.error("Error creating profile:", error);
+    console.error("Error in profile creation endpoint:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Failed to create profile" },
+      { error: "Failed to create profile", details: errorMessage },
       { status: 500 }
     );
   }

@@ -21,6 +21,7 @@ import {
   UserCog,
   UserX,
   Users,
+  Building2,
 } from "lucide-react";
 import type { SidebarData } from "../types";
 
@@ -57,9 +58,9 @@ export const sidebarData: SidebarData = {
           icon: LayoutDashboard,
         },
         {
-          title: "Tasks",
-          url: "/tasks",
-          icon: CheckSquare,
+          title: "Companies",
+          url: "/companies",
+          icon: Building2,
         },
         {
           title: "Apps",

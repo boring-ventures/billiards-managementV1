@@ -99,7 +99,6 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             userId: user.id,
             firstName: data.firstName,
             lastName: data.lastName,
-            birthDate: data.birthDate,
             avatarUrl,
           }),
         });
@@ -112,6 +111,12 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
           result = text ? JSON.parse(text) : {};
 
           if (!response.ok) {
+            console.error("Profile creation error:", {
+              status: response.status,
+              statusText: response.statusText,
+              result,
+            });
+
             throw new Error(
               typeof result.error === "string"
                 ? result.error

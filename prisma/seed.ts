@@ -15,8 +15,7 @@ async function main() {
     data: {
       name: "Cue Masters Billiards",
       address: "123 Main Street, Downtown, NY 10001",
-      phone: "(212) 555-1234",
-      timezone: "America/New_York",
+      phone: "(212) 555-1234"
     },
   });
 
@@ -24,8 +23,7 @@ async function main() {
     data: {
       name: "Pocket Aces Pool Hall",
       address: "456 Broadway Ave, Los Angeles, CA 90001",
-      phone: "(323) 555-6789",
-      timezone: "America/Los_Angeles",
+      phone: "(323) 555-6789"
     },
   });
 
