@@ -11,6 +11,20 @@ const companySchema = z.object({
   phone: z.string().optional(),
 });
 
+// Function to check if user has super admin role
+async function checkSuperAdminRole(userId: string) {
+  try {
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: { role: true },
+    });
+    return profile?.role === "SUPERADMIN";
+  } catch (error) {
+    console.error("Failed to check user role:", error);
+    return false;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -20,6 +34,15 @@ export async function GET(req: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check if user has super admin role
+    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires super admin access" },
+        { status: 403 }
+      );
     }
 
     const companies = await db.company.findMany({
@@ -42,6 +65,15 @@ export async function POST(req: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check if user has super admin role
+    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires super admin access" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

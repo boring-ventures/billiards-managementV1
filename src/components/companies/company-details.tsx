@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Edit,
   Trash,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -38,9 +39,94 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CompanyForm } from "@/components/forms/company-form";
+import { Skeleton } from "@/components/ui/skeleton";
+import { motion } from "framer-motion";
 
 interface CompanyDetailsProps {
   companyId: string;
+}
+
+function CompanyDetailsSkeleton() {
+  return (
+    <div className="space-y-8 p-8">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-36" />
+          <Skeleton className="h-6 w-48" />
+        </div>
+        <div className="flex space-x-2">
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-9 w-24" />
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-lg p-6">
+        <div className="mb-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <Skeleton className="h-5 w-5" />
+            <Skeleton className="h-8 w-64" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-5 w-32" />
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-20" />
+              <Skeleton className="h-8 w-20" />
+              <Skeleton className="h-8 w-24" />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <Skeleton className="h-5 w-40 mb-3" />
+                <Skeleton className="h-px w-full mb-4" />
+                <div className="space-y-2">
+                  <div className="flex items-start">
+                    <Skeleton className="h-4 w-4 mr-2" />
+                    <Skeleton className="h-5 w-full max-w-md" />
+                  </div>
+                  <div className="flex items-center">
+                    <Skeleton className="h-4 w-4 mr-2" />
+                    <Skeleton className="h-5 w-32" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Skeleton className="h-5 w-20 mb-3" />
+                <Skeleton className="h-px w-full mb-4" />
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <Skeleton className="h-4 w-4 mr-2" />
+                    <Skeleton className="h-5 w-56" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <Skeleton className="h-5 w-24 mb-3" />
+                <Skeleton className="h-px w-full mb-4" />
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <Skeleton className="h-4 w-4 mr-2" />
+                    <Skeleton className="h-5 w-40" />
+                  </div>
+                  <div className="flex items-center">
+                    <Skeleton className="h-4 w-4 mr-2" />
+                    <Skeleton className="h-5 w-36" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function CompanyDetails({ companyId }: CompanyDetailsProps) {
@@ -48,38 +134,50 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
   const { deleteCompany } = useCompanies();
   const router = useRouter();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchCompany();
   }, [fetchCompany]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-[400px] flex items-center justify-center p-8">
-        <p>Loading company details...</p>
-      </div>
-    );
+    return <CompanyDetailsSkeleton />;
   }
 
   if (!company) {
     return (
-      <div className="min-h-[400px] flex flex-col items-center justify-center p-8">
-        <p className="text-muted-foreground mb-4">
-          Company not found or has been deleted.
-        </p>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="min-h-[400px] flex flex-col items-center justify-center p-8"
+      >
+        <div className="text-center mb-6">
+          <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground text-lg">
+            Company not found or has been deleted.
+          </p>
+        </div>
         <Button asChild variant="outline">
           <Link href="/companies">
             <ChevronLeft className="mr-2 h-4 w-4" />
             Back to Companies
           </Link>
         </Button>
-      </div>
+      </motion.div>
     );
   }
 
   const handleDelete = async () => {
-    await deleteCompany(companyId);
-    router.push("/companies");
+    try {
+      setIsDeleting(true);
+      await deleteCompany(companyId);
+      router.push("/companies");
+    } catch (error) {
+      console.error("Error deleting company:", error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleEditSuccess = () => {
@@ -88,7 +186,12 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
   };
 
   return (
-    <div className="space-y-8 p-8">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-8 p-8"
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button asChild variant="outline" size="sm">
@@ -135,8 +238,16 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
                 <AlertDialogAction
                   onClick={handleDelete}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={isDeleting}
                 >
-                  Delete
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    "Delete"
+                  )}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -144,7 +255,12 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
         </div>
       </div>
 
-      <div className="bg-card border rounded-lg p-6">
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        className="bg-card border rounded-lg p-6"
+      >
         <div className="mb-4">
           <div className="flex items-center space-x-2 mb-2">
             <Building className="h-5 w-5 text-primary" />
@@ -178,7 +294,12 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
 
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
+            <motion.div
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="space-y-4"
+            >
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground mb-1">
                   Contact Information
@@ -214,9 +335,14 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="space-y-4">
+            <motion.div
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="space-y-4"
+            >
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground mb-1">
                   Resources
@@ -243,10 +369,10 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[550px]">
@@ -268,6 +394,6 @@ export function CompanyDetails({ companyId }: CompanyDetailsProps) {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   );
 }

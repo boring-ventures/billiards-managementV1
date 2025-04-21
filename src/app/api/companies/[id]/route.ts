@@ -11,10 +11,27 @@ const companyUpdateSchema = z.object({
   phone: z.string().optional(),
 });
 
+// Function to check if user has super admin role
+async function checkSuperAdminRole(userId: string) {
+  try {
+    const profile = await db.profile.findUnique({
+      where: { userId },
+      select: { role: true },
+    });
+    return profile?.role === "SUPER_ADMIN";
+  } catch (error) {
+    console.error("Failed to check user role:", error);
+    return false;
+  }
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Ensure params.id is available
+  const companyId = params.id;
+
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const {
@@ -25,8 +42,17 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if user has super admin role
+    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires super admin access" },
+        { status: 403 }
+      );
+    }
+
     const company = await db.company.findUnique({
-      where: { id: params.id },
+      where: { id: companyId },
       include: {
         _count: {
           select: {
@@ -53,6 +79,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Ensure params.id is available
+  const companyId = params.id;
+
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const {
@@ -63,12 +92,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if user has super admin role
+    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires super admin access" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const validatedData = companyUpdateSchema.parse(body);
 
     // Check if company exists
     const existingCompany = await db.company.findUnique({
-      where: { id: params.id },
+      where: { id: companyId },
     });
 
     if (!existingCompany) {
@@ -76,7 +114,7 @@ export async function PATCH(
     }
 
     const updatedCompany = await db.company.update({
-      where: { id: params.id },
+      where: { id: companyId },
       data: validatedData,
     });
 
@@ -95,6 +133,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Ensure params.id is available
+  const companyId = params.id;
+
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const {
@@ -105,9 +146,18 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if user has super admin role
+    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    if (!isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires super admin access" },
+        { status: 403 }
+      );
+    }
+
     // Check if company exists
     const existingCompany = await db.company.findUnique({
-      where: { id: params.id },
+      where: { id: companyId },
     });
 
     if (!existingCompany) {
@@ -116,7 +166,7 @@ export async function DELETE(
 
     // Delete the company
     await db.company.delete({
-      where: { id: params.id },
+      where: { id: companyId },
     });
 
     return NextResponse.json({ success: true });
