@@ -25,6 +25,8 @@ import {
   BuildingIcon,
   Factory,
   Package,
+  ShoppingCart,
+  Table,
 } from "lucide-react";
 import type { SidebarData } from "../types";
 import { UserRole } from "@prisma/client";
@@ -68,7 +70,7 @@ export const sidebarData: SidebarData = {
         },
         {
           title: "Select Workspace", 
-          url: "/select-company",
+          url: "/company-selection",
           icon: Factory,
           requiredRole: UserRole.SUPERADMIN,
         },
@@ -97,6 +99,16 @@ export const sidebarData: SidebarData = {
           title: "Inventory",
           url: "/dashboard/inventory",
           icon: Package,
+        },
+        {
+          title: "POS",
+          url: "/dashboard/pos",
+          icon: ShoppingCart,
+        },
+        {
+          title: "Tables",
+          url: "/dashboard/tables",
+          icon: Table,
         },
         {
           title: "Auth",

@@ -23,7 +23,7 @@ export const assertRoleAndCompany = (
   // Must have a company context
   if (!companyId) {
     if (profile.role === UserRole.SUPERADMIN) {
-      redirect("/select-company");
+      redirect("/company-selection");
     } else {
       redirect("/waiting-approval");
     }

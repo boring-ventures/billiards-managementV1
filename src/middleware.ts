@@ -18,7 +18,7 @@ export async function middleware(req: NextRequest) {
   // If there's no session and the user is trying to access a protected route
   if (!session && 
      (req.nextUrl.pathname.startsWith("/dashboard") || 
-      req.nextUrl.pathname.startsWith("/select-company") || 
+      req.nextUrl.pathname.startsWith("/company-selection") || 
       req.nextUrl.pathname.startsWith("/waiting-approval"))
     ) {
     const redirectUrl = req.nextUrl.clone();
@@ -50,7 +50,7 @@ export const config = {
     "/sign-in", 
     "/sign-up", 
     "/auth/callback", 
-    "/select-company",
+    "/company-selection",
     "/waiting-approval"
   ],
 };

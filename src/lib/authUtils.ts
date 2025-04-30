@@ -45,7 +45,7 @@ export const canAccessDashboard = (profile: Profile | null): boolean => {
 
 /**
  * Redirects the user based on their role and company assignment
- * - Superadmins without company selection go to select-company
+ * - Superadmins without company selection go to company-selection
  * - Regular users without company assignment go to waiting-approval
  * - Users with proper access go to dashboard
  */
@@ -57,7 +57,7 @@ export const getRedirectPath = (profile: Profile | null): string => {
   const hasSelectedCompany = typeof window !== 'undefined' && !!localStorage.getItem('selectedCompanyId');
   
   if (isSuperadmin && !hasSelectedCompany) {
-    return '/select-company';
+    return '/company-selection';
   }
   
   if (!isSuperadmin && !hasCompany) {

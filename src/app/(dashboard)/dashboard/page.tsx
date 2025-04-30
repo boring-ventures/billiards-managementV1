@@ -23,7 +23,7 @@ export default function Dashboard() {
 
       // Superadmin without selected company - go to company selection
       if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
-        router.push("/select-company");
+        router.push("/company-selection");
         return;
       }
 

@@ -14,7 +14,7 @@ export default function WaitingApprovalPage() {
   useEffect(() => {
     // If user is a SUPERADMIN, redirect to company selection
     if (!isLoading && profile?.role === UserRole.SUPERADMIN) {
-      router.push("/select-company");
+      router.push("/company-selection");
       return;
     }
 

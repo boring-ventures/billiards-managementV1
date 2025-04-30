@@ -11,6 +11,7 @@ import ProductPerformance from "@/components/views/dashboard/ProductPerformance"
 import FinancialTrends from "@/components/views/dashboard/FinancialTrends";
 import InventoryAlerts from "@/components/views/dashboard/InventoryAlerts";
 import ActivityLogFeed from "@/components/views/dashboard/ActivityLogFeed";
+import { UserRole } from "@prisma/client";
 
 export default function DashboardContent() {
   const { profile } = useCurrentUser();
