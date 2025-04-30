@@ -24,6 +24,7 @@ import {
   Building2,
   BuildingIcon,
   Factory,
+  Package,
 } from "lucide-react";
 import type { SidebarData } from "../types";
 import { UserRole } from "@prisma/client";
@@ -92,6 +93,11 @@ export const sidebarData: SidebarData = {
     {
       title: "Pages",
       items: [
+        {
+          title: "Inventory",
+          url: "/dashboard/inventory",
+          icon: Package,
+        },
         {
           title: "Auth",
           icon: Lock,
