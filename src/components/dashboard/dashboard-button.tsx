@@ -1,27 +1,39 @@
 'use client';
 
-import { useAuth } from "@/providers/auth-provider";
-import { Button } from "@/components/ui/button";
-import { LayoutDashboard } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { LucideIcon } from "lucide-react";
 
 interface DashboardButtonProps {
+  href: string;
+  icon: LucideIcon;
+  title: string;
+  description: string;
   className?: string;
 }
 
-export default function DashboardButton({ className }: DashboardButtonProps = {}) {
-  const { user, isLoading } = useAuth();
-  const router = useRouter();
-
-  if (isLoading || !user) return null;
-
+export function DashboardButton({
+  href,
+  icon: Icon,
+  title,
+  description,
+  className,
+}: DashboardButtonProps) {
   return (
-    <Button
-      onClick={() => router.push("/dashboard")}
-      className={`flex items-center gap-2 shadow-lg ${className}`}
+    <Link
+      href={href}
+      className={cn(
+        buttonVariants({ variant: "outline", size: "lg" }),
+        "h-auto flex flex-col items-center justify-center gap-2 p-6 text-center group shadow-sm hover:shadow-md transition-all duration-200 bg-card border-border/40 hover:border-primary/20 hover:bg-accent/50",
+        className
+      )}
     >
-      <LayoutDashboard className="h-4 w-4" />
-      Go to Dashboard
-    </Button>
+      <Icon className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+      <div className="space-y-1">
+        <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+    </Link>
   );
 } 

@@ -58,12 +58,19 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome back, {profile?.firstName || user?.email}
-        </p>
+    <div className="container mx-auto py-8 space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border/50 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {profile?.firstName || user?.email}
+          </p>
+        </div>
+        <div className="mt-4 sm:mt-0">
+          <span className="inline-flex items-center rounded-full bg-green-50 dark:bg-green-900/20 px-3 py-1 text-sm font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/30">
+            Active
+          </span>
+        </div>
       </div>
       
       <DashboardContent />

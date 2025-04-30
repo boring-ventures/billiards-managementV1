@@ -4,10 +4,23 @@ import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import Link from "next/link";
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+}
+
+export function DashboardHeader({
+  title,
+  description,
+  actions,
+}: DashboardHeaderProps) {
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const { profile } = useCurrentUser();
 
   const handleSignOut = async () => {
     try {
@@ -19,22 +32,22 @@ export function DashboardHeader() {
   };
 
   return (
-    <header className="border-b border-border">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-medium">Welcome, {user?.email}</h2>
-          </div>
-          <Button
-            variant="outline"
-            onClick={handleSignOut}
-            className="flex items-center gap-2"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
-        </div>
+    <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center border-b border-border/60 pb-6 mb-6">
+      <div className="space-y-1">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          {title}
+        </h1>
+        {description && (
+          <p className="text-muted-foreground text-sm md:text-base max-w-3xl">
+            {description}
+          </p>
+        )}
       </div>
-    </header>
+      {actions && (
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {actions}
+        </div>
+      )}
+    </div>
   );
 } 

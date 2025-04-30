@@ -19,23 +19,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isSuperadmin = profile?.role === UserRole.SUPERADMIN;
 
   return (
-    <Sidebar collapsible="icon" variant="floating" {...props}>
-      <SidebarHeader>
+    <Sidebar 
+      collapsible="icon" 
+      variant="floating" 
+      className="border-r border-sidebar-border bg-sidebar dark:bg-sidebar-background shadow-sm" 
+      {...props}
+    >
+      <SidebarHeader className="border-b border-sidebar-border/70 pb-2">
         {isSuperadmin ? (
           <CompanyTeamSwitcher />
         ) : (
           <TeamSwitcher teams={sidebarData.teams} />
         )}
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="pt-4">
         {sidebarData.navGroups.map((props: NavGroupProps) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-sidebar-border/70 pt-2">
         <NavUser />
       </SidebarFooter>
-      <SidebarRail />
+      <SidebarRail className="bg-sidebar-accent/30" />
     </Sidebar>
   );
 }

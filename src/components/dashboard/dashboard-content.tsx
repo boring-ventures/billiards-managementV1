@@ -27,37 +27,37 @@ export default function DashboardContent() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <RevenueOverview companyId={activeCompanyId} />
       </div>
       
-      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Business Overview</TabsTrigger>
-          <TabsTrigger value="tables">Active Tables</TabsTrigger>
-          <TabsTrigger value="products">Product Performance</TabsTrigger>
-          <TabsTrigger value="finance">Financial Trends</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="activity">Activity Log</TabsTrigger>
+      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="bg-accent/50 p-1 rounded-xl">
+          <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Business Overview</TabsTrigger>
+          <TabsTrigger value="tables" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Active Tables</TabsTrigger>
+          <TabsTrigger value="products" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Product Performance</TabsTrigger>
+          <TabsTrigger value="finance" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Financial Trends</TabsTrigger>
+          <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Inventory</TabsTrigger>
+          <TabsTrigger value="activity" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-sidebar-accent data-[state=active]:shadow-sm">Activity Log</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Active Tables</CardTitle>
-                <CardDescription>Currently active table sessions</CardDescription>
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="dashboard-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl font-semibold">Active Tables</CardTitle>
+                <CardDescription className="text-muted-foreground">Currently active table sessions</CardDescription>
               </CardHeader>
               <CardContent>
                 <ActiveTableSessions companyId={activeCompanyId} />
               </CardContent>
             </Card>
             
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Products</CardTitle>
-                <CardDescription>Best selling products this week</CardDescription>
+            <Card className="dashboard-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl font-semibold">Top Products</CardTitle>
+                <CardDescription className="text-muted-foreground">Best selling products this week</CardDescription>
               </CardHeader>
               <CardContent>
                 <ProductPerformance companyId={activeCompanyId} />
@@ -65,21 +65,21 @@ export default function DashboardContent() {
             </Card>
           </div>
           
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Financial Trends</CardTitle>
-                <CardDescription>Income vs Expense this month</CardDescription>
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="dashboard-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl font-semibold">Financial Trends</CardTitle>
+                <CardDescription className="text-muted-foreground">Income vs Expense this month</CardDescription>
               </CardHeader>
               <CardContent className="h-[300px]">
                 <FinancialTrends companyId={activeCompanyId} />
               </CardContent>
             </Card>
             
-            <Card>
-              <CardHeader>
-                <CardTitle>Inventory Alerts</CardTitle>
-                <CardDescription>Items below critical threshold</CardDescription>
+            <Card className="dashboard-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl font-semibold">Inventory Alerts</CardTitle>
+                <CardDescription className="text-muted-foreground">Items below critical threshold</CardDescription>
               </CardHeader>
               <CardContent>
                 <InventoryAlerts companyId={activeCompanyId} />
@@ -89,10 +89,10 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="tables">
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Table Sessions</CardTitle>
-              <CardDescription>Currently active table sessions</CardDescription>
+          <Card className="dashboard-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Active Table Sessions</CardTitle>
+              <CardDescription className="text-muted-foreground">Currently active table sessions</CardDescription>
             </CardHeader>
             <CardContent>
               <ActiveTableSessions companyId={activeCompanyId} fullView />
@@ -101,10 +101,10 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="products">
-          <Card>
-            <CardHeader>
-              <CardTitle>Product Performance</CardTitle>
-              <CardDescription>Best selling products this week</CardDescription>
+          <Card className="dashboard-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Product Performance</CardTitle>
+              <CardDescription className="text-muted-foreground">Best selling products this week</CardDescription>
             </CardHeader>
             <CardContent>
               <ProductPerformance companyId={activeCompanyId} fullView />
@@ -113,10 +113,10 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="finance">
-          <Card>
-            <CardHeader>
-              <CardTitle>Financial Trends</CardTitle>
-              <CardDescription>Income vs Expense over time</CardDescription>
+          <Card className="dashboard-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Financial Trends</CardTitle>
+              <CardDescription className="text-muted-foreground">Income vs Expense over time</CardDescription>
             </CardHeader>
             <CardContent className="h-[400px]">
               <FinancialTrends companyId={activeCompanyId} fullView />
@@ -125,10 +125,10 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="inventory">
-          <Card>
-            <CardHeader>
-              <CardTitle>Inventory Alerts</CardTitle>
-              <CardDescription>Items below critical threshold</CardDescription>
+          <Card className="dashboard-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Inventory Alerts</CardTitle>
+              <CardDescription className="text-muted-foreground">Items below critical threshold</CardDescription>
             </CardHeader>
             <CardContent>
               <InventoryAlerts companyId={activeCompanyId} fullView />
@@ -137,10 +137,10 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="activity">
-          <Card>
-            <CardHeader>
-              <CardTitle>Activity Log</CardTitle>
-              <CardDescription>Recent system activities</CardDescription>
+          <Card className="dashboard-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Activity Log</CardTitle>
+              <CardDescription className="text-muted-foreground">Recent system activities</CardDescription>
             </CardHeader>
             <CardContent>
               <ActivityLogFeed companyId={activeCompanyId} />
