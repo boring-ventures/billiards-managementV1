@@ -56,7 +56,7 @@ export function PosCart({ items, onRemove, onUpdateQuantity, inventoryItems }: P
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-grow">
                   <h4 className="font-medium">{item.name}</h4>
-                  <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} each</p>
+                  <p className="text-sm text-muted-foreground">${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'} each</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -90,7 +90,7 @@ export function PosCart({ items, onRemove, onUpdateQuantity, inventoryItems }: P
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
-                <span className="font-semibold">${lineTotal.toFixed(2)}</span>
+                <span className="font-semibold">${typeof lineTotal === 'number' ? lineTotal.toFixed(2) : '0.00'}</span>
               </div>
               
               <Separator className="mt-4" />

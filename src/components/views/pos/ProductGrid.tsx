@@ -47,7 +47,7 @@ export function ProductGrid({ items, onAddToCart }: ProductGridProps) {
               </div>
               <div className="mt-auto pt-2 flex justify-between items-end">
                 <span className="text-lg font-bold">
-                  ${item.price?.toFixed(2)}
+                  ${item.price && typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
                 </span>
                 <span className="text-sm text-muted-foreground">
                   Stock: {item.quantity}

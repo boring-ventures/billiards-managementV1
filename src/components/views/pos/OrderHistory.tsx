@@ -240,7 +240,7 @@ export default function OrderHistory({ companyId }: OrderHistoryProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      ${order.totalAmount?.toFixed(2)}
+                      ${typeof order.totalAmount === 'number' ? order.totalAmount.toFixed(2) : '0.00'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button 
@@ -290,8 +290,8 @@ export default function OrderHistory({ companyId }: OrderHistoryProps) {
                     <TableRow key={item.id}>
                       <TableCell>{item.name}</TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${item.lineTotal.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">${typeof item.unitPrice === 'number' ? item.unitPrice.toFixed(2) : '0.00'}</TableCell>
+                      <TableCell className="text-right">${typeof item.lineTotal === 'number' ? item.lineTotal.toFixed(2) : '0.00'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -301,7 +301,7 @@ export default function OrderHistory({ companyId }: OrderHistoryProps) {
                 <div className="w-64 space-y-2">
                   <div className="flex justify-between font-medium">
                     <span>Total:</span>
-                    <span>${selectedOrder?.totalAmount.toFixed(2)}</span>
+                    <span>${selectedOrder?.totalAmount && typeof selectedOrder.totalAmount === 'number' ? selectedOrder.totalAmount.toFixed(2) : '0.00'}</span>
                   </div>
                 </div>
               </div>

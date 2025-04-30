@@ -394,7 +394,7 @@ export function PosSystem({ companyId, profile }: PosSystemProps) {
             <div className="flex justify-between items-center w-full mb-4">
               <span className="text-lg font-medium">Total:</span>
               <span className="text-lg font-bold">
-                ${cartTotal.toFixed(2)}
+                ${typeof cartTotal === 'number' ? cartTotal.toFixed(2) : '0.00'}
               </span>
             </div>
             <Button 
