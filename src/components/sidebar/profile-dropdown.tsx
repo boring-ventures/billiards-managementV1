@@ -156,8 +156,12 @@ export function ProfileDropdown() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={async () => {
-            await fetch("/api/auth/signout", { method: "POST" });
-            window.location.href = "/login";
+            try {
+              await fetch("/api/auth/signout", { method: "POST" });
+              window.location.href = "/sign-in";
+            } catch (error) {
+              console.error("Error signing out:", error);
+            }
           }}
         >
           <LogOut className="mr-2 h-4 w-4" />

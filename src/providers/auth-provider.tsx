@@ -103,10 +103,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setProfile(null);
-    router.push("/sign-in");
+    try {
+      // First try the API endpoint
+      const response = await fetch("/api/auth/signout", { method: "POST" });
+      
+      if (!response.ok) {
+        // If API fails, fall back to client-side signout
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      }
+      
+      // Clear state regardless of method used
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      router.push("/sign-in");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      // Clear state on error to prevent being stuck
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      router.push("/sign-in");
+    }
   };
 
   return (
