@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCompany } from "@/context/company-context";
@@ -13,12 +13,18 @@ export default function Dashboard() {
   const { profile, isLoading: profileLoading } = useCurrentUser();
   const { selectedCompanyId } = useCompany();
   const [hasRedirected, setHasRedirected] = useState(false);
+  const redirectionTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (hasRedirected) return; // Prevent redirection loops
     
+    // Clear any existing redirection timeouts
+    if (redirectionTimeout.current) {
+      clearTimeout(redirectionTimeout.current);
+    }
+    
     // Delay the check to allow context to fully initialize
-    const redirectionCheck = setTimeout(() => {
+    redirectionTimeout.current = setTimeout(() => {
       if (!profileLoading) {
         // No profile, redirect to login
         if (!profile) {
@@ -27,8 +33,14 @@ export default function Dashboard() {
           return;
         }
 
-        // Superadmin without selected company - go to company selection
-        if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
+        // Only redirect superadmin if they definitely have no company selected
+        // This prevents a loop where the context is still loading the company from localStorage
+        if (profile.role === UserRole.SUPERADMIN && 
+            !selectedCompanyId && 
+            typeof window !== 'undefined' && 
+            !localStorage.getItem("selectedCompanyId")) {
+          
+          console.log("No company selected, redirecting to company selection");
           setHasRedirected(true);
           router.push("/company-selection");
           return;
@@ -41,12 +53,16 @@ export default function Dashboard() {
           return;
         }
       }
-    }, 500); // Short delay to ensure context values are populated
+    }, 1500); // Longer delay to ensure context values are populated
 
-    return () => clearTimeout(redirectionCheck);
+    return () => {
+      if (redirectionTimeout.current) {
+        clearTimeout(redirectionTimeout.current);
+      }
+    };
   }, [profile, profileLoading, router, selectedCompanyId, hasRedirected]);
 
-  if (profileLoading) {
+  if (profileLoading || (profile?.role === UserRole.SUPERADMIN && !selectedCompanyId && !hasRedirected)) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

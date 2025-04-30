@@ -56,8 +56,11 @@ export default function CompanySelectionPage() {
     // Save the selected company to localStorage
     localStorage.setItem("selectedCompanyId", companyId);
     
-    // Redirect to dashboard
-    router.push("/dashboard");
+    // Set timeout to ensure localStorage is updated before redirecting
+    setTimeout(() => {
+      // Redirect to dashboard
+      router.push("/dashboard");
+    }, 100);
   };
 
   if (isLoading) {
