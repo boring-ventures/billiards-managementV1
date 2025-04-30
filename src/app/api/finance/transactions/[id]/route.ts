@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
 import { UserRole } from "@prisma/client";
 
 // DELETE /api/finance/transactions/[id] - Delete a transaction

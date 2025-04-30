@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth, getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
 
 /**
  * GET: List all transactions for a company
@@ -18,11 +17,20 @@ export async function GET(req: NextRequest) {
     // Get user profile with company information
     const user = await getCurrentUser();
     
-    if (!user || !user.profile?.companyId) {
+    if (!user || !user.id) {
+      return NextResponse.json({ error: "User not found" }, { status: 400 });
+    }
+    
+    // Get the profile with company ID
+    const profile = await db.profile.findUnique({
+      where: { userId: user.id },
+    });
+    
+    if (!profile || !profile.companyId) {
       return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
     }
     
-    const companyId = user.profile.companyId;
+    const companyId = profile.companyId;
     
     // Fetch all transactions for this company with related data
     const transactions = await db.financeTransaction.findMany({
@@ -65,11 +73,20 @@ export async function POST(req: NextRequest) {
     // Get user profile with company information
     const user = await getCurrentUser();
     
-    if (!user || !user.profile?.companyId) {
+    if (!user || !user.id) {
+      return NextResponse.json({ error: "User not found" }, { status: 400 });
+    }
+    
+    // Get the profile with company ID
+    const profile = await db.profile.findUnique({
+      where: { userId: user.id },
+    });
+    
+    if (!profile || !profile.companyId) {
       return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
     }
     
-    const companyId = user.profile.companyId;
+    const companyId = profile.companyId;
     
     // Parse request body
     const body = await req.json();
@@ -88,7 +105,7 @@ export async function POST(req: NextRequest) {
         amount,
         transactionDate: new Date(transactionDate),
         description: description || null,
-        staffId: user.profile.id, // Record which staff member created the transaction
+        staffId: profile.id, // Record which staff member created the transaction
       },
     });
     
