@@ -30,8 +30,12 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/dashboard/:path*',
-        destination: '/src/app/(dashboard)/dashboard/:path*',
+        source: '/dashboard/:slug(.*)',
+        destination: '/src/app/(dashboard)/dashboard/:slug',
+      },
+      {
+        source: '/dashboard',
+        destination: '/src/app/(dashboard)/dashboard',
       },
     ];
   },
