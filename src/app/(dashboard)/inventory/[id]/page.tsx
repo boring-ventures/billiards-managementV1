@@ -21,7 +21,7 @@ export default function EditInventoryItemPage({ params }: EditInventoryItemPageP
   // Check if user has admin permissions
   useEffect(() => {
     if (!isLoading && !hasAdminPermission(profile)) {
-      router.push("/dashboard");
+      router.push("/");
     }
   }, [profile, isLoading, router]);
 

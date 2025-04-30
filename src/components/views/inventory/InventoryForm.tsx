@@ -149,7 +149,7 @@ export default function InventoryForm({ companyId, itemId }: InventoryFormProps)
       });
 
       // Navigate back to inventory list
-      router.push("/dashboard/inventory");
+      router.push("/inventory");
       router.refresh();
     } catch (error) {
       console.error("Error saving item:", error);
@@ -406,7 +406,7 @@ export default function InventoryForm({ companyId, itemId }: InventoryFormProps)
             <Button 
               type="button" 
               variant="outline" 
-              onClick={() => router.push("/dashboard/inventory")}
+              onClick={() => router.push("/inventory")}
               disabled={isLoading}
             >
               Cancel

@@ -21,7 +21,7 @@ export default function InventoryPage() {
           </p>
         </div>
         {isAdmin && (
-          <Link href="/dashboard/inventory/new" passHref>
+          <Link href="/inventory/new" passHref>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Add New Item
