@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Loader2 } from "lucide-react";
+import { PosSystem } from "@/components/views/pos/PosSystem";
 
 export default function POSPage() {
   const router = useRouter();
@@ -51,13 +52,9 @@ export default function POSPage() {
         </p>
       </div>
 
-      <div className="grid gap-6">
-        {/* POS content will go here */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">POS System</h3>
-          <p className="text-muted-foreground mt-2">POS features coming soon</p>
-        </div>
-      </div>
+      {profile?.companyId && (
+        <PosSystem companyId={profile.companyId} profile={profile} />
+      )}
     </div>
   );
 } 

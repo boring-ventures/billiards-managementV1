@@ -20,6 +20,80 @@ const orderSchema = z.object({
   staffId: z.string(),
 });
 
+export async function GET(req: NextRequest) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies });
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+    
+    // Extract companyId from query params
+    const searchParams = req.nextUrl.searchParams;
+    const companyId = searchParams.get("companyId");
+    
+    if (!companyId) {
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
+    }
+    
+    // Get user profile to check role and company access
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
+    });
+    
+    // Verify the user has access to this company
+    const isSuperadmin = profile?.role === UserRole.SUPERADMIN;
+    const isAssignedToCompany = profile?.companyId === companyId;
+    
+    if (!profile || (!isSuperadmin && !isAssignedToCompany)) {
+      return NextResponse.json(
+        { error: "Unauthorized to access this company" },
+        { status: 403 }
+      );
+    }
+    
+    // Get orders for the company, ordered by most recent first
+    const orders = await prisma.posOrder.findMany({
+      where: {
+        companyId,
+      },
+      include: {
+        orderItems: true,
+        tableSession: {
+          include: {
+            table: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 50, // Limit to avoid too much data
+    });
+    
+    return NextResponse.json(orders);
+  } catch (error) {
+    console.error("[GET_ORDERS_ERROR]", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -73,10 +147,10 @@ export async function POST(req: NextRequest) {
           tx.posOrderItem.create({
             data: {
               orderId: order.id,
-              inventoryItemId: item.inventoryItemId,
+              itemId: item.inventoryItemId,
               quantity: item.quantity,
-              priceAtPurchase: item.price,
-              name: item.name,
+              unitPrice: item.price,
+              lineTotal: item.price * item.quantity,
             },
           })
         )
