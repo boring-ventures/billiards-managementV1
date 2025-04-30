@@ -16,7 +16,16 @@ const nextConfig = {
     // Similarly, this ignores TypeScript errors during the build
     ignoreBuildErrors: true,
   },
-  // ... other config options
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client'],
+  },
+  // Improved error handling for RSC requests
+  onDemandEntries: {
+    // period (in ms) where the server will keep pages in the buffer
+    maxInactiveAge: 60 * 1000,
+    // number of pages that should be kept simultaneously without being disposed
+    pagesBufferLength: 5,
+  },
 };
 
 module.exports = nextConfig;

@@ -15,6 +15,13 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
+  // Handle static pages without authentication
+  if (req.nextUrl.pathname === "/terms" || 
+      req.nextUrl.pathname === "/privacy" || 
+      req.nextUrl.pathname === "/documentation") {
+    return res;
+  }
+
   // If there's no session and the user is trying to access a protected route
   if (!session && 
      (req.nextUrl.pathname.startsWith("/dashboard") || 
@@ -51,6 +58,9 @@ export const config = {
     "/sign-up", 
     "/auth/callback", 
     "/company-selection",
-    "/waiting-approval"
+    "/waiting-approval",
+    "/terms",
+    "/privacy",
+    "/documentation"
   ],
 };
