@@ -4,21 +4,21 @@ import React from "react"
 
 import { useEffect, useState } from "react"
 import { motion, useAnimation } from "framer-motion"
-import { Building, Briefcase, Globe, Laptop, Lightbulb, Rocket, Target, Zap, Brain, Heart } from "lucide-react"
+import { Building, Briefcase, Globe, Laptop, Target, TrendingUp, BarChart, DollarSign, Clock, Users } from "lucide-react"
 import { BlurFade } from "@/components/magicui/blur-fade"
 import { ShineBorder } from "@/components/magicui/shine-border"
 
 const companies = [
-  { name: "TechCorp", icon: Building },
-  { name: "InnovateLabs", icon: Lightbulb },
-  { name: "MindfulCo", icon: Brain },
-  { name: "FutureWorks", icon: Rocket },
-  { name: "ZenithHealth", icon: Heart },
-  { name: "GlobalTech", icon: Globe },
-  { name: "SmartSolutions", icon: Laptop },
-  { name: "PowerInnovate", icon: Zap },
-  { name: "TargetAchievers", icon: Target },
-  { name: "BizPro", icon: Briefcase },
+  { name: "Rack 'Em Up", icon: Building },
+  { name: "Corner Pocket", icon: Target },
+  { name: "Cue Masters", icon: Users },
+  { name: "Break Away", icon: TrendingUp },
+  { name: "8-Ball Venues", icon: Globe },
+  { name: "Pro Pocket", icon: DollarSign },
+  { name: "Cue & Brew", icon: Clock },
+  { name: "Billiards Pro", icon: BarChart },
+  { name: "Strike Force", icon: Target },
+  { name: "Chalk & Cue", icon: Briefcase },
 ]
 
 export default function SocialProof() {
@@ -46,7 +46,7 @@ export default function SocialProof() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <BlurFade>
           <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground mb-12">
-            Trusted by Leading Organizations
+            Trusted by Billiards Venues Nationwide
           </h2>
         </BlurFade>
         

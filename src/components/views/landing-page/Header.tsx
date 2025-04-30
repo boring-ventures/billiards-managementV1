@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Menu, X, Brain } from "lucide-react";
+import { Menu, X, Target } from "lucide-react";
 import { AuthHeader } from "./auth-header";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -31,10 +31,10 @@ export default function Header() {
             <div className={`transition-all duration-300 rounded-lg ${
               scrolled ? "bg-gradient-to-br from-primary to-blue-600" : "bg-white/20 backdrop-blur-md group-hover:bg-gradient-to-br group-hover:from-primary group-hover:to-blue-600"
             } p-1.5 shadow-sm`}>
-              <Brain className={`h-6 w-6 ${scrolled ? "text-white" : "text-primary group-hover:text-white"}`} />
+              <Target className={`h-6 w-6 ${scrolled ? "text-white" : "text-primary group-hover:text-white"}`} />
             </div>
             <span className={`text-xl font-bold ${scrolled ? "text-gray-900" : "text-white"}`}>
-              POSITIVE-Next
+              CueMaster
             </span>
           </Link>
           

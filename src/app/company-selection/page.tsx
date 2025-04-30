@@ -76,10 +76,10 @@ export default function CompanySelectionPage() {
             <div className="flex justify-center mb-4">
               <Building className="h-12 w-12 text-primary" />
             </div>
-            <CardTitle className="text-center text-2xl">Select a Workspace</CardTitle>
+            <CardTitle className="text-center text-2xl">Select a Venue</CardTitle>
             <CardDescription className="text-center pt-2">
-              As a Superadmin, you can access any workspace in the system.
-              Select a workspace to continue.
+              As a Superadmin, you can access any pool hall or billiards venue in the system.
+              Select a venue to continue.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
@@ -89,7 +89,7 @@ export default function CompanySelectionPage() {
               </div>
             ) : companies.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">No workspaces found.</p>
+                <p className="text-muted-foreground">No venues found.</p>
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -97,10 +97,10 @@ export default function CompanySelectionPage() {
                   <Button
                     key={company.id}
                     variant="outline"
-                    className="h-auto p-4 justify-start flex flex-col items-start space-y-2 hover:border-primary hover:bg-primary/5 transition-colors"
+                    className="h-auto p-4 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors"
                     onClick={() => selectCompany(company.id)}
                   >
-                    <div className="flex items-center gap-2 text-left">
+                    <div className="flex items-center gap-2">
                       <Building className="h-5 w-5 text-primary" />
                       <span className="font-medium text-base">{company.name}</span>
                     </div>

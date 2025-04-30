@@ -49,20 +49,20 @@ export default function CTA() {
               transition={{ duration: 0.7 }}
             >
               <h2 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
-                Begin your journey to 
-                <span className="text-primary"> mental excellence</span>
+                Ready to elevate your 
+                <span className="text-primary"> billiards business</span>
               </h2>
               <p className="text-xl text-muted-foreground mb-8 max-w-2xl leading-relaxed">
-                Experience the transformative power of AI-guided mental fitness. Join thousands who have already enhanced their focus, resilience, and emotional balance.
+                Join pool halls and billiards venues across the country that are increasing efficiency, improving customer experience, and maximizing profit with CueMaster.
               </p>
               
               {/* Features list */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
                 {[
-                  "Personalized mental fitness plan",
-                  "AI-powered adaptive coaching",
-                  "Progress tracking dashboard",
-                  "Research-backed techniques"
+                  "Streamlined venue operations",
+                  "Real-time table management",
+                  "Integrated point of sale",
+                  "Comprehensive business analytics"
                 ].map((feature, i) => (
                   <motion.div 
                     key={feature} 
@@ -88,21 +88,21 @@ export default function CTA() {
               transition={{ duration: 0.7, delay: 0.2 }}
             >
               <div className="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
-                <h3 className="text-xl font-semibold mb-6">Start your transformation today</h3>
+                <h3 className="text-xl font-semibold mb-6">Get started with CueMaster today</h3>
                 <p className="text-muted-foreground mb-6">
-                  Join POSITIVE-Next and receive a complimentary mental fitness assessment.
+                  Schedule a free demo and see how CueMaster can transform your billiards venue.
                 </p>
                 
                 <Link 
                   href="/sign-up" 
                   className="group relative w-full inline-flex items-center justify-center px-6 py-4 rounded-lg bg-gradient-to-r from-primary to-blue-600 text-white font-medium text-lg shadow-lg hover:shadow-primary/25 transition-all duration-300"
                 >
-                  <span>Sign Up Free</span>
+                  <span>Request Demo</span>
                   <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
                 </Link>
                 
                 <p className="text-sm text-center text-muted-foreground mt-6">
-                  No credit card required. Start with our free plan today.
+                  No commitment required. See the difference for yourself.
                 </p>
               </div>
             </motion.div>

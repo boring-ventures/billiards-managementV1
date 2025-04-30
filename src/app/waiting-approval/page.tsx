@@ -50,10 +50,10 @@ export default function WaitingApprovalPage() {
           </CardHeader>
           <CardContent className="text-center pt-2 pb-8">
             <p className="mb-4 text-base">
-              Please wait for your company administrator to assign you to a workspace.
+              Please wait for your venue manager to assign you to a pool hall or billiards venue.
             </p>
             <p className="text-sm text-muted-foreground">
-              Once assigned, you&apos;ll receive an email notification and be able to access your dashboard.
+              Once assigned, you&apos;ll receive an email notification and be able to access your venue dashboard.
             </p>
           </CardContent>
         </Card>

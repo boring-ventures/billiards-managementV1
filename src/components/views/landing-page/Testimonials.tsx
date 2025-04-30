@@ -3,32 +3,32 @@
 import { Star } from "lucide-react";
 import { motion } from "framer-motion";
 
-// Realistic testimonial data
+// Realistic testimonial data for billiards venues
 const testimonials = [
   {
     id: "t1",
     quote:
-      "POSITIVE-Next has completely transformed how I manage stress. I've seen remarkable improvements in my focus and emotional balance in just 6 weeks.",
-    author: "Sarah J.",
-    title: "Marketing Executive",
+      "CueMaster has streamlined our entire operation. We've reduced wait times, increased table utilization, and our customers love the seamless experience. Our revenue is up 22% since implementation.",
+    author: "James K.",
+    title: "Owner, Cue's & Brews Pool Hall",
     rating: 5,
     imagePath: "/images/testimonials/person1.jpg",
   },
   {
     id: "t2",
     quote:
-      "As a CEO dealing with constant pressure, this platform has been invaluable. The personalized mental fitness exercises have measurably improved my decision-making and leadership.",
-    author: "Michael R.",
-    title: "CEO, TechVision Inc.",
+      "As the manager of 3 billiards venues, CueMaster's multi-tenant system has been a game-changer. I can monitor all locations from one dashboard and the detailed analytics help me make smarter business decisions.",
+    author: "Michelle T.",
+    title: "Regional Manager, Pocket Aces",
     rating: 5,
     imagePath: "/images/testimonials/person2.jpg",
   },
   {
     id: "t3",
     quote:
-      "I've tried numerous mental wellness apps, but POSITIVE-Next stands apart with its science-based approach and adaptive AI. It feels like having a personal mental coach.",
-    author: "Emily L.",
-    title: "Clinical Psychologist",
+      "I've tried several management systems, but CueMaster is the only one specifically designed for pool halls. The table tracking and integrated POS have eliminated our manual processes and reduced staff errors by 90%.",
+    author: "Robert L.",
+    title: "Director, Grand Slam Billiards",
     rating: 5,
     imagePath: "/images/testimonials/person3.jpg",
   },
@@ -57,10 +57,10 @@ export default function Testimonials() {
             >
               <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-1 w-16 h-1 mb-8 rounded-full" />
               <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-6">
-                Real results from real users
+                Trusted by venue owners
               </h2>
               <p className="text-lg text-muted-foreground mb-8 max-w-lg">
-                See how POSITIVE-Next is helping people transform their mental fitness and achieve breakthrough results in their personal and professional lives.
+                See how CueMaster is helping billiards venues across the country improve operations, enhance customer experiences, and increase profitability.
               </p>
               
               <div className="flex items-center space-x-2 mb-8">
@@ -68,7 +68,7 @@ export default function Testimonials() {
                   <Star key={star} className="h-6 w-6 text-amber-400 fill-amber-400" />
                 ))}
                 <span className="ml-2 text-lg font-medium">4.9/5</span>
-                <span className="text-muted-foreground text-sm ml-2">(230+ reviews)</span>
+                <span className="text-muted-foreground text-sm ml-2">(85+ reviews)</span>
               </div>
             </motion.div>
           </div>

@@ -1,60 +1,60 @@
 "use client";
 
-import { Brain, Heart, Zap, Target, Smile, TrendingUp } from "lucide-react";
+import { LayoutGrid, DollarSign, Clock, Clipboard, Users, BarChart } from "lucide-react";
 import { motion } from "framer-motion";
 
 const features = [
   {
-    id: "mental-fitness",
-    icon: Brain,
-    title: "Mental Fitness",
+    id: "table-management",
+    icon: LayoutGrid,
+    title: "Table Management",
     description:
-      "Train your mind to overcome negative thoughts and build lasting mental resilience through AI-guided exercises.",
+      "Efficiently organize and monitor all your pool tables with real-time availability tracking and smart booking system.",
     color: "from-blue-500/20 to-blue-600/5",
     accentColor: "bg-blue-500",
   },
   {
-    id: "emotional-intelligence",
-    icon: Heart,
-    title: "Emotional Intelligence",
+    id: "point-of-sale",
+    icon: DollarSign,
+    title: "Point of Sale",
     description:
-      "Develop a deeper understanding of your emotions with personalized insights and practical management techniques.",
+      "Seamlessly process payments, manage tabs, and handle food and beverage orders with our integrated POS system.",
     color: "from-rose-500/20 to-rose-600/5",
     accentColor: "bg-rose-500",
   },
   {
-    id: "peak-performance",
-    icon: Zap,
-    title: "Peak Performance",
+    id: "time-tracking",
+    icon: Clock,
+    title: "Time Tracking",
     description:
-      "Unlock your full potential with focused mental training designed to optimize your productivity and creativity.",
+      "Automatically track table usage time and calculate charges with customizable hourly rates and special promotions.",
     color: "from-amber-500/20 to-amber-600/5",
     accentColor: "bg-amber-500",
   },
   {
-    id: "goal-setting",
-    icon: Target,
-    title: "Goal Setting",
+    id: "inventory-management",
+    icon: Clipboard,
+    title: "Inventory Management",
     description:
-      "Learn to set and achieve meaningful goals that align perfectly with your values and deepest aspirations.",
+      "Track stock levels for equipment, merchandise, food and beverages with automated alerts for low inventory items.",
     color: "from-emerald-500/20 to-emerald-600/5",
     accentColor: "bg-emerald-500",
   },
   {
-    id: "stress-management",
-    icon: Smile,
-    title: "Stress Management",
+    id: "staff-management",
+    icon: Users,
+    title: "Staff Management",
     description:
-      "Discover evidence-based techniques to reduce stress and maintain a calm, focused state in any situation.",
+      "Manage employee schedules, track work hours, and assign role-based permissions with comprehensive staff controls.",
     color: "from-violet-500/20 to-violet-600/5",
     accentColor: "bg-violet-500",
   },
   {
-    id: "personal-growth",
-    icon: TrendingUp,
-    title: "Personal Growth",
+    id: "reporting-analytics",
+    icon: BarChart,
+    title: "Reporting & Analytics",
     description:
-      "Embark on a journey of continuous self-improvement with personalized growth plans and progress tracking.",
+      "Gain valuable insights into your business performance with detailed financial reports and usage analytics.",
     color: "from-cyan-500/20 to-cyan-600/5",
     accentColor: "bg-cyan-500",
   },
@@ -97,8 +97,8 @@ export default function Features() {
             transition={{ duration: 0.8 }}
           >
             <h2 className="text-4xl md:text-5xl font-bold leading-tight">
-              Strengthen your mind with precision-designed
-              <span className="text-primary"> mental tools</span>
+              Run your venue with powerful
+              <span className="text-primary"> management tools</span>
             </h2>
           </motion.div>
           
@@ -109,7 +109,7 @@ export default function Features() {
             transition={{ duration: 0.8, delay: 0.2 }}
           >
             <p className="text-lg text-muted-foreground">
-              POSITIVE-Next combines neuroscience research with AI technology to deliver customized mental fitness exercises that adapt to your unique needs and goals. Our science-backed approach builds resilience, focus, and emotional balance.
+              CueMaster combines all the tools you need to efficiently manage your billiards venue in one integrated platform. From table bookings to financial reporting, our comprehensive system streamlines operations and maximizes revenue.
             </p>
           </motion.div>
         </div>
@@ -142,7 +142,7 @@ export default function Features() {
                 <p className="text-muted-foreground flex-grow mb-4">{feature.description}</p>
                 
                 <div className="mt-auto pt-2 flex items-center opacity-70 group-hover:opacity-100 transition-opacity">
-                  <span className="text-sm font-medium text-primary">Learn technique</span>
+                  <span className="text-sm font-medium text-primary">Learn more</span>
                   <svg className="w-4 h-4 ml-1 text-primary group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FacebookIcon, TwitterIcon, InstagramIcon, Brain, ArrowUpRight } from "lucide-react";
+import { FacebookIcon, TwitterIcon, InstagramIcon, Target, ArrowUpRight } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -17,15 +17,15 @@ export default function Footer() {
           <div className="md:col-span-4 lg:col-span-5">
             <div className="flex items-center mb-5">
               <div className="bg-gradient-to-r from-primary to-blue-600 p-2 rounded-lg mr-2">
-                <Brain className="h-6 w-6 text-white" />
+                <Target className="h-6 w-6 text-white" />
               </div>
               <span className="text-2xl font-bold text-gray-900">
-                POSITIVE-Next
+                CueMaster
               </span>
             </div>
             
             <p className="text-muted-foreground max-w-md mb-6">
-              Empowering minds for a better tomorrow through AI-powered mental fitness solutions that adapt to your unique needs.
+              Streamlining billiards venue management with powerful tools for table booking, POS, inventory tracking, and comprehensive business insights.
             </p>
             
             <div className="flex space-x-4 mb-8 md:mb-0">
@@ -55,8 +55,8 @@ export default function Footer() {
               <h4 className="text-base font-semibold text-gray-900 mb-5">Features</h4>
               <ul className="space-y-3">
                 {[
-                  { href: "/#features", label: "Mental Tools" },
-                  { href: "/#about", label: "About POSITIVE" },
+                  { href: "/#features", label: "Table Management" },
+                  { href: "/#about", label: "About CueMaster" },
                   { href: "/#testimonials", label: "Success Stories" },
                 ].map((link) => (
                   <li key={link.href}>
@@ -78,7 +78,7 @@ export default function Footer() {
                 {[
                   { href: "/blog", label: "Blog" },
                   { href: "/documentation", label: "Documentation" },
-                  { href: "/guides", label: "Guides" },
+                  { href: "/guides", label: "User Guides" },
                 ].map((link) => (
                   <li key={link.href}>
                     <Link
@@ -119,7 +119,7 @@ export default function Footer() {
         {/* Bottom section */}
         <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-muted-foreground mb-4 md:mb-0">
-            &copy; {new Date().getFullYear()} POSITIVE-Next. All rights reserved.
+            &copy; {new Date().getFullYear()} CueMaster. All rights reserved.
           </p>
           
           <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm text-muted-foreground">
@@ -129,7 +129,7 @@ export default function Footer() {
             <Link href="/sitemap" className="hover:text-primary transition-colors">
               Sitemap
             </Link>
-            <span>Made with ❤️ for mental wellness</span>
+            <span>Trusted by pool halls worldwide</span>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Brain } from "lucide-react";
+import { CheckCircle, Target } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function About() {
@@ -26,27 +26,31 @@ export default function About() {
             transition={{ duration: 0.8 }}
           >
             <div className="relative aspect-square max-w-lg mx-auto">
-              {/* Circular gradient background */}
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-gray-100 to-white shadow-xl" />
+              {/* Pool table background */}
+              <div className="absolute inset-4 rounded-md bg-gradient-to-br from-emerald-800/90 to-emerald-900/80 shadow-xl" />
+              <div className="absolute inset-8 rounded-md border-8 border-primary/20 bg-emerald-700/20" />
               
-              {/* Central brain icon */}
+              {/* Central logo */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1/3 h-1/3 rounded-full bg-gradient-to-br from-primary/90 to-blue-600/80 flex items-center justify-center">
-                <Brain className="w-12 h-12 text-white" />
+                <Target className="w-12 h-12 text-white" />
               </div>
               
-              {/* Conceptual rings */}
-              <div className="absolute inset-4 rounded-full border-2 border-dashed border-gray-200 animate-[spin_60s_linear_infinite_reverse]" />
-              <div className="absolute inset-10 rounded-full border-2 border-dashed border-gray-200 animate-[spin_40s_linear_infinite]" />
-              <div className="absolute inset-16 rounded-full border-2 border-dashed border-gray-200 animate-[spin_30s_linear_infinite_reverse]" />
+              {/* Pool balls */}
+              <div className="absolute top-[30%] left-[30%] w-8 h-8 rounded-full bg-red-500 shadow-lg" />
+              <div className="absolute top-[40%] left-[60%] w-8 h-8 rounded-full bg-blue-500 shadow-lg" />
+              <div className="absolute top-[60%] left-[35%] w-8 h-8 rounded-full bg-yellow-500 shadow-lg" />
+              <div className="absolute top-[65%] left-[65%] w-8 h-8 rounded-full bg-green-500 shadow-lg" />
+              <div className="absolute top-[25%] left-[50%] w-8 h-8 rounded-full bg-purple-500 shadow-lg" />
+              <div className="absolute top-[75%] left-[50%] w-8 h-8 rounded-full bg-orange-500 shadow-lg" />
               
-              {/* Concept labels positioned around the circle */}
+              {/* Feature labels positioned around the visual */}
               {[
-                { label: "Focus", angle: 0, color: "bg-blue-500" },
-                { label: "Calm", angle: 60, color: "bg-emerald-500" },
-                { label: "Growth", angle: 120, color: "bg-amber-500" },
-                { label: "Clarity", angle: 180, color: "bg-violet-500" },
-                { label: "Balance", angle: 240, color: "bg-rose-500" },
-                { label: "Resilience", angle: 300, color: "bg-cyan-500" },
+                { label: "Tables", angle: 0, color: "bg-blue-500" },
+                { label: "Payments", angle: 60, color: "bg-emerald-500" },
+                { label: "Inventory", angle: 120, color: "bg-amber-500" },
+                { label: "Staff", angle: 180, color: "bg-violet-500" },
+                { label: "Analytics", angle: 240, color: "bg-rose-500" },
+                { label: "Reporting", angle: 300, color: "bg-cyan-500" },
               ].map((concept, i) => {
                 const radius = 45; // % of container
                 const radians = (concept.angle * Math.PI) / 180;
@@ -82,22 +86,21 @@ export default function About() {
           >
             <div className="bg-gradient-to-r from-primary to-primary-muted p-1 w-20 h-1 mb-6 rounded-full" />
             <h2 className="text-4xl md:text-5xl font-bold mb-8 leading-tight">
-              Your AI companion for <br />
-              <span className="text-primary">mental excellence</span>
+              The complete solution for <br />
+              <span className="text-primary">billiards venues</span>
             </h2>
             
             <p className="text-lg text-muted-foreground mb-12 leading-relaxed max-w-2xl">
-              POSITIVE-Next is a revolutionary mental fitness platform powered by advanced AI. 
-              Our mission is to help you overcome mental barriers, build resilience, and reach your full potential 
-              through science-backed techniques personalized to your unique needs.
+              CueMaster is a comprehensive management platform built specifically for pool halls and billiards venues. 
+              Our all-in-one system helps you streamline operations, maximize revenue, and deliver exceptional customer experiences.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[
-                { label: "Science-based approach", id: "science" },
-                { label: "Personalized experience", id: "personal" },
-                { label: "Continuous progress tracking", id: "progress" },
-                { label: "Expert-guided techniques", id: "expert" },
+                { label: "Multi-tenant architecture", id: "multi-tenant" },
+                { label: "Real-time monitoring", id: "realtime" },
+                { label: "Customizable settings", id: "custom" },
+                { label: "Comprehensive reporting", id: "reporting" },
               ].map((item, i) => (
                 <motion.div
                   key={item.id}
@@ -112,17 +115,17 @@ export default function About() {
                   </div>
                   <div>
                     <p className="font-medium">{item.label}</p>
-                    {item.id === "science" && (
-                      <p className="text-sm text-muted-foreground mt-1">Based on proven cognitive behavioral techniques</p>
+                    {item.id === "multi-tenant" && (
+                      <p className="text-sm text-muted-foreground mt-1">Manage multiple venues from a single dashboard</p>
                     )}
-                    {item.id === "personal" && (
-                      <p className="text-sm text-muted-foreground mt-1">Adapts to your needs, goals, and progress</p>
+                    {item.id === "realtime" && (
+                      <p className="text-sm text-muted-foreground mt-1">Track table usage and revenue in real-time</p>
                     )}
-                    {item.id === "progress" && (
-                      <p className="text-sm text-muted-foreground mt-1">Visualize improvements in your mental fitness</p>
+                    {item.id === "custom" && (
+                      <p className="text-sm text-muted-foreground mt-1">Set venue-specific pricing, hours, and rules</p>
                     )}
-                    {item.id === "expert" && (
-                      <p className="text-sm text-muted-foreground mt-1">Developed with psychologists and wellness experts</p>
+                    {item.id === "reporting" && (
+                      <p className="text-sm text-muted-foreground mt-1">Gain insights with detailed business analytics</p>
                     )}
                   </div>
                 </motion.div>
