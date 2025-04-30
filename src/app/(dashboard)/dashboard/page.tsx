@@ -1,25 +1,48 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client";
 
-export default async function DashboardPage() {
-  const supabase = createServerComponentClient({ cookies });
-  const { data: { session } } = await supabase.auth.getSession();
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useCompany } from "@/context/company-context";
+import { UserRole } from "@prisma/client";
+import DashboardContent from "@/components/dashboard/dashboard-content";
+import { Loader2 } from "lucide-react";
 
-  if (!session) {
-    redirect("/sign-in");
+export default function Dashboard() {
+  const router = useRouter();
+  const { profile, isLoading: profileLoading } = useCurrentUser();
+  const { selectedCompanyId, isSuperadmin } = useCompany();
+
+  useEffect(() => {
+    if (!profileLoading) {
+      // No profile, redirect to login
+      if (!profile) {
+        router.push("/sign-in");
+        return;
+      }
+
+      // Superadmin without selected company - go to company selection
+      if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
+        router.push("/company-selection");
+        return;
+      }
+
+      // Regular user without a company - go to waiting page
+      if (profile.role !== UserRole.SUPERADMIN && !profile.companyId) {
+        router.push("/waiting");
+        return;
+      }
+    }
+  }, [profile, profileLoading, router, selectedCompanyId]);
+
+  if (profileLoading) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
-  return (
-    <div className="space-y-8">
-      <div className="bg-card rounded-lg p-6">
-        <h2 className="text-2xl font-semibold mb-4">Dashboard Overview</h2>
-        <p className="text-muted-foreground">
-          This is your protected dashboard page. You can start adding your content here.
-        </p>
-      </div>
-      
-      {/* Add more dashboard sections here */}
-    </div>
-  );
+  // If we get here, the user is authenticated and has a valid company context
+  return <DashboardContent />;
 } 

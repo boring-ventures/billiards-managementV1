@@ -34,9 +34,19 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  // Protected dashboard routes are managed in the page components
+  // Company selection and waiting page logic is handled in the client components
+
   return res;
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/sign-in", "/sign-up", "/auth/callback"],
+  matcher: [
+    "/dashboard/:path*", 
+    "/sign-in", 
+    "/sign-up", 
+    "/auth/callback", 
+    "/company-selection",
+    "/waiting"
+  ],
 };

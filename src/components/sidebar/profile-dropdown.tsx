@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, LogOut, Settings, User } from "lucide-react";
+import { BadgeCheck, LogOut, Settings, User, Building } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -16,9 +16,37 @@ import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Badge } from "@/components/ui/badge";
 import { UserRole } from "@prisma/client";
+import { useCompany } from "@/context/company-context";
+import { useState, useEffect } from "react";
+
+interface Company {
+  id: string;
+  name: string;
+}
 
 export function ProfileDropdown() {
   const { profile, user, isLoading } = useCurrentUser();
+  const { isSuperadmin, selectedCompanyId, setSelectedCompanyId } = useCompany();
+  const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
+
+  useEffect(() => {
+    // For superadmins, fetch the current company name
+    if (isSuperadmin && selectedCompanyId) {
+      const fetchCompanyDetails = async () => {
+        try {
+          const response = await fetch(`/api/companies/${selectedCompanyId}`);
+          if (response.ok) {
+            const data = await response.json();
+            setCurrentCompany(data.company);
+          }
+        } catch (error) {
+          console.error("Failed to fetch company details:", error);
+        }
+      };
+      
+      fetchCompanyDetails();
+    }
+  }, [isSuperadmin, selectedCompanyId]);
 
   if (isLoading) {
     return (
@@ -53,6 +81,12 @@ export function ProfileDropdown() {
       .replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
+  const handleSwitchCompany = () => {
+    // Clear selected company and redirect to company selection
+    setSelectedCompanyId(null);
+    window.location.href = "/company-selection";
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -82,6 +116,12 @@ export function ProfileDropdown() {
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>
+            {isSuperadmin && currentCompany && (
+              <p className="text-xs mt-1 flex items-center text-primary">
+                <Building className="h-3 w-3 mr-1" />
+                {currentCompany.name}
+              </p>
+            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -99,12 +139,18 @@ export function ProfileDropdown() {
             </Link>
           </DropdownMenuItem>
           {profile.role === UserRole.SUPERADMIN && (
-            <DropdownMenuItem asChild>
-              <Link href="/admin">
-                <BadgeCheck className="mr-2 h-4 w-4" />
-                Admin
-              </Link>
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem asChild>
+                <Link href="/admin">
+                  <BadgeCheck className="mr-2 h-4 w-4" />
+                  Admin
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSwitchCompany}>
+                <Building className="mr-2 h-4 w-4" />
+                Switch Workspace
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

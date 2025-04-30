@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import prisma from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 
 // Schema for company creation/update
 const companySchema = z.object({
@@ -25,34 +27,57 @@ async function checkSuperAdminRole(userId: string) {
   }
 }
 
-export async function GET(req: NextRequest) {
+// GET: Fetch all companies for superadmin
+export async function GET(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
+
+    // Get the current user's session
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession();
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (sessionError || !session) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Check if user has super admin role
-    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
-    if (!isSuperAdmin) {
+    const userId = session.user.id;
+
+    // Fetch user profile to check role
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+    });
+
+    // Only superadmin can see all companies
+    if (!profile || profile.role !== UserRole.SUPERADMIN) {
       return NextResponse.json(
-        { error: "Forbidden: Requires super admin access" },
+        { error: "Unauthorized: Only superadmins can access all companies" },
         { status: 403 }
       );
     }
 
-    const companies = await db.company.findMany({
-      orderBy: { name: "asc" },
+    // Fetch all companies
+    const companies = await prisma.company.findMany({
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        phone: true,
+        createdAt: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
     });
 
-    return NextResponse.json(companies);
+    return NextResponse.json({ companies });
   } catch (error) {
-    console.error("[COMPANIES_GET]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    console.error("Error fetching companies:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch companies" },
+      { status: 500 }
+    );
   }
 }
 
