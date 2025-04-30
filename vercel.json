@@ -3,10 +3,6 @@
   "installCommand": "pnpm install",
   "framework": "nextjs",
   "devCommand": "pnpm run dev",
-  "rewrites": [
-    { "source": "/dashboard/:slug(.*)", "destination": "/src/app/(dashboard)/dashboard/:slug" },
-    { "source": "/dashboard", "destination": "/src/app/(dashboard)/dashboard" }
-  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -25,8 +21,5 @@
         }
       ]
     }
-  ],
-  "github": {
-    "silent": true
-  }
+  ]
 } 

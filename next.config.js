@@ -26,19 +26,7 @@ const nextConfig = {
     maxInactiveAge: 60 * 1000,
     // number of pages that should be kept simultaneously without being disposed
     pagesBufferLength: 5,
-  },
-  async rewrites() {
-    return [
-      {
-        source: '/dashboard/:slug(.*)',
-        destination: '/src/app/(dashboard)/dashboard/:slug',
-      },
-      {
-        source: '/dashboard',
-        destination: '/src/app/(dashboard)/dashboard',
-      },
-    ];
-  },
+  }
 };
 
 module.exports = nextConfig;
