@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Loader2 } from "lucide-react";
+import DashboardContent from "@/components/dashboard/dashboard-content";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -64,24 +65,8 @@ export default function DashboardPage() {
           Welcome back, {profile?.firstName || user?.email}
         </p>
       </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Dashboard cards will go here */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Tables</h3>
-          <p className="text-muted-foreground mt-2">Manage your pool tables and track sessions</p>
-        </div>
-        
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">Inventory</h3>
-          <p className="text-muted-foreground mt-2">Track inventory items and stock levels</p>
-        </div>
-        
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
-          <h3 className="font-semibold">POS</h3>
-          <p className="text-muted-foreground mt-2">Process sales and manage transactions</p>
-        </div>
-      </div>
+      
+      <DashboardContent />
     </div>
   );
 } 
