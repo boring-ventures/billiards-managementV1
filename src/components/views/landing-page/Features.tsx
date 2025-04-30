@@ -1,3 +1,5 @@
+"use client";
+
 import { Brain, Heart, Zap, Target, Smile, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 

@@ -1,589 +1,282 @@
 import {
   PrismaClient,
+  UserRole,
   InventoryTransactionType,
   FinanceCategoryType,
 } from "@prisma/client";
-import { randomUUID } from "crypto";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("Starting seed process...");
 
-  // Create companies
-  const company1 = await prisma.company.create({
+  // Clean up existing data to prevent duplicates
+  await cleanupData();
+
+  // Create a superadmin user without company association
+  const superadmin = await prisma.profile.create({
     data: {
-      name: "Cue Masters Billiards",
-      address: "123 Main Street, Downtown, NY 10001",
-      phone: "(212) 555-1234"
+      userId: "00000000-0000-0000-0000-000000000001",
+      firstName: "Super",
+      lastName: "Admin",
+      role: UserRole.SUPERADMIN,
+      active: true,
     },
   });
 
-  const company2 = await prisma.company.create({
+  console.log("Created superadmin:", superadmin);
+
+  // Create a company
+  const company = await prisma.company.create({
     data: {
-      name: "Pocket Aces Pool Hall",
-      address: "456 Broadway Ave, Los Angeles, CA 90001",
-      phone: "(323) 555-6789"
+      name: "Billiards Alpha",
+      phone: "+59170000000",
+      address: "Av. Libertadores #1000",
     },
   });
 
-  console.log("Created companies");
+  console.log("Created company:", company);
 
-  // Create tables for each company
-  const tables1 = await Promise.all(
-    Array.from({ length: 6 }, (_, i) => i + 1).map((num) =>
-      prisma.table.create({
-        data: {
-          companyId: company1.id,
-          name: `Table ${num}`,
-          status: "AVAILABLE",
-          hourlyRate: 15 + (num % 3) * 5, // Vary rates: 15, 20, 25
-        },
-      })
-    )
-  );
-
-  const tables2 = await Promise.all(
-    Array.from({ length: 4 }, (_, i) => i + 1).map((num) =>
-      prisma.table.create({
-        data: {
-          companyId: company2.id,
-          name: `Table ${num}`,
-          status: "AVAILABLE",
-          hourlyRate: 12 + (num % 2) * 8, // Vary rates: 12, 20
-        },
-      })
-    )
-  );
-
-  console.log("Created tables");
-
-  // Create inventory categories
-  const drinksCat1 = await prisma.inventoryCategory.create({
+  // Create admin and staff users linked to the company
+  const alice = await prisma.profile.create({
     data: {
-      companyId: company1.id,
-      name: "Drinks",
-      description: "Beverages and refreshments",
+      userId: "00000000-0000-0000-0000-000000000002",
+      companyId: company.id,
+      firstName: "Alice",
+      lastName: "Johnson",
+      role: UserRole.ADMIN,
+      active: true,
     },
   });
 
-  const foodCat1 = await prisma.inventoryCategory.create({
+  const bob = await prisma.profile.create({
     data: {
-      companyId: company1.id,
-      name: "Food",
-      description: "Snacks and meals",
+      userId: "00000000-0000-0000-0000-000000000003",
+      companyId: company.id,
+      firstName: "Bob",
+      lastName: "Smith",
+      role: UserRole.SELLER,
+      active: true,
     },
   });
 
-  const equipmentCat1 = await prisma.inventoryCategory.create({
+  console.log("Created company users:", { alice, bob });
+
+  // Create tables
+  const table1 = await prisma.table.create({
     data: {
-      companyId: company1.id,
-      name: "Equipment",
-      description: "Cues, chalk, and other billiards equipment",
+      companyId: company.id,
+      name: "Table 1",
+      status: "AVAILABLE",
+      hourlyRate: 50.00,
     },
   });
 
-  const drinksCat2 = await prisma.inventoryCategory.create({
+  const table2 = await prisma.table.create({
     data: {
-      companyId: company2.id,
-      name: "Beverages",
-      description: "All drinks",
+      companyId: company.id,
+      name: "Table 2",
+      status: "AVAILABLE",
+      hourlyRate: 40.00,
     },
   });
 
-  const snacksCat2 = await prisma.inventoryCategory.create({
+  console.log("Created tables:", { table1, table2 });
+
+  // Create inventory category and items
+  const barCategory = await prisma.inventoryCategory.create({
     data: {
-      companyId: company2.id,
-      name: "Snacks",
-      description: "Quick bites and appetizers",
+      companyId: company.id,
+      name: "Bar",
+      description: "Bebidas y refrescos",
     },
   });
 
-  console.log("Created inventory categories");
+  console.log("Created inventory category:", barCategory);
 
-  // Create inventory items
-  const items1 = await Promise.all([
-    // Drinks for company 1
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: drinksCat1.id,
-        name: "Soft Drink",
-        sku: "DRK-001",
-        quantity: 100,
-        criticalThreshold: 20,
-        price: 2.5,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: drinksCat1.id,
-        name: "Bottled Water",
-        sku: "DRK-002",
-        quantity: 150,
-        criticalThreshold: 30,
-        price: 1.5,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: drinksCat1.id,
-        name: "Beer",
-        sku: "DRK-003",
-        quantity: 75,
-        criticalThreshold: 15,
-        price: 5.0,
-      },
-    }),
-
-    // Food for company 1
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: foodCat1.id,
-        name: "Nachos",
-        sku: "FOOD-001",
-        quantity: 30,
-        criticalThreshold: 5,
-        price: 7.5,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: foodCat1.id,
-        name: "Pizza Slice",
-        sku: "FOOD-002",
-        quantity: 40,
-        criticalThreshold: 8,
-        price: 4.0,
-      },
-    }),
-
-    // Equipment for company 1
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: equipmentCat1.id,
-        name: "Cue Chalk",
-        sku: "EQ-001",
-        quantity: 50,
-        criticalThreshold: 10,
-        price: 1.0,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company1.id,
-        categoryId: equipmentCat1.id,
-        name: "House Cue",
-        sku: "EQ-002",
-        quantity: 20,
-        criticalThreshold: 3,
-        price: 25.0,
-      },
-    }),
-
-    // Items for company 2
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company2.id,
-        categoryId: drinksCat2.id,
-        name: "Cola",
-        sku: "B-DRK-001",
-        quantity: 80,
-        criticalThreshold: 15,
-        price: 2.25,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company2.id,
-        categoryId: drinksCat2.id,
-        name: "Craft Beer",
-        sku: "B-DRK-002",
-        quantity: 60,
-        criticalThreshold: 12,
-        price: 6.5,
-      },
-    }),
-    prisma.inventoryItem.create({
-      data: {
-        companyId: company2.id,
-        categoryId: snacksCat2.id,
-        name: "French Fries",
-        sku: "B-FOOD-001",
-        quantity: 45,
-        criticalThreshold: 10,
-        price: 5.0,
-      },
-    }),
-  ]);
-
-  console.log("Created inventory items");
-
-  // Create finance categories
-  const income1 = await prisma.financeCategory.create({
+  const cerveza = await prisma.inventoryItem.create({
     data: {
-      companyId: company1.id,
-      name: "Table Revenue",
-      categoryType: FinanceCategoryType.INCOME,
+      companyId: company.id,
+      categoryId: barCategory.id,
+      name: "Cerveza",
+      quantity: 50,
+      criticalThreshold: 10,
+      price: 20.00,
     },
   });
 
-  const income2 = await prisma.financeCategory.create({
+  const soda = await prisma.inventoryItem.create({
     data: {
-      companyId: company1.id,
-      name: "Food & Beverage Sales",
-      categoryType: FinanceCategoryType.INCOME,
+      companyId: company.id,
+      categoryId: barCategory.id,
+      name: "Soda",
+      quantity: 30,
+      criticalThreshold: 5,
+      price: 10.00,
     },
   });
 
-  const expense1 = await prisma.financeCategory.create({
+  console.log("Created inventory items:", { cerveza, soda });
+
+  // Create a table session 
+  const startTime = new Date();
+  const endTime = new Date(startTime);
+  endTime.setMinutes(endTime.getMinutes() + 45); // 45 minutes later
+
+  const tableSession = await prisma.tableSession.create({
     data: {
-      companyId: company1.id,
-      name: "Utilities",
-      categoryType: FinanceCategoryType.EXPENSE,
-    },
-  });
-
-  const expense2 = await prisma.financeCategory.create({
-    data: {
-      companyId: company1.id,
-      name: "Staff Salaries",
-      categoryType: FinanceCategoryType.EXPENSE,
-    },
-  });
-
-  const expense3 = await prisma.financeCategory.create({
-    data: {
-      companyId: company1.id,
-      name: "Maintenance",
-      categoryType: FinanceCategoryType.EXPENSE,
-    },
-  });
-
-  // Also for company 2
-  const income1_c2 = await prisma.financeCategory.create({
-    data: {
-      companyId: company2.id,
-      name: "Table Revenue",
-      categoryType: FinanceCategoryType.INCOME,
-    },
-  });
-
-  const expense1_c2 = await prisma.financeCategory.create({
-    data: {
-      companyId: company2.id,
-      name: "Operating Expenses",
-      categoryType: FinanceCategoryType.EXPENSE,
-    },
-  });
-
-  console.log("Created finance categories");
-
-  // Create finance transactions
-  const transactions = await Promise.all([
-    // Income for company 1
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company1.id,
-        categoryId: income1.id,
-        amount: 450.0,
-        transactionDate: new Date("2023-05-01"),
-        description: "Weekend table revenue",
-      },
-    }),
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company1.id,
-        categoryId: income2.id,
-        amount: 325.5,
-        transactionDate: new Date("2023-05-01"),
-        description: "Weekend F&B sales",
-      },
-    }),
-
-    // Expenses for company 1
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company1.id,
-        categoryId: expense1.id,
-        amount: 180.25,
-        transactionDate: new Date("2023-05-05"),
-        description: "Monthly electricity bill",
-      },
-    }),
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company1.id,
-        categoryId: expense2.id,
-        amount: 1200.0,
-        transactionDate: new Date("2023-05-15"),
-        description: "Staff salaries - first half of May",
-      },
-    }),
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company1.id,
-        categoryId: expense3.id,
-        amount: 75.0,
-        transactionDate: new Date("2023-05-10"),
-        description: "Table cloth replacement",
-      },
-    }),
-
-    // For company 2
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company2.id,
-        categoryId: income1_c2.id,
-        amount: 320.0,
-        transactionDate: new Date("2023-05-01"),
-        description: "Weekend table revenue",
-      },
-    }),
-    prisma.financeTransaction.create({
-      data: {
-        companyId: company2.id,
-        categoryId: expense1_c2.id,
-        amount: 150.0,
-        transactionDate: new Date("2023-05-05"),
-        description: "Weekly cleaning service",
-      },
-    }),
-  ]);
-
-  console.log("Created finance transactions");
-
-  // Create table reservations
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const reservation1 = await prisma.tableReservation.create({
-    data: {
-      companyId: company1.id,
-      tableId: tables1[0].id,
-      customerName: "John Smith",
-      customerPhone: "555-123-4567",
-      reservedFrom: new Date(tomorrow.setHours(18, 0, 0, 0)),
-      reservedTo: new Date(tomorrow.setHours(20, 0, 0, 0)),
-      status: "CONFIRMED",
-    },
-  });
-
-  const reservation2 = await prisma.tableReservation.create({
-    data: {
-      companyId: company1.id,
-      tableId: tables1[1].id,
-      customerName: "Emily Johnson",
-      customerPhone: "555-987-6543",
-      reservedFrom: new Date(tomorrow.setHours(19, 0, 0, 0)),
-      reservedTo: new Date(tomorrow.setHours(21, 0, 0, 0)),
-      status: "PENDING",
-    },
-  });
-
-  console.log("Created table reservations");
-
-  // Create table maintenance records
-  const maintenance1 = await prisma.tableMaintenance.create({
-    data: {
-      companyId: company1.id,
-      tableId: tables1[2].id,
-      description: "Replace felt and bumpers",
-      maintenanceAt: new Date("2023-05-15T10:00:00Z"),
-      cost: 350.0,
-    },
-  });
-
-  const maintenance2 = await prisma.tableMaintenance.create({
-    data: {
-      companyId: company2.id,
-      tableId: tables2[0].id,
-      description: "Regular maintenance and leveling",
-      maintenanceAt: new Date("2023-05-20T09:00:00Z"),
-      cost: 150.0,
-    },
-  });
-
-  console.log("Created table maintenance records");
-
-  // Create inventory transactions
-  const invTransaction1 = await prisma.inventoryTransaction.create({
-    data: {
-      companyId: company1.id,
-      itemId: items1[0].id, // Soft Drink
-      transactionType: InventoryTransactionType.INCOMING,
-      quantityDelta: 50,
-      note: "Initial stock order",
-    },
-  });
-
-  const invTransaction2 = await prisma.inventoryTransaction.create({
-    data: {
-      companyId: company1.id,
-      itemId: items1[2].id, // Beer
-      transactionType: InventoryTransactionType.OUTGOING,
-      quantityDelta: -10,
-      note: "Weekend sales",
-    },
-  });
-
-  const invTransaction3 = await prisma.inventoryTransaction.create({
-    data: {
-      companyId: company1.id,
-      itemId: items1[3].id, // Nachos
-      transactionType: InventoryTransactionType.ADJUSTMENT,
-      quantityDelta: -2,
-      note: "Inventory count adjustment",
-    },
-  });
-
-  console.log("Created inventory transactions");
-
-  // Create activity logs
-  const activityLogs = await Promise.all([
-    prisma.tableActivityLog.create({
-      data: {
-        companyId: company1.id,
-        action: "CREATE",
-        entityType: "TABLE",
-        entityId: tables1[0].id,
-        metadata: { description: "New table added to system" },
-      },
-    }),
-    prisma.tableActivityLog.create({
-      data: {
-        companyId: company1.id,
-        action: "UPDATE",
-        entityType: "INVENTORY",
-        entityId: items1[0].id,
-        metadata: {
-          description: "Stock updated",
-          previousQuantity: 50,
-          newQuantity: 100,
-        },
-      },
-    }),
-    prisma.tableActivityLog.create({
-      data: {
-        companyId: company2.id,
-        action: "CREATE",
-        entityType: "RESERVATION",
-        entityId: reservation1.id,
-        metadata: { description: "New reservation created" },
-      },
-    }),
-  ]);
-
-  console.log("Created activity logs");
-
-  // Create a simulated complete table session with POS order
-  const completedSession = await prisma.tableSession.create({
-    data: {
-      companyId: company1.id,
-      tableId: tables1[0].id,
-      startedAt: new Date("2023-05-01T14:00:00Z"),
-      endedAt: new Date("2023-05-01T16:30:00Z"),
-      durationMin: 150,
-      totalCost: 37.5, // 2.5 hours at $15/hour
+      companyId: company.id,
+      tableId: table1.id,
+      staffId: bob.id,
+      startedAt: startTime,
+      endedAt: endTime,
+      durationMin: 45,
+      totalCost: 37.50, // 45 minutes of 50/hour rate = 37.50
       status: "CLOSED",
     },
   });
 
+  console.log("Created table session:", tableSession);
+
+  // Create a POS order linked to the session
   const posOrder = await prisma.posOrder.create({
     data: {
-      companyId: company1.id,
+      companyId: company.id,
       orderNumber: "ORD-001",
-      tableSessionId: completedSession.id,
-      totalAmount: 52.5, // Table fee + food/drinks
-      paidAmount: 52.5,
+      staffId: bob.id,
+      tableSessionId: tableSession.id, 
+      totalAmount: 50.00, // 2 cervezas (20.00 each) + 1 soda (10.00) = 50.00
+      paidAmount: 50.00,
     },
   });
 
+  console.log("Created POS order:", posOrder);
+
+  // Create order items
   const orderItems = await Promise.all([
-    // Table charge is implicitly included via the session
-    // Add some food and drinks to the order
     prisma.posOrderItem.create({
       data: {
         orderId: posOrder.id,
-        itemId: items1[0].id, // Soft Drink
+        itemId: cerveza.id,
         quantity: 2,
-        unitPrice: 2.5,
-        lineTotal: 5.0,
+        unitPrice: 20.00,
+        lineTotal: 40.00,
       },
     }),
     prisma.posOrderItem.create({
       data: {
         orderId: posOrder.id,
-        itemId: items1[3].id, // Nachos
+        itemId: soda.id,
         quantity: 1,
-        unitPrice: 7.5,
-        lineTotal: 7.5,
-      },
-    }),
-    prisma.posOrderItem.create({
-      data: {
-        orderId: posOrder.id,
-        itemId: items1[2].id, // Beer
-        quantity: 1,
-        unitPrice: 5.0,
-        lineTotal: 5.0,
+        unitPrice: 10.00,
+        lineTotal: 10.00,
       },
     }),
   ]);
 
-  console.log("Created simulated table session with POS order");
+  console.log("Created order items:", orderItems);
 
-  // Add a currently active table session
-  const activeSession = await prisma.tableSession.create({
+  // Update inventory to reflect the order
+  await prisma.inventoryTransaction.create({
     data: {
-      companyId: company1.id,
-      tableId: tables1[3].id,
-      startedAt: new Date(Date.now() - 3600000), // Started 1 hour ago
-      status: "ACTIVE",
+      companyId: company.id,
+      itemId: cerveza.id,
+      transactionType: InventoryTransactionType.OUTGOING,
+      quantityDelta: -2, // Decrease by 2
+      note: "Sale via POS order ORD-001",
     },
   });
 
-  // Create a POS order for the active session
-  const activeOrder = await prisma.posOrder.create({
+  await prisma.inventoryTransaction.create({
     data: {
-      companyId: company1.id,
-      orderNumber: "ORD-002",
-      tableSessionId: activeSession.id,
-      totalAmount: 15.0, // Food/drinks only so far
-      paidAmount: 0, // Not paid yet
+      companyId: company.id,
+      itemId: soda.id,
+      transactionType: InventoryTransactionType.OUTGOING,
+      quantityDelta: -1, // Decrease by 1
+      note: "Sale via POS order ORD-001",
     },
   });
 
-  const activeOrderItems = await Promise.all([
-    prisma.posOrderItem.create({
-      data: {
-        orderId: activeOrder.id,
-        itemId: items1[1].id, // Bottled Water
-        quantity: 2,
-        unitPrice: 1.5,
-        lineTotal: 3.0,
-      },
-    }),
-    prisma.posOrderItem.create({
-      data: {
-        orderId: activeOrder.id,
-        itemId: items1[4].id, // Pizza Slice
-        quantity: 3,
-        unitPrice: 4.0,
-        lineTotal: 12.0,
-      },
-    }),
-  ]);
+  // Create finance categories
+  const incomeCategory = await prisma.financeCategory.create({
+    data: {
+      companyId: company.id,
+      name: "Ventas",
+      categoryType: FinanceCategoryType.INCOME,
+    },
+  });
 
-  console.log("Created active table session with ongoing order");
+  const expenseCategory = await prisma.financeCategory.create({
+    data: {
+      companyId: company.id,
+      name: "Compras",
+      categoryType: FinanceCategoryType.EXPENSE,
+    },
+  });
+
+  console.log("Created finance categories:", { incomeCategory, expenseCategory });
+
+  // Create finance transactions
+  const incomeTransaction = await prisma.financeTransaction.create({
+    data: {
+      companyId: company.id,
+      categoryId: incomeCategory.id,
+      amount: 100.00,
+      transactionDate: new Date(),
+      description: "Venta de bebidas",
+    },
+  });
+
+  const expenseTransaction = await prisma.financeTransaction.create({
+    data: {
+      companyId: company.id,
+      categoryId: expenseCategory.id,
+      amount: 60.00,
+      transactionDate: new Date(),
+      description: "Compra de insumos",
+    },
+  });
+
+  console.log("Created finance transactions:", { incomeTransaction, expenseTransaction });
 
   console.log("Seed completed successfully!");
+}
+
+// Helper function to clean up existing data to prevent duplicates on re-runs
+async function cleanupData() {
+  console.log("Cleaning up existing data...");
+
+  // Delete in proper order to respect foreign key constraints
+  await prisma.financeTransaction.deleteMany({});
+  await prisma.financeCategory.deleteMany({});
+  await prisma.posOrderItem.deleteMany({});
+  await prisma.posOrder.deleteMany({});
+  await prisma.inventoryTransaction.deleteMany({});
+  await prisma.tableActivityLog.deleteMany({});
+  await prisma.tableSession.deleteMany({});
+  await prisma.tableReservation.deleteMany({});
+  await prisma.tableMaintenance.deleteMany({});
+  await prisma.inventoryItem.deleteMany({});
+  await prisma.inventoryCategory.deleteMany({});
+  await prisma.table.deleteMany({});
+  
+  // Only delete company-linked profiles, keep the superadmin
+  await prisma.profile.deleteMany({
+    where: {
+      companyId: {
+        not: null
+      }
+    }
+  });
+  
+  await prisma.company.deleteMany({});
+  
+  // Delete specific superadmin to avoid duplicates
+  await prisma.profile.deleteMany({
+    where: {
+      userId: "00000000-0000-0000-0000-000000000001"
+    }
+  });
 }
 
 main()

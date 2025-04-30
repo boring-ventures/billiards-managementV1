@@ -1,3 +1,5 @@
+"use client";
+
 import { CheckCircle, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 
