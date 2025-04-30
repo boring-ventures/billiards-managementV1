@@ -18,6 +18,7 @@ const nextConfig = {
   },
   experimental: {
     serverComponentsExternalPackages: ['@prisma/client'],
+    serverActions: true,
   },
   // Improved error handling for RSC requests
   onDemandEntries: {
@@ -25,6 +26,14 @@ const nextConfig = {
     maxInactiveAge: 60 * 1000,
     // number of pages that should be kept simultaneously without being disposed
     pagesBufferLength: 5,
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/dashboard/:path*',
+        destination: '/src/app/(dashboard)/dashboard/:path*',
+      },
+    ];
   },
 };
 

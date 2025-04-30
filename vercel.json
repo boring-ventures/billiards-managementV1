@@ -2,5 +2,31 @@
   "buildCommand": "pnpm run build",
   "installCommand": "pnpm install",
   "framework": "nextjs",
-  "devCommand": "pnpm run dev"
+  "devCommand": "pnpm run dev",
+  "rewrites": [
+    { "source": "/dashboard/:path*", "destination": "/src/app/(dashboard)/dashboard/:path*" },
+    { "source": "/dashboard", "destination": "/src/app/(dashboard)/dashboard" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "x-content-type-options",
+          "value": "nosniff"
+        },
+        {
+          "key": "x-frame-options",
+          "value": "DENY"
+        },
+        {
+          "key": "x-xss-protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
+  "github": {
+    "silent": true
+  }
 } 
