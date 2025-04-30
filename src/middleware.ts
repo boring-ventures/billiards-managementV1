@@ -16,7 +16,11 @@ export async function middleware(req: NextRequest) {
   }
 
   // If there's no session and the user is trying to access a protected route
-  if (!session && req.nextUrl.pathname.startsWith("/dashboard")) {
+  if (!session && 
+     (req.nextUrl.pathname.startsWith("/dashboard") || 
+      req.nextUrl.pathname.startsWith("/select-company") || 
+      req.nextUrl.pathname.startsWith("/waiting-approval"))
+    ) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/sign-in";
     redirectUrl.searchParams.set("redirectTo", req.nextUrl.pathname);
@@ -34,8 +38,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Protected dashboard routes are managed in the page components
-  // Company selection and waiting page logic is handled in the client components
+  // The company selection and waiting page flow are handled client-side
+  // in the individual page components to get access to the profile data
 
   return res;
 }
@@ -46,7 +50,7 @@ export const config = {
     "/sign-in", 
     "/sign-up", 
     "/auth/callback", 
-    "/company-selection",
-    "/waiting"
+    "/select-company",
+    "/waiting-approval"
   ],
 };

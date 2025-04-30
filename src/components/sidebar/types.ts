@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { UserRole } from "@prisma/client";
 
 interface User {
   name: string;
@@ -16,6 +17,7 @@ interface BaseNavItem {
   title: string;
   icon?: LucideIcon;
   badge?: string;
+  requiredRole?: UserRole;
 }
 
 export interface NavLink extends BaseNavItem {

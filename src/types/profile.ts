@@ -3,6 +3,7 @@ import type { UserRole } from "@prisma/client";
 export interface Profile {
   id: string;
   userId: string;
+  companyId?: string;
   avatarUrl?: string;
   birthDate?: Date;
   createdAt: Date;

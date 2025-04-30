@@ -11,7 +11,7 @@ import { Loader2 } from "lucide-react";
 export default function Dashboard() {
   const router = useRouter();
   const { profile, isLoading: profileLoading } = useCurrentUser();
-  const { selectedCompanyId, isSuperadmin } = useCompany();
+  const { selectedCompanyId } = useCompany();
 
   useEffect(() => {
     if (!profileLoading) {
@@ -23,13 +23,13 @@ export default function Dashboard() {
 
       // Superadmin without selected company - go to company selection
       if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
-        router.push("/company-selection");
+        router.push("/select-company");
         return;
       }
 
       // Regular user without a company - go to waiting page
       if (profile.role !== UserRole.SUPERADMIN && !profile.companyId) {
-        router.push("/waiting");
+        router.push("/waiting-approval");
         return;
       }
     }

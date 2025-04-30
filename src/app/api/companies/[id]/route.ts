@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { UserRole } from "@prisma/client";
 
 // Schema for company update
 const companyUpdateSchema = z.object({
@@ -26,41 +27,54 @@ async function checkSuperAdminRole(userId: string) {
 }
 
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Ensure params.id is available
-  const companyId = params.id;
-
   try {
+    const { id } = params;
     const supabase = createRouteHandlerClient({ cookies });
+
+    // Get the current user's session
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession();
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (sessionError || !session) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Check if user has super admin role
-    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
-    if (!isSuperAdmin) {
+    const userId = session.user.id;
+
+    // Fetch user profile to check role
+    const profile = await db.profile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+
+    // Check if user has access to the company
+    const hasAccess =
+      profile.role === UserRole.SUPERADMIN || profile.companyId === id;
+
+    if (!hasAccess) {
       return NextResponse.json(
-        { error: "Forbidden: Requires super admin access" },
+        { error: "Unauthorized to access this company" },
         { status: 403 }
       );
     }
 
+    // Fetch the company
     const company = await db.company.findUnique({
-      where: { id: companyId },
-      include: {
-        _count: {
-          select: {
-            profiles: true,
-            tables: true,
-            inventoryItems: true,
-          },
-        },
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        phone: true,
+        createdAt: true,
       },
     });
 
@@ -68,10 +82,13 @@ export async function GET(
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    return NextResponse.json(company);
+    return NextResponse.json({ company });
   } catch (error) {
-    console.error("[COMPANY_GET]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    console.error("Error fetching company:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch company" },
+      { status: 500 }
+    );
   }
 }
 

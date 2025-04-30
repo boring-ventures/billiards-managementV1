@@ -22,8 +22,11 @@ import {
   UserX,
   Users,
   Building2,
+  BuildingIcon,
+  Factory,
 } from "lucide-react";
 import type { SidebarData } from "../types";
+import { UserRole } from "@prisma/client";
 
 export const sidebarData: SidebarData = {
   user: {
@@ -54,13 +57,19 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: "Dashboard",
-          url: "/",
+          url: "/dashboard",
           icon: LayoutDashboard,
         },
         {
           title: "Companies",
           url: "/companies",
           icon: Building2,
+        },
+        {
+          title: "Select Workspace", 
+          url: "/select-company",
+          icon: Factory,
+          requiredRole: UserRole.SUPERADMIN,
         },
         {
           title: "Apps",

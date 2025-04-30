@@ -29,6 +29,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { UserRole } from "@prisma/client";
 import type {
   NavCollapsible,
   NavItem,
@@ -39,12 +41,29 @@ import type {
 export function NavGroup({ title, items }: NavGroupType) {
   const { state } = useSidebar();
   const pathname = usePathname();
+  const { profile } = useCurrentUser();
+  
+  // Filter items based on user role
+  const filteredItems = items.filter(item => {
+    // If the item has a 'requiredRole' property, check if user has that role
+    if ('requiredRole' in item) {
+      if (!profile || item.requiredRole === undefined) return true;
+      
+      // Special handling for the Select Workspace item - only show for SUPERADMIN
+      if (item.title === 'Select Workspace') {
+        return profile.role === UserRole.SUPERADMIN;
+      }
+      
+      return item.requiredRole === profile.role;
+    }
+    return true;
+  });
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{title}</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item: NavItem) => {
+        {filteredItems.map((item: NavItem) => {
           const key = `${item.title}-${item.url}`;
 
           if (!item.items)

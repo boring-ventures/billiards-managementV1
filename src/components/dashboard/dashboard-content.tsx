@@ -1,11 +1,11 @@
 "use client";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useCompany } from "@/context/company-context";
+import { getActiveCompanyId } from "@/lib/authUtils";
 
 export default function DashboardContent() {
   const { profile } = useCurrentUser();
-  const { selectedCompanyId } = useCompany();
+  const activeCompanyId = getActiveCompanyId(profile);
   
   // In a real application, you would fetch data based on the company context
 
@@ -14,7 +14,7 @@ export default function DashboardContent() {
       <div className="bg-card rounded-lg p-6">
         <h2 className="text-2xl font-semibold mb-4">Dashboard Overview</h2>
         <p className="text-muted-foreground">
-          Welcome to your dashboard. You are viewing data for company ID: {profile?.companyId || selectedCompanyId}
+          Welcome to your dashboard. You are viewing data for company ID: {activeCompanyId || "Unknown"}
         </p>
       </div>
 
