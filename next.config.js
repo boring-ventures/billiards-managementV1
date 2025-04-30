@@ -17,9 +17,13 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client'],
-    serverActions: true,
+    serverActions: {
+      bodySizeLimit: '2mb',
+      allowedOrigins: ['localhost:3000', 'billiards-management-v1.vercel.app']
+    }
   },
+  // External packages that should be treated as server components
+  serverExternalPackages: ['@prisma/client'],
   // Improved error handling for RSC requests
   onDemandEntries: {
     // period (in ms) where the server will keep pages in the buffer
