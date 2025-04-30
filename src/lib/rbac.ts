@@ -45,7 +45,7 @@ export const assertRoleAndCompany = (
  */
 export const hasAdminPermission = (profile: Profile | null): boolean => {
   if (!profile) return false;
-  return [UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role as UserRole);
+  return [UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(profile.role.toString());
 };
 
 /**
@@ -53,5 +53,15 @@ export const hasAdminPermission = (profile: Profile | null): boolean => {
  */
 export const hasStaffPermission = (profile: Profile | null): boolean => {
   if (!profile) return false;
-  return [UserRole.SELLER, UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role as UserRole);
-}; 
+  return [UserRole.SELLER.toString(), UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(profile.role.toString());
+};
+
+/**
+ * Temporary API auth check until proper auth is implemented
+ * For demonstration purposes only
+ */
+export const hasApiPermission = (user: any): boolean => {
+  // For API routes, we temporarily allow all authenticated users
+  // This is a placeholder until proper auth is implemented
+  return !!user;
+} 

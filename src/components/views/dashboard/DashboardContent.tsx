@@ -5,12 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getActiveCompanyId } from "@/lib/authUtils";
-import RevenueOverview from "@/components/views/dashboard/RevenueOverview";
-import ActiveTableSessions from "@/components/views/dashboard/ActiveTableSessions";
-import ProductPerformance from "@/components/views/dashboard/ProductPerformance";
-import FinancialTrends from "@/components/views/dashboard/FinancialTrends";
-import InventoryAlerts from "@/components/views/dashboard/InventoryAlerts";
-import ActivityLogFeed from "@/components/views/dashboard/ActivityLogFeed";
+import RevenueOverview from "./RevenueOverview";
+import ActiveTableSessions from "./ActiveTableSessions";
+import ProductPerformance from "./ProductPerformance";
+import FinancialTrends from "./FinancialTrends";
+import InventoryAlerts from "./InventoryAlerts";
+import ActivityLogFeed from "./ActivityLogFeed";
 
 export default function DashboardContent() {
   const { profile } = useCurrentUser();

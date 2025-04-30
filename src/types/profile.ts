@@ -1,15 +1,14 @@
-import type { UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 
 export interface Profile {
   id: string;
   userId: string;
-  companyId?: string;
-  avatarUrl?: string;
-  birthDate?: Date;
+  companyId: string | null; // Allow null for companyId to match the Prisma model
+  avatarUrl: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  role: UserRole;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
-  active: boolean;
-  firstName?: string;
-  lastName?: string;
-  role: UserRole;
 } 
