@@ -44,7 +44,7 @@ export default function DashboardContent() {
         
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="dashboard-card">
+            <Card className="dashboard-card border-l-4 border-l-blue-500/70">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Active Tables</CardTitle>
                 <CardDescription className="text-muted-foreground">Currently active table sessions</CardDescription>
@@ -54,7 +54,7 @@ export default function DashboardContent() {
               </CardContent>
             </Card>
             
-            <Card className="dashboard-card">
+            <Card className="dashboard-card border-l-4 border-l-green-500/70">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Top Products</CardTitle>
                 <CardDescription className="text-muted-foreground">Best selling products this week</CardDescription>
@@ -66,7 +66,7 @@ export default function DashboardContent() {
           </div>
           
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="dashboard-card">
+            <Card className="dashboard-card border-l-4 border-l-purple-500/70">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Financial Trends</CardTitle>
                 <CardDescription className="text-muted-foreground">Income vs Expense this month</CardDescription>
@@ -76,7 +76,7 @@ export default function DashboardContent() {
               </CardContent>
             </Card>
             
-            <Card className="dashboard-card">
+            <Card className="dashboard-card border-l-4 border-l-amber-500/70">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Inventory Alerts</CardTitle>
                 <CardDescription className="text-muted-foreground">Items below critical threshold</CardDescription>
@@ -89,7 +89,7 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="tables">
-          <Card className="dashboard-card">
+          <Card className="dashboard-card border-l-4 border-l-blue-500/70">
             <CardHeader className="pb-3">
               <CardTitle className="text-xl font-semibold">Active Table Sessions</CardTitle>
               <CardDescription className="text-muted-foreground">Currently active table sessions</CardDescription>
@@ -101,7 +101,7 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="products">
-          <Card className="dashboard-card">
+          <Card className="dashboard-card border-l-4 border-l-green-500/70">
             <CardHeader className="pb-3">
               <CardTitle className="text-xl font-semibold">Product Performance</CardTitle>
               <CardDescription className="text-muted-foreground">Best selling products this week</CardDescription>
@@ -113,7 +113,7 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="finance">
-          <Card className="dashboard-card">
+          <Card className="dashboard-card border-l-4 border-l-purple-500/70">
             <CardHeader className="pb-3">
               <CardTitle className="text-xl font-semibold">Financial Trends</CardTitle>
               <CardDescription className="text-muted-foreground">Income vs Expense over time</CardDescription>
@@ -125,7 +125,7 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="inventory">
-          <Card className="dashboard-card">
+          <Card className="dashboard-card border-l-4 border-l-amber-500/70">
             <CardHeader className="pb-3">
               <CardTitle className="text-xl font-semibold">Inventory Alerts</CardTitle>
               <CardDescription className="text-muted-foreground">Items below critical threshold</CardDescription>
@@ -137,7 +137,7 @@ export default function DashboardContent() {
         </TabsContent>
         
         <TabsContent value="activity">
-          <Card className="dashboard-card">
+          <Card className="dashboard-card border-l-4 border-l-sky-500/70">
             <CardHeader className="pb-3">
               <CardTitle className="text-xl font-semibold">Activity Log</CardTitle>
               <CardDescription className="text-muted-foreground">Recent system activities</CardDescription>

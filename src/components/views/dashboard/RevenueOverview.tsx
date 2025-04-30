@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowUpIcon, ArrowDownIcon, DollarSignIcon } from "lucide-react";
 import { formatPrice } from "@/lib/tableUtils";
+import { cn } from "@/lib/utils";
 
 type RevenueData = {
   posRevenue: number;
@@ -48,12 +49,13 @@ export default function RevenueOverview({ companyId }: { companyId: string }) {
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-blue-400/5 pointer-events-none" />
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
           <CardTitle className="text-sm font-medium">POS Revenue</CardTitle>
-          <DollarSignIcon className="h-4 w-4 text-muted-foreground" />
+          <DollarSignIcon className="h-4 w-4 text-blue-500" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative z-10">
           <div className="text-2xl font-bold">
             {loading ? "Loading..." : formatPrice(data.posRevenue)}
           </div>
@@ -63,12 +65,13 @@ export default function RevenueOverview({ companyId }: { companyId: string }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-green-400/5 pointer-events-none" />
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
           <CardTitle className="text-sm font-medium">Other Income</CardTitle>
           <ArrowUpIcon className="h-4 w-4 text-green-500" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative z-10">
           <div className="text-2xl font-bold">
             {loading ? "Loading..." : formatPrice(data.otherIncome)}
           </div>
@@ -78,12 +81,13 @@ export default function RevenueOverview({ companyId }: { companyId: string }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-red-400/5 pointer-events-none" />
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
           <CardTitle className="text-sm font-medium">Expenses</CardTitle>
           <ArrowDownIcon className="h-4 w-4 text-red-500" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative z-10">
           <div className="text-2xl font-bold">
             {loading ? "Loading..." : formatPrice(data.expenses)}
           </div>
