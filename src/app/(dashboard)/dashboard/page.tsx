@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCompany } from "@/context/company-context";
@@ -12,28 +12,39 @@ export default function Dashboard() {
   const router = useRouter();
   const { profile, isLoading: profileLoading } = useCurrentUser();
   const { selectedCompanyId } = useCompany();
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   useEffect(() => {
-    if (!profileLoading) {
-      // No profile, redirect to login
-      if (!profile) {
-        router.push("/sign-in");
-        return;
-      }
+    if (hasRedirected) return; // Prevent redirection loops
+    
+    // Delay the check to allow context to fully initialize
+    const redirectionCheck = setTimeout(() => {
+      if (!profileLoading) {
+        // No profile, redirect to login
+        if (!profile) {
+          setHasRedirected(true);
+          router.push("/sign-in");
+          return;
+        }
 
-      // Superadmin without selected company - go to company selection
-      if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
-        router.push("/company-selection");
-        return;
-      }
+        // Superadmin without selected company - go to company selection
+        if (profile.role === UserRole.SUPERADMIN && !selectedCompanyId) {
+          setHasRedirected(true);
+          router.push("/company-selection");
+          return;
+        }
 
-      // Regular user without a company - go to waiting page
-      if (profile.role !== UserRole.SUPERADMIN && !profile.companyId) {
-        router.push("/waiting-approval");
-        return;
+        // Regular user without a company - go to waiting page
+        if (profile.role !== UserRole.SUPERADMIN && !profile.companyId) {
+          setHasRedirected(true);
+          router.push("/waiting-approval");
+          return;
+        }
       }
-    }
-  }, [profile, profileLoading, router, selectedCompanyId]);
+    }, 500); // Short delay to ensure context values are populated
+
+    return () => clearTimeout(redirectionCheck);
+  }, [profile, profileLoading, router, selectedCompanyId, hasRedirected]);
 
   if (profileLoading) {
     return (

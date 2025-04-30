@@ -22,7 +22,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const { profile, isLoading } = useCurrentUser();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
+  // First effect: Set up superadmin status and company ID for non-superadmins
   useEffect(() => {
     // Check if user is superadmin
     if (!isLoading && profile) {
@@ -32,32 +34,44 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       if (profile.companyId) {
         setSelectedCompanyId(profile.companyId);
       }
+      
+      setInitialized(true);
     }
   }, [isLoading, profile]);
 
+  // Second effect: Handle localStorage for superadmins (client-side only)
   useEffect(() => {
-    // Only run for superadmins
-    if (isSuperadmin) {
-      // Try to get selected company from localStorage
-      const storedCompanyId = localStorage.getItem("selectedCompanyId");
-      
-      if (storedCompanyId) {
-        setSelectedCompanyId(storedCompanyId);
-      } else if (!isLoading) {
-        // If no company is selected, redirect to company selection
-        router.push("/company-selection");
+    // Only run on client-side after initialization
+    if (typeof window !== 'undefined' && initialized && isSuperadmin) {
+      try {
+        const storedCompanyId = localStorage.getItem("selectedCompanyId");
+        
+        if (storedCompanyId) {
+          setSelectedCompanyId(storedCompanyId);
+        } else if (!isLoading) {
+          // If no company is selected, redirect to company selection
+          router.push("/company-selection");
+        }
+      } catch (error) {
+        console.error("Error accessing localStorage:", error);
       }
     }
-  }, [isSuperadmin, isLoading, router]);
+  }, [isSuperadmin, isLoading, router, initialized]);
 
   // Update the setSelectedCompanyId function to also save to localStorage
   const handleSetSelectedCompanyId = (id: string | null) => {
     setSelectedCompanyId(id);
     
-    if (id) {
-      localStorage.setItem("selectedCompanyId", id);
-    } else {
-      localStorage.removeItem("selectedCompanyId");
+    if (typeof window !== 'undefined') {
+      try {
+        if (id) {
+          localStorage.setItem("selectedCompanyId", id);
+        } else {
+          localStorage.removeItem("selectedCompanyId");
+        }
+      } catch (error) {
+        console.error("Error accessing localStorage:", error);
+      }
     }
   };
 
