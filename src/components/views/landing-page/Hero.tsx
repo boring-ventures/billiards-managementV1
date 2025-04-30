@@ -8,13 +8,15 @@ import { ShimmerButton } from "@/components/magicui/shimmer-button";
 
 export default function Hero() {
   return (
-    <section className="relative py-20 md:py-32 overflow-hidden">
-      {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-radial from-primary/20 via-transparent to-transparent" />
+    <section className="relative py-28 md:py-36 overflow-hidden">
+      {/* Gradient backgrounds */}
+      <div className="absolute inset-0 bg-gradient-radial from-primary/20 via-transparent to-transparent -z-10" />
+      <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full filter blur-3xl opacity-50 -z-10 animate-pulse" />
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 rounded-full filter blur-3xl opacity-50 -z-10 animate-pulse" style={{ animationDelay: "1s" }} />
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative">
         <div className="max-w-4xl mx-auto text-center">
-          <ShineBorder className="p-8 rounded-2xl">
+          <ShineBorder className="p-8 md:p-12 rounded-2xl bg-background/30 backdrop-blur-sm border-border/50">
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               {/* Floating badge */}
               <BlurFade>
@@ -28,7 +30,7 @@ export default function Hero() {
                 <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-foreground leading-tight tracking-tight">
                   Your mind is your best friend—
                   <br />
-                  <span className="text-primary">
+                  <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary-foreground/70">
                     But it can also be your worst enemy.
                   </span>
                 </h1>
@@ -56,9 +58,10 @@ export default function Hero() {
                   
                   <Link
                     href="/#features"
-                    className="inline-flex items-center text-foreground hover:text-primary transition-colors px-8 py-3"
+                    className="inline-flex items-center text-foreground hover:text-primary transition-colors px-8 py-3 group"
                   >
                     Learn More
+                    <span className="inline-block ml-1 transition-transform group-hover:translate-x-1">→</span>
                   </Link>
                 </div>
               </BlurFade>
@@ -74,9 +77,9 @@ export default function Hero() {
                 <BlurFade
                   key={stat.label}
                   delay={i * 0.1}
-                  className="flex flex-col items-center p-4 rounded-lg bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-all duration-300"
+                  className="flex flex-col items-center p-4 rounded-lg bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-md hover:-translate-y-1"
                 >
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-primary">
                     {stat.value}
                   </div>
                   <div className="text-sm text-muted-foreground">
