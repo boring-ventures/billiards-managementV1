@@ -88,7 +88,7 @@ export function NewTableForm() {
       }
       
       // Redirect to tables list
-      router.push("/tables");
+      router.push("/dashboard/tables");
       router.refresh();
     } catch (error) {
       console.error("Error creating table:", error);
@@ -174,7 +174,7 @@ export function NewTableForm() {
               type="button"
               variant="outline"
               className="mr-2"
-              onClick={() => router.push("/tables")}
+              onClick={() => router.push("/dashboard/tables")}
             >
               Cancel
             </Button>

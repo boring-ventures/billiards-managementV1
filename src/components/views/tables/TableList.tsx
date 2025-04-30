@@ -235,7 +235,7 @@ export function TableList({ profile }: TableListProps) {
                     <Button 
                       variant="outline" 
                       size="icon"
-                      onClick={() => router.push(`/tables/${table.id}`)}
+                      onClick={() => router.push(`/dashboard/tables/${table.id}`)}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -260,7 +260,7 @@ export function TableList({ profile }: TableListProps) {
         <div className="text-center p-8">
           <p className="text-muted-foreground mb-4">No tables found</p>
           {isAdmin && (
-            <Button onClick={() => router.push("/tables/new")}>
+            <Button onClick={() => router.push("/dashboard/tables/new")}>
               <Plus className="mr-2 h-4 w-4" />
               Add Your First Table
             </Button>
