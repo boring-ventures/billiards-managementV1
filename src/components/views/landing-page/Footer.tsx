@@ -1,99 +1,136 @@
 import Link from "next/link";
-import { FacebookIcon, TwitterIcon, InstagramIcon, Brain } from "lucide-react";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { ShineBorder } from "@/components/magicui/shine-border";
+import { FacebookIcon, TwitterIcon, InstagramIcon, Brain, ArrowUpRight } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-secondary/30 backdrop-blur-sm text-foreground py-16 relative overflow-hidden">
-      {/* Decorative elements */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary/5 rounded-full filter blur-3xl opacity-30 -z-10" />
+    <footer className="relative bg-gray-50 text-foreground pt-24 pb-12 overflow-hidden">
+      {/* Subtle background pattern */}
+      <div className="absolute inset-0 bg-grid-gray-200/30 -z-10" />
       
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8">
-          <BlurFade className="md:col-span-1">
-            <div className="flex items-center space-x-2 mb-4">
-              <ShineBorder className="rounded-full p-1">
-                <Brain className="h-8 w-8 text-primary" />
-              </ShineBorder>
-              <span className="text-2xl font-bold text-primary">
+      {/* Top curved separator */}
+      <div className="absolute top-0 inset-x-0 h-16 bg-white" />
+      <div className="absolute -top-8 inset-x-0 h-16 rounded-[50%_50%_0_0] bg-white" />
+      
+      <div className="container mx-auto px-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
+          {/* Brand column */}
+          <div className="md:col-span-4 lg:col-span-5">
+            <div className="flex items-center mb-5">
+              <div className="bg-gradient-to-r from-primary to-blue-600 p-2 rounded-lg mr-2">
+                <Brain className="h-6 w-6 text-white" />
+              </div>
+              <span className="text-2xl font-bold text-gray-900">
                 POSITIVE-Next
               </span>
             </div>
-            <p className="text-muted-foreground">
-              Empowering minds for a better tomorrow.
+            
+            <p className="text-muted-foreground max-w-md mb-6">
+              Empowering minds for a better tomorrow through AI-powered mental fitness solutions that adapt to your unique needs.
             </p>
-          </BlurFade>
-          
-          <BlurFade delay={0.1} className="md:col-span-1">
-            <h4 className="text-lg font-semibold mb-4 text-foreground/80">Quick Links</h4>
-            <ul className="space-y-3">
+            
+            <div className="flex space-x-4 mb-8 md:mb-0">
               {[
-                { href: "/#features", label: "Features" },
-                { href: "/#about", label: "About" },
-                { href: "/#testimonials", label: "Testimonials" },
-              ].map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-muted-foreground hover:text-primary transition-colors flex items-center group"
-                  >
-                    <span className="inline-block w-0 group-hover:w-2 transition-all duration-300 mr-0 group-hover:mr-1 h-px bg-primary"></span>
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </BlurFade>
-          
-          <BlurFade delay={0.2} className="md:col-span-1">
-            <h4 className="text-lg font-semibold mb-4 text-foreground/80">Legal</h4>
-            <ul className="space-y-3">
-              {[
-                { href: "/terms", label: "Terms of Service" },
-                { href: "/privacy", label: "Privacy Policy" },
-              ].map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-muted-foreground hover:text-primary transition-colors flex items-center group"
-                  >
-                    <span className="inline-block w-0 group-hover:w-2 transition-all duration-300 mr-0 group-hover:mr-1 h-px bg-primary"></span>
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </BlurFade>
-          
-          <BlurFade delay={0.3} className="md:col-span-1">
-            <h4 className="text-lg font-semibold mb-4 text-foreground/80">Connect</h4>
-            <div className="flex space-x-4">
-              {[
-                { href: "https://facebook.com/positivenext", icon: FacebookIcon },
-                { href: "https://twitter.com/positivenext", icon: TwitterIcon },
-                { href: "https://instagram.com/positivenext", icon: InstagramIcon },
+                { href: "https://facebook.com", icon: FacebookIcon },
+                { href: "https://twitter.com", icon: TwitterIcon },
+                { href: "https://instagram.com", icon: InstagramIcon },
               ].map((social) => (
                 <a
                   key={social.href}
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors p-2 hover:bg-primary/10 rounded-full"
+                  className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-muted-foreground hover:text-primary hover:shadow-md transition-all"
+                  aria-label={`${social.icon.name} link`}
                 >
-                  <social.icon size={20} />
+                  <social.icon size={18} />
                 </a>
               ))}
             </div>
-          </BlurFade>
+          </div>
+          
+          {/* Navigation columns */}
+          <div className="md:col-span-8 lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-8">
+            {/* Quick links */}
+            <div>
+              <h4 className="text-base font-semibold text-gray-900 mb-5">Features</h4>
+              <ul className="space-y-3">
+                {[
+                  { href: "/#features", label: "Mental Tools" },
+                  { href: "/#about", label: "About POSITIVE" },
+                  { href: "/#testimonials", label: "Success Stories" },
+                ].map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            {/* Resources */}
+            <div>
+              <h4 className="text-base font-semibold text-gray-900 mb-5">Resources</h4>
+              <ul className="space-y-3">
+                {[
+                  { href: "/blog", label: "Blog" },
+                  { href: "/documentation", label: "Documentation" },
+                  { href: "/guides", label: "Guides" },
+                ].map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {link.label}
+                      <ArrowUpRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            {/* Legal */}
+            <div>
+              <h4 className="text-base font-semibold text-gray-900 mb-5">Legal</h4>
+              <ul className="space-y-3">
+                {[
+                  { href: "/terms", label: "Terms of Service" },
+                  { href: "/privacy", label: "Privacy Policy" },
+                  { href: "/cookies", label: "Cookie Policy" },
+                ].map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
         
-        <div className="mt-16 pt-8 border-t border-border/40 text-center">
-          <p className="text-muted-foreground text-sm">
-            &copy; {new Date().getFullYear()} POSITIVE-Next. All rights
-            reserved.
+        {/* Bottom section */}
+        <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-muted-foreground mb-4 md:mb-0">
+            &copy; {new Date().getFullYear()} POSITIVE-Next. All rights reserved.
           </p>
+          
+          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm text-muted-foreground">
+            <Link href="/accessibility" className="hover:text-primary transition-colors">
+              Accessibility
+            </Link>
+            <Link href="/sitemap" className="hover:text-primary transition-colors">
+              Sitemap
+            </Link>
+            <span>Made with ❤️ for mental wellness</span>
+          </div>
         </div>
       </div>
     </footer>

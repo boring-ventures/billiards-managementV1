@@ -34,26 +34,30 @@ export default function WaitingApprovalPage() {
   }
 
   return (
-    <div className="container max-w-md py-10">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-center mb-2">
-            <AlertCircle className="h-12 w-12 text-yellow-500" />
-          </div>
-          <CardTitle className="text-center">Account Pending</CardTitle>
-          <CardDescription className="text-center">
-            Your account has been created successfully.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-center">
-          <p className="mb-4">
-            Please wait for your company administrator to assign you to a workspace.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Once assigned, you&apos;ll receive an email notification and be able to access your dashboard.
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+      <div className="w-full max-w-md">
+        <Card className="shadow-lg border-border/30">
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full bg-yellow-50 p-3">
+                <AlertCircle className="h-12 w-12 text-yellow-500" />
+              </div>
+            </div>
+            <CardTitle className="text-center text-2xl">Account Pending</CardTitle>
+            <CardDescription className="text-center pt-2">
+              Your account has been created successfully.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center pt-2 pb-8">
+            <p className="mb-4 text-base">
+              Please wait for your company administrator to assign you to a workspace.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Once assigned, you&apos;ll receive an email notification and be able to access your dashboard.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 } 

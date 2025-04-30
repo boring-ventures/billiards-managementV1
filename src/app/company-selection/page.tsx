@@ -69,43 +69,48 @@ export default function CompanySelectionPage() {
   }
 
   return (
-    <div className="container max-w-4xl py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>Select a Workspace</CardTitle>
-          <CardDescription>
-            As a Superadmin, you can access any workspace in the system.
-            Select a workspace to continue.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {fetchingCompanies ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+      <div className="w-full max-w-4xl">
+        <Card className="shadow-lg border-border/30">
+          <CardHeader className="pb-3">
+            <div className="flex justify-center mb-4">
+              <Building className="h-12 w-12 text-primary" />
             </div>
-          ) : companies.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No workspaces found.</p>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {companies.map((company) => (
-                <Button
-                  key={company.id}
-                  variant="outline"
-                  className="h-auto p-4 justify-start flex flex-col items-start space-y-2"
-                  onClick={() => selectCompany(company.id)}
-                >
-                  <div className="flex items-center gap-2 text-left">
-                    <Building className="h-5 w-5 text-primary" />
-                    <span className="font-medium text-base">{company.name}</span>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <CardTitle className="text-center text-2xl">Select a Workspace</CardTitle>
+            <CardDescription className="text-center pt-2">
+              As a Superadmin, you can access any workspace in the system.
+              Select a workspace to continue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {fetchingCompanies ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : companies.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No workspaces found.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {companies.map((company) => (
+                  <Button
+                    key={company.id}
+                    variant="outline"
+                    className="h-auto p-4 justify-start flex flex-col items-start space-y-2 hover:border-primary hover:bg-primary/5 transition-colors"
+                    onClick={() => selectCompany(company.id)}
+                  >
+                    <div className="flex items-center gap-2 text-left">
+                      <Building className="h-5 w-5 text-primary" />
+                      <span className="font-medium text-base">{company.name}</span>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 } 
