@@ -51,6 +51,12 @@ export function useCurrentUser(): CurrentUserData {
       }
 
       const profileData = await response.json();
+      
+      // Ensure companyId is set correctly from company_id
+      if (profileData.company_id && !profileData.companyId) {
+        profileData.companyId = profileData.company_id;
+      }
+      
       setProfile(profileData);
     } catch (err) {
       console.error("Error fetching user data:", err);
@@ -75,6 +81,12 @@ export function useCurrentUser(): CurrentUserData {
               const response = await fetch("/api/profile");
               if (response.ok) {
                 const profileData = await response.json();
+                
+                // Ensure companyId is set correctly from company_id
+                if (profileData.company_id && !profileData.companyId) {
+                  profileData.companyId = profileData.company_id;
+                }
+                
                 setProfile(profileData);
               }
             } catch (err) {

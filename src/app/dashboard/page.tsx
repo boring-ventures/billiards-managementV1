@@ -12,20 +12,34 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isLoading) {
+      // Debug logging
+      console.log("Dashboard - Current user state:", { 
+        user: user ? { id: user.id, email: user.email } : null,
+        profile: profile ? { 
+          id: profile.id, 
+          companyId: profile.companyId, 
+          role: profile.role,
+          active: profile.active
+        } : null
+      });
+    
       // Redirect if not authenticated
       if (!user) {
+        console.log("Dashboard - No user, redirecting to sign-in");
         router.push("/sign-in");
         return;
       }
 
       // Redirect if no company selected
       if (!profile?.companyId) {
+        console.log("Dashboard - No companyId in profile, redirecting to company-selection");
         router.push("/company-selection");
         return;
       }
 
       // Redirect if waiting for approval
       if (!profile.active) {
+        console.log("Dashboard - User not active, redirecting to waiting-approval");
         router.push("/waiting-approval");
         return;
       }

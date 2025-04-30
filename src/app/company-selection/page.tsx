@@ -15,9 +15,10 @@ interface Company {
 
 export default function CompanySelectionPage() {
   const router = useRouter();
-  const { profile, isLoading } = useCurrentUser();
+  const { profile, isLoading, refetch } = useCurrentUser();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fetchingCompanies, setFetchingCompanies] = useState(true);
+  const [selectingCompany, setSelectingCompany] = useState(false);
 
   useEffect(() => {
     // If user is not a SUPERADMIN, redirect to the waiting page
@@ -52,18 +53,40 @@ export default function CompanySelectionPage() {
     }
   }, [isLoading, profile, router]);
 
-  const selectCompany = (companyId: string) => {
-    // Save the selected company to localStorage
-    localStorage.setItem("selectedCompanyId", companyId);
+  const selectCompany = async (companyId: string) => {
+    setSelectingCompany(true);
     
-    // Set timeout to ensure localStorage is updated before redirecting
-    setTimeout(() => {
+    try {
+      // Save the selected company to localStorage
+      localStorage.setItem("selectedCompanyId", companyId);
+      
+      // Call API endpoint to update the user's profile with the company ID
+      const response = await fetch(`/api/companies/${companyId}/select`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to select company');
+      }
+      
+      // Refetch profile data to get updated companyId
+      if (refetch) {
+        await refetch();
+      }
+      
       // Redirect to dashboard
       router.push("/dashboard");
-    }, 100);
+    } catch (error) {
+      console.error("Error selecting company:", error);
+    } finally {
+      setSelectingCompany(false);
+    }
   };
 
-  if (isLoading) {
+  if (isLoading || selectingCompany) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -102,6 +125,7 @@ export default function CompanySelectionPage() {
                     variant="outline"
                     className="h-auto p-4 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors"
                     onClick={() => selectCompany(company.id)}
+                    disabled={selectingCompany}
                   >
                     <div className="flex items-center gap-2">
                       <Building className="h-5 w-5 text-primary" />
