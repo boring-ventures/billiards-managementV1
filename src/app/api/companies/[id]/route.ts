@@ -19,7 +19,7 @@ async function checkSuperAdminRole(userId: string) {
       where: { userId },
       select: { role: true },
     });
-    return profile?.role === "SUPER_ADMIN";
+    return profile?.role === UserRole.SUPERADMIN;
   } catch (error) {
     console.error("Failed to check user role:", error);
     return false;

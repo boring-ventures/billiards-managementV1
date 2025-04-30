@@ -50,7 +50,7 @@ export default function WaitingApprovalPage() {
             Please wait for your company administrator to assign you to a workspace.
           </p>
           <p className="text-sm text-muted-foreground">
-            Once assigned, you'll receive an email notification and be able to access your dashboard.
+            Once assigned, you&apos;ll receive an email notification and be able to access your dashboard.
           </p>
         </CardContent>
       </Card>

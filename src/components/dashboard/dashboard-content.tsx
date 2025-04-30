@@ -1,11 +1,12 @@
 "use client";
 
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { getActiveCompanyId } from "@/lib/authUtils";
 
 export default function DashboardContent() {
   const { profile } = useCurrentUser();
-  const activeCompanyId = getActiveCompanyId(profile);
+  // Convert the profile returned from hooks to the expected Profile type
+  const activeCompanyId = typeof profile?.companyId === 'string' ? profile.companyId : 
+                         (typeof window !== 'undefined' ? localStorage.getItem('selectedCompanyId') : null);
   
   // In a real application, you would fetch data based on the company context
 

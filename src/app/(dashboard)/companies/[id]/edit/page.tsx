@@ -7,21 +7,19 @@ import { Button } from "@/components/ui/button";
 import { CompanyForm } from "@/components/forms/company-form";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Edit Company - Billiards Management",
   description: "Edit company details",
 };
 
-interface EditCompanyPageProps {
-  params: {
-    id: string;
-  };
-}
+type Props = {
+  params: { id: string };
+  searchParams: { [key: string]: string | string[] | undefined };
+};
 
-export default async function EditCompanyPage({
-  params,
-}: EditCompanyPageProps) {
+export default async function EditCompanyPage({ params }: Props) {
   // Extract id for safety
   const id = params.id;
 

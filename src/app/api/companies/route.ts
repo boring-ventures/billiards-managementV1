@@ -28,7 +28,7 @@ async function checkSuperAdminRole(userId: string) {
 }
 
 // GET: Fetch all companies for superadmin
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
 
