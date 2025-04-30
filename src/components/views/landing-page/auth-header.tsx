@@ -1,8 +1,9 @@
 'use client';
 
 import { useAuth } from "@/providers/auth-provider";
-import DashboardButton from "@/components/dashboard/dashboard-button";
+import { DashboardButton } from "@/components/dashboard/dashboard-button";
 import Link from "next/link";
+import { LayoutDashboard } from "lucide-react";
 
 export function AuthHeader() {
   const { user, isLoading } = useAuth();
@@ -14,7 +15,15 @@ export function AuthHeader() {
   }
 
   if (user) {
-    return <DashboardButton />;
+    return (
+      <DashboardButton 
+        href="/dashboard"
+        icon={LayoutDashboard}
+        title="Dashboard"
+        description="Access your account"
+        className="w-full md:w-auto"
+      />
+    );
   }
 
   return (
