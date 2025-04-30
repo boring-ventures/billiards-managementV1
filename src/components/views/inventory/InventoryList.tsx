@@ -227,7 +227,12 @@ export function InventoryList({ adminView, companyId }: InventoryListProps) {
                   <TableCell>{item.sku || "-"}</TableCell>
                   <TableCell className="text-right">{item.quantity}</TableCell>
                   <TableCell className="text-right">
-                    {item.price ? `$${item.price.toFixed(2)}` : "-"}
+                    {item.price && typeof item.price === 'number' 
+                      ? `$${item.price.toFixed(2)}` 
+                      : (item.price && typeof item.price === 'string' 
+                          ? `$${parseFloat(item.price).toFixed(2)}` 
+                          : "-")
+                    }
                   </TableCell>
                   <TableCell className="text-right">
                     {hasLowStock(item) ? (
