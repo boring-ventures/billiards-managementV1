@@ -15,7 +15,9 @@ interface ConfirmDeleteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  table: Table | null;
+  table?: Table | null;
+  title?: string;
+  description?: string;
 }
 
 export function ConfirmDeleteModal({
@@ -23,17 +25,32 @@ export function ConfirmDeleteModal({
   onClose,
   onConfirm,
   table,
+  title,
+  description,
 }: ConfirmDeleteModalProps) {
-  if (!table) return null;
+  // Handle two scenarios:
+  // 1. For table delete (backward compatibility)
+  // 2. For generic delete with title/description
+
+  let modalTitle = title;
+  let modalDescription = description;
+
+  // If table is provided, use its details for backward compatibility
+  if (table) {
+    modalTitle = modalTitle || `Delete ${table.name}`;
+    modalDescription = modalDescription || `Are you sure you want to delete this table? This action cannot be undone. Tables with active sessions cannot be deleted.`;
+  }
+
+  // If no table or title/description, don't render
+  if (!modalTitle && !table) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete {table.name}</DialogTitle>
+          <DialogTitle>{modalTitle}</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this table? This action cannot be undone.
-            Tables with active sessions cannot be deleted.
+            {modalDescription}
           </DialogDescription>
         </DialogHeader>
 
@@ -42,7 +59,7 @@ export function ConfirmDeleteModal({
             Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm}>
-            Delete Table
+            Delete
           </Button>
         </DialogFooter>
       </DialogContent>
