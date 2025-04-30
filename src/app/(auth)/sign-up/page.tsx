@@ -12,9 +12,9 @@ export const metadata: Metadata = {
 export default function SignUpPage() {
   return (
     <AuthLayout>
-      <Card className="p-6 border-2 shadow-lg">
-        <div className="mb-2 flex flex-col space-y-2 text-left">
-          <h1 className="text-lg font-semibold tracking-tight">
+      <Card className="p-8 border border-slate-700/50 bg-white/95 dark:bg-slate-950/80 backdrop-blur-sm rounded-xl shadow-xl">
+        <div className="mb-2 flex flex-col space-y-3 text-left">
+          <h1 className="text-2xl font-semibold tracking-tight">
             Create an account
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -22,25 +22,25 @@ export default function SignUpPage() {
             Already have an account?{" "}
             <Link
               href="/sign-in"
-              className="underline underline-offset-4 hover:text-primary"
+              className="text-primary font-medium hover:underline"
             >
               Sign In
             </Link>
           </p>
         </div>
         <SignUpForm />
-        <p className="mt-4 px-8 text-center text-sm text-muted-foreground">
+        <p className="mt-4 px-4 text-center text-sm text-muted-foreground">
           By creating an account, you agree to our{" "}
           <Link
             href="/terms"
-            className="underline underline-offset-4 hover:text-primary"
+            className="text-primary font-medium hover:underline"
           >
             Terms of Service
           </Link>{" "}
           and{" "}
           <Link
             href="/privacy"
-            className="underline underline-offset-4 hover:text-primary"
+            className="text-primary font-medium hover:underline"
           >
             Privacy Policy
           </Link>

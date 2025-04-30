@@ -12,14 +12,14 @@ export const metadata: Metadata = {
 export default function MagicLinkPage() {
   return (
     <AuthLayout>
-      <Card className="p-6 border-2 shadow-lg">
-        <div className="flex flex-col space-y-2 text-left">
+      <Card className="p-8 border border-slate-700/50 bg-white/95 dark:bg-slate-950/80 backdrop-blur-sm rounded-xl shadow-xl">
+        <div className="flex flex-col space-y-3 text-left">
           <h1 className="text-2xl font-semibold tracking-tight">Magic Link</h1>
           <p className="text-sm text-muted-foreground">
             Enter your email below to receive a magic link.{" "}
             <Link
               href="/sign-in"
-              className="underline underline-offset-4 hover:text-primary"
+              className="text-primary font-medium hover:underline"
             >
               Back to Sign In
             </Link>

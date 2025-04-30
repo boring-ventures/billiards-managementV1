@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 export default function ForgotPasswordPage() {
   return (
     <AuthLayout>
-      <Card className="p-6 border-2 shadow-lg">
-        <div className="flex flex-col space-y-2 text-left">
+      <Card className="p-8 border border-slate-700/50 bg-white/95 dark:bg-slate-950/80 backdrop-blur-sm rounded-xl shadow-xl">
+        <div className="flex flex-col space-y-3 text-left">
           <h1 className="text-2xl font-semibold tracking-tight">
             Reset Password
           </h1>
@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
             Enter your email below to receive a password reset link.{" "}
             <Link
               href="/sign-in"
-              className="underline underline-offset-4 hover:text-primary"
+              className="text-primary font-medium hover:underline"
             >
               Back to Sign In
             </Link>

@@ -1,4 +1,4 @@
-import { Brain } from "lucide-react"
+import { Target } from "lucide-react"
 
 interface Props {
     children: React.ReactNode
@@ -6,11 +6,14 @@ interface Props {
   
   export default function AuthLayout({ children }: Props) {
     return (
-      <div className='container grid h-svh flex-col items-center justify-center bg-background lg:max-w-none lg:px-0'>
-        <div className='mx-auto flex w-full flex-col justify-center space-y-2 sm:w-[480px] lg:p-8'>
-          <div className='mb-4 flex items-center justify-center'>
-            <Brain className='mr-2 h-6 w-6' />
-            <h1 className='text-xl font-medium'>POSITIVE</h1>
+      <div className='min-h-svh bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center lg:max-w-none lg:px-0'>
+        <div className='mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[480px] lg:p-8'>
+          <div className='mb-8 flex flex-col items-center justify-center space-y-2'>
+            <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
+              <Target className='h-7 w-7 text-white' />
+            </div>
+            <h1 className='text-2xl font-semibold text-white'>Billiards Management</h1>
+            <p className="text-sm text-slate-300">Sign in to manage your billiards hall</p>
           </div>
           {children}
         </div>
