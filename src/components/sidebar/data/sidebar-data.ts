@@ -61,7 +61,7 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: "Dashboard",
-          url: "/",
+          url: "/dashboard",
           icon: LayoutDashboard,
         },
       ],
@@ -71,22 +71,22 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: "Inventory",
-          url: "/inventory",
+          url: "/dashboard/inventory",
           icon: Package,
         },
         {
           title: "POS",
-          url: "/pos",
+          url: "/dashboard/pos",
           icon: ShoppingCart,
         },
         {
           title: "Tables",
-          url: "/tables",
+          url: "/dashboard/tables",
           icon: Table,
         },
         {
           title: "Finance",
-          url: "/finance/transactions",
+          url: "/dashboard/finance/transactions",
           icon: Wallet,
         },
       ],
@@ -97,12 +97,12 @@ export const sidebarData: SidebarData = {
         {
           title: "Settings",
           icon: Settings,
-          url: "/settings",
+          url: "/dashboard/settings",
           requiredRole: UserRole.ADMIN,
         },
         {
           title: "Help Center",
-          url: "/help",
+          url: "/dashboard/help",
           icon: HelpCircle,
         },
       ],

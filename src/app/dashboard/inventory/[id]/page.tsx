@@ -1,0 +1,53 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { hasAdminPermission } from "@/lib/rbac";
+import InventoryForm from "@/components/views/inventory/InventoryForm";
+import { Loader2 } from "lucide-react";
+
+interface EditInventoryItemPageProps {
+  params: {
+    id: string;
+  };
+}
+
+export default function EditInventoryItemPage({ params }: EditInventoryItemPageProps) {
+  const router = useRouter();
+  const { profile, isLoading } = useCurrentUser();
+  const itemId = params.id;
+
+  // Check if user has admin permissions
+  useEffect(() => {
+    if (!isLoading && !hasAdminPermission(profile)) {
+      router.push("/dashboard");
+    }
+  }, [profile, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Only render form if user has admin access and there's a company context
+  if (!profile?.companyId || !hasAdminPermission(profile)) {
+    return null;
+  }
+
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Edit Inventory Item</h1>
+        <p className="text-muted-foreground">
+          Update inventory item details
+        </p>
+      </div>
+
+      <InventoryForm companyId={profile.companyId} itemId={itemId} />
+    </div>
+  );
+} 

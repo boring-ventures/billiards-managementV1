@@ -1,31 +1,23 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useCompany } from "@/context/company-context";
 
 export default function HelpPage() {
-  const router = useRouter();
-  const { profile } = useCurrentUser();
-  const { selectedCompanyId } = useCompany();
-
-  useEffect(() => {
-    // If no company is selected, redirect to dashboard
-    if (!selectedCompanyId) {
-      router.push("/dashboard");
-    }
-  }, [router, selectedCompanyId]);
-
-  if (!selectedCompanyId) {
-    return null;
-  }
+  const { profile, isLoading } = useCurrentUser();
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      <h1 className="text-2xl font-bold mb-6">Help Center</h1>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <p>Help resources and documentation will be displayed here.</p>
+    <div className="container mx-auto py-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Help Center</h1>
+        <p className="text-muted-foreground">
+          Find answers to common questions and get support
+        </p>
+      </div>
+
+      <div className="bg-card rounded-lg border p-6">
+        <p className="text-center text-muted-foreground">
+          Help documentation coming soon
+        </p>
       </div>
     </div>
   );
