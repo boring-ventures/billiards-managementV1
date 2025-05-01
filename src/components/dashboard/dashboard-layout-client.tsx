@@ -9,6 +9,9 @@ import { Header } from "@/components/sidebar/header";
 import { Search } from "@/components/sidebar/search";
 import { ThemeSwitch } from "@/components/sidebar/theme-switch";
 import { ProfileDropdown } from "@/components/sidebar/profile-dropdown";
+import { ViewAsDropdown } from "@/components/ui/view-as-dropdown";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { UserRole } from "@prisma/client";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -35,6 +38,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutProps) {
           <Header>
             <div className="ml-auto flex items-center space-x-4">
               <Search />
+              <ViewAsDropdown />
               <ThemeSwitch />
               <ProfileDropdown />
             </div>

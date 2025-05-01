@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useViewMode } from '@/context/view-mode-context';
 import { 
   Card, 
   CardContent, 
@@ -46,7 +47,7 @@ type TableListProps = {
 export function TableList({ 
   profile, 
   searchQuery = "", 
-  statusFilter = "",
+  statusFilter = "all",
   refreshKey = 0 
 }: TableListProps) {
   const router = useRouter();
@@ -59,7 +60,8 @@ export function TableList({
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   
-  const isAdmin = hasAdminPermission(profile);
+  const { viewMode } = useViewMode();
+  const isAdmin = hasAdminPermission(profile, viewMode);
   
   // Function to fetch tables data
   const fetchTables = async () => {

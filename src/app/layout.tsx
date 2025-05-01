@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/context/theme-context";
 import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { CompanyProvider } from "@/context/company-context";
+import { ViewModeProvider } from "@/context/view-mode-context";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -46,8 +47,10 @@ export default function RootLayout({
         >
           <AuthProvider>
             <CompanyProvider>
-              {children}
-              <Toaster />
+              <ViewModeProvider>
+                {children}
+                <Toaster />
+              </ViewModeProvider>
             </CompanyProvider>
           </AuthProvider>
         </ThemeProvider>

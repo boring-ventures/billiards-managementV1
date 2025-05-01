@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, isValid } from 'date-fns';
+import { useViewMode } from '@/context/view-mode-context';
 import {
   Card,
   CardContent,
@@ -107,7 +108,8 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
   const [dialogTitle, setDialogTitle] = useState("New Reservation");
   const router = useRouter();
   const { toast } = useToast();
-  const isAdmin = hasAdminPermission(profile);
+  const { viewMode } = useViewMode();
+  const isAdmin = hasAdminPermission(profile, viewMode);
 
   const form = useForm<z.infer<typeof reservationFormSchema>>({
     resolver: zodResolver(reservationFormSchema),

@@ -3,6 +3,19 @@ import { UserRole } from "@prisma/client";
 import { getActiveCompanyId } from "./authUtils";
 import type { Profile } from "@/types/profile";
 
+// Client-side utility to get the current effective role (considering view mode)
+export const getEffectiveRole = (profile: Profile | null, viewMode: UserRole | null): UserRole | null => {
+  if (!profile) return null;
+  
+  // For superadmins with a view mode set, return the view mode
+  if (profile.role === UserRole.SUPERADMIN && viewMode) {
+    return viewMode;
+  }
+  
+  // Otherwise return the actual role
+  return profile.role;
+};
+
 /**
  * Assert that the user has the required role and company context
  * Redirects to appropriate page if requirements aren't met
@@ -10,7 +23,8 @@ import type { Profile } from "@/types/profile";
 export const assertRoleAndCompany = (
   profile: Profile | null,
   allowedRoles: UserRole[],
-  redirectTo = "/dashboard"
+  redirectTo = "/dashboard",
+  viewMode: UserRole | null = null
 ): { companyId: string; userId: string } => {
   // No profile means not authenticated
   if (!profile) {
@@ -29,8 +43,11 @@ export const assertRoleAndCompany = (
     }
   }
 
+  // Get the effective role (considering view mode for superadmins)
+  const effectiveRole = getEffectiveRole(profile, viewMode);
+
   // Check if user has required role
-  if (!allowedRoles.includes(profile.role)) {
+  if (!allowedRoles.includes(effectiveRole as UserRole)) {
     redirect(redirectTo);
   }
 
@@ -42,18 +59,28 @@ export const assertRoleAndCompany = (
 
 /**
  * Check if user has admin permissions (Admin or Superadmin)
+ * Respects view mode for superadmins
  */
-export const hasAdminPermission = (profile: Profile | null): boolean => {
+export const hasAdminPermission = (profile: Profile | null, viewMode: UserRole | null = null): boolean => {
   if (!profile) return false;
-  return [UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(profile.role.toString());
+  
+  // Get the effective role (respecting view mode)
+  const effectiveRole = getEffectiveRole(profile, viewMode);
+  
+  return [UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(effectiveRole?.toString() || "");
 };
 
 /**
  * Check if user has staff permissions (Seller, Admin, or Superadmin)
+ * Respects view mode for superadmins
  */
-export const hasStaffPermission = (profile: Profile | null): boolean => {
+export const hasStaffPermission = (profile: Profile | null, viewMode: UserRole | null = null): boolean => {
   if (!profile) return false;
-  return [UserRole.SELLER.toString(), UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(profile.role.toString());
+  
+  // Get the effective role (respecting view mode)
+  const effectiveRole = getEffectiveRole(profile, viewMode);
+  
+  return [UserRole.SELLER.toString(), UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(effectiveRole?.toString() || "");
 };
 
 /**

@@ -6,10 +6,12 @@ import { hasAdminPermission } from "@/lib/rbac";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { useViewMode } from "@/context/view-mode-context";
 
 export default function InventoryPage() {
   const { profile, isLoading } = useCurrentUser();
-  const isAdmin = hasAdminPermission(profile);
+  const { viewMode } = useViewMode();
+  const isAdmin = hasAdminPermission(profile, viewMode);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
