@@ -1,135 +1,92 @@
 import Link from "next/link";
-import { FacebookIcon, TwitterIcon, InstagramIcon, Target, ArrowUpRight } from "lucide-react";
+import { Target } from "lucide-react";
 
 export default function Footer() {
+  const currentYear = new Date().getFullYear();
+  
   return (
-    <footer className="relative bg-gray-50 text-foreground pt-24 pb-12 overflow-hidden">
-      {/* Subtle background pattern */}
-      <div className="absolute inset-0 bg-grid-gray-200/30 -z-10" />
-      
-      {/* Top curved separator */}
-      <div className="absolute top-0 inset-x-0 h-16 bg-white" />
-      <div className="absolute -top-8 inset-x-0 h-16 rounded-[50%_50%_0_0] bg-white" />
-      
-      <div className="container mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
-          {/* Brand column */}
-          <div className="md:col-span-4 lg:col-span-5">
-            <div className="flex items-center mb-5">
-              <div className="bg-gradient-to-r from-primary to-blue-600 p-2 rounded-lg mr-2">
-                <Target className="h-6 w-6 text-white" />
+    <footer className="bg-gray-50 border-t border-gray-100">
+      <div className="container mx-auto px-6 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          {/* Logo and tagline */}
+          <div className="md:col-span-1">
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="bg-primary p-1.5 rounded-md">
+                <Target className="h-5 w-5 text-white" />
               </div>
-              <span className="text-2xl font-bold text-gray-900">
-                CueMaster
-              </span>
-            </div>
-            
-            <p className="text-muted-foreground max-w-md mb-6">
-              Streamlining billiards venue management with powerful tools for table booking, POS, inventory tracking, and comprehensive business insights.
+              <span className="text-lg font-semibold">CueMaster</span>
+            </Link>
+            <p className="mt-4 text-muted-foreground text-sm">
+              Modern management software for billiards venues and pool halls.
             </p>
-            
-            <div className="flex space-x-4 mb-8 md:mb-0">
-              {[
-                { href: "https://facebook.com", icon: FacebookIcon },
-                { href: "https://twitter.com", icon: TwitterIcon },
-                { href: "https://instagram.com", icon: InstagramIcon },
-              ].map((social) => (
-                <a
-                  key={social.href}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-muted-foreground hover:text-primary hover:shadow-md transition-all"
-                  aria-label={`${social.icon.name} link`}
-                >
-                  <social.icon size={18} />
-                </a>
-              ))}
-            </div>
           </div>
           
-          {/* Navigation columns */}
-          <div className="md:col-span-8 lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-8">
-            {/* Quick links */}
-            <div>
-              <h4 className="text-base font-semibold text-gray-900 mb-5">Features</h4>
-              <ul className="space-y-3">
-                {[
-                  { href: "/#features", label: "Table Management" },
-                  { href: "/#about", label: "About CueMaster" },
-                  { href: "/#testimonials", label: "Success Stories" },
-                ].map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            {/* Resources */}
-            <div>
-              <h4 className="text-base font-semibold text-gray-900 mb-5">Resources</h4>
-              <ul className="space-y-3">
-                {[
-                  { href: "/blog", label: "Blog" },
-                  { href: "/documentation", label: "Documentation" },
-                  { href: "/guides", label: "User Guides" },
-                ].map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {link.label}
-                      <ArrowUpRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            {/* Legal */}
-            <div>
-              <h4 className="text-base font-semibold text-gray-900 mb-5">Legal</h4>
-              <ul className="space-y-3">
-                {[
-                  { href: "/terms", label: "Terms of Service" },
-                  { href: "/privacy", label: "Privacy Policy" },
-                  { href: "/cookies", label: "Cookie Policy" },
-                ].map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="inline-flex items-center text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {/* Quick links - condensed to 3 columns */}
+          <div>
+            <h3 className="font-medium text-sm uppercase tracking-wider text-muted-foreground mb-4">Product</h3>
+            <ul className="space-y-2">
+              {["Features", "Pricing", "Security"].map((item) => (
+                <li key={item}>
+                  <Link href="#" className="text-sm text-gray-600 hover:text-primary transition-colors">
+                    {item}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-sm uppercase tracking-wider text-muted-foreground mb-4">Company</h3>
+            <ul className="space-y-2">
+              {["About", "Customers", "Contact"].map((item) => (
+                <li key={item}>
+                  <Link href="#" className="text-sm text-gray-600 hover:text-primary transition-colors">
+                    {item}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-sm uppercase tracking-wider text-muted-foreground mb-4">Legal</h3>
+            <ul className="space-y-2">
+              {["Terms", "Privacy", "Cookies"].map((item) => (
+                <li key={item}>
+                  <Link href="#" className="text-sm text-gray-600 hover:text-primary transition-colors">
+                    {item}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
         
-        {/* Bottom section */}
-        <div className="pt-8 border-t border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between">
-          <p className="text-sm text-muted-foreground mb-4 md:mb-0">
-            &copy; {new Date().getFullYear()} CueMaster. All rights reserved.
+        {/* Copyright and bottom links */}
+        <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center">
+          <p className="text-sm text-gray-500">
+            © {currentYear} CueMaster. All rights reserved.
           </p>
           
-          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm text-muted-foreground">
-            <Link href="/accessibility" className="hover:text-primary transition-colors">
-              Accessibility
+          <div className="flex space-x-6 mt-4 md:mt-0">
+            <Link href="#" className="text-gray-400 hover:text-gray-500">
+              <span className="sr-only">Twitter</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84" />
+              </svg>
             </Link>
-            <Link href="/sitemap" className="hover:text-primary transition-colors">
-              Sitemap
+            <Link href="#" className="text-gray-400 hover:text-gray-500">
+              <span className="sr-only">LinkedIn</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+              </svg>
             </Link>
-            <span>Trusted by pool halls worldwide</span>
+            <Link href="#" className="text-gray-400 hover:text-gray-500">
+              <span className="sr-only">Facebook</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" clipRule="evenodd" />
+              </svg>
+            </Link>
           </div>
         </div>
       </div>

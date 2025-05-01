@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Menu, X, Target } from "lucide-react";
 import { AuthHeader } from "./auth-header";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -22,42 +22,44 @@ export default function Header() {
 
   return (
     <header className={`fixed top-0 right-0 left-0 z-50 transition-all duration-300 ${
-      scrolled ? "bg-white/90 backdrop-blur-md shadow-sm py-3" : "bg-transparent py-5"
+      scrolled ? "bg-white/95 shadow-sm py-3" : "bg-transparent py-4"
     }`}>
       <div className="container mx-auto px-6">
         <div className="flex justify-between items-center">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2 group">
-            <div className={`transition-all duration-300 rounded-lg ${
-              scrolled ? "bg-gradient-to-br from-primary to-blue-600" : "bg-white/20 backdrop-blur-md group-hover:bg-gradient-to-br group-hover:from-primary group-hover:to-blue-600"
-            } p-1.5 shadow-sm`}>
-              <Target className={`h-6 w-6 ${scrolled ? "text-white" : "text-primary group-hover:text-white"}`} />
+          <Link href="/" className="flex items-center space-x-2">
+            <div className={`${
+              scrolled ? "bg-primary text-white" : "bg-white/10 text-white"
+            } p-1.5 rounded-md transition-colors`}>
+              <Target className="h-5 w-5" />
             </div>
-            <span className={`text-xl font-bold ${scrolled ? "text-gray-900" : "text-white"}`}>
+            <span className={`text-lg font-semibold ${scrolled ? "text-gray-900" : "text-white"}`}>
               CueMaster
             </span>
           </Link>
           
           {/* Desktop navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            {[
-              { href: "/#features", label: "Features" },
-              { href: "/#about", label: "About" },
-              { href: "/#testimonials", label: "Testimonials" },
-            ].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`text-sm font-medium transition-colors hover:text-primary relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 hover:after:w-full after:bg-primary after:transition-all ${
-                  scrolled ? "text-gray-600" : "text-white"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+          <nav className="hidden md:flex items-center space-x-6">
+            <Link
+              href="#features"
+              className={`text-sm font-medium hover:text-primary transition-colors ${
+                scrolled ? "text-gray-700" : "text-white"
+              }`}
+            >
+              Features
+            </Link>
             
-            {/* Auth buttons - preserved as required */}
-            <div className="relative z-10">
+            <Link
+              href="#pricing"
+              className={`text-sm font-medium hover:text-primary transition-colors ${
+                scrolled ? "text-gray-700" : "text-white"
+              }`}
+            >
+              Pricing
+            </Link>
+            
+            {/* Auth buttons */}
+            <div className="pl-2">
               <AuthHeader />
             </div>
           </nav>
@@ -66,8 +68,8 @@ export default function Header() {
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`md:hidden p-2 rounded-lg ${
-              scrolled ? "text-gray-600 hover:bg-gray-100" : "text-white hover:bg-white/10"
+            className={`md:hidden p-2 ${
+              scrolled ? "text-gray-700" : "text-white"
             }`}
             aria-label={isMenuOpen ? "Close menu" : "Open menu"}
           >
@@ -77,37 +79,36 @@ export default function Header() {
       </div>
       
       {/* Mobile menu */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div 
-            className="md:hidden absolute top-full left-0 right-0 bg-white shadow-lg overflow-hidden"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <nav className="container mx-auto px-6 py-5 flex flex-col space-y-4">
-              {[
-                { href: "/#features", label: "Features" },
-                { href: "/#about", label: "About" },
-                { href: "/#testimonials", label: "Testimonials" },
-              ].map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="py-2 text-gray-600 hover:text-primary text-lg font-medium"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <div className="pt-4 border-t border-gray-100">
-                <AuthHeader />
-              </div>
-            </nav>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isMenuOpen && (
+        <motion.div 
+          className="md:hidden absolute top-full left-0 right-0 bg-white shadow-md"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          transition={{ duration: 0.2 }}
+        >
+          <nav className="container mx-auto px-6 py-4 flex flex-col">
+            <Link
+              href="#features"
+              className="py-2 text-gray-700 hover:text-primary text-base"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Features
+            </Link>
+            
+            <Link
+              href="#pricing"
+              className="py-2 text-gray-700 hover:text-primary text-base"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Pricing
+            </Link>
+            
+            <div className="pt-3 mt-3 border-t border-gray-100">
+              <AuthHeader />
+            </div>
+          </nav>
+        </motion.div>
+      )}
     </header>
   );
 }
