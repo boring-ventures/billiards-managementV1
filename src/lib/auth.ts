@@ -17,10 +17,11 @@ interface Session {
 export async function auth(): Promise<Session | null> {
   // In a real app, this would check for a valid session
   // For demo purposes, we're returning a mock session
-
-  // If you're implementing a real auth system, replace this with actual auth logic
+  
+  // Using a UUID that hopefully exists in your database
+  // You may need to replace this with a valid user ID from your database
   const mockUser: User = {
-    id: "123e4567-e89b-12d3-a456-426614174000", // Valid UUID format
+    id: "123e4567-e89b-12d3-a456-426614174000", // Valid UUID format - replace with a real user ID
     email: "user@example.com",
     name: "Demo User",
     role: "USER",

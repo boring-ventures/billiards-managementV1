@@ -11,26 +11,42 @@ export async function GET(req: NextRequest) {
     
     // Check if user is authenticated
     if (!session || !session.user) {
+      console.log("Finance transactions: Auth failed - No session or user");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
     // Get user profile with company information
     const user = await getCurrentUser();
     
-    if (!user || !user.id) {
+    if (!user) {
+      console.log("Finance transactions: getCurrentUser returned no user");
       return NextResponse.json({ error: "User not found" }, { status: 400 });
     }
+
+    if (!user.id) {
+      console.log("Finance transactions: User has no ID");
+      return NextResponse.json({ error: "User ID not found" }, { status: 400 });
+    }
+    
+    console.log("Finance transactions: Trying to find profile for user ID:", user.id);
     
     // Get the profile with company ID
     const profile = await db.profile.findUnique({
       where: { userId: user.id },
     });
     
-    if (!profile || !profile.companyId) {
+    if (!profile) {
+      console.log("Finance transactions: No profile found for user ID:", user.id);
+      return NextResponse.json({ error: "No profile found for user" }, { status: 400 });
+    }
+    
+    if (!profile.companyId) {
+      console.log("Finance transactions: Profile has no companyId:", profile.id);
       return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
     }
     
     const companyId = profile.companyId;
+    console.log("Finance transactions: Found companyId:", companyId);
     
     // Fetch all transactions for this company with related data
     const transactions = await db.financeTransaction.findMany({
@@ -54,7 +70,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ transactions });
   } catch (error) {
     console.error("Failed to fetch transactions:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
 
