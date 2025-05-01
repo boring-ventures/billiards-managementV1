@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -12,6 +12,9 @@ import FinancialTrends from "@/components/views/dashboard/FinancialTrends";
 import InventoryAlerts from "@/components/views/dashboard/InventoryAlerts";
 import ActivityLogFeed from "@/components/views/dashboard/ActivityLogFeed";
 import { UserRole } from "@prisma/client";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { UserCog, PlusCircle, Building } from "lucide-react";
 
 export default function DashboardContent() {
   const { profile } = useCurrentUser();
@@ -33,67 +36,77 @@ export default function DashboardContent() {
             <CardContent className="space-y-4">
               <div className="bg-accent/30 p-4 rounded-md">
                 <h3 className="font-medium text-lg mb-2">Getting Started</h3>
-                <p className="text-muted-foreground mb-4">
-                  As a superadmin, you have full access to the entire system. Here are some actions you can take:
-                </p>
-                <ul className="list-disc pl-5 space-y-2 text-sm">
+                <ul className="space-y-2">
                   <li>
-                    <a href="/company-selection" className="text-primary hover:underline font-medium">
-                      Select a venue
-                    </a>{" "}
-                    to manage from the existing venues
+                    <Button asChild variant="link" className="h-auto p-0 text-primary">
+                      <Link href="/dashboard/admin/users">
+                        <UserCog className="h-4 w-4 mr-2 inline" />
+                        Manage User Accounts
+                      </Link>
+                    </Button>
                   </li>
                   <li>
-                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
-                      Create a new venue
-                    </a>{" "}
-                    and set up its profile
+                    <Button asChild variant="link" className="h-auto p-0 text-primary">
+                      <Link href="/dashboard/settings">
+                        <PlusCircle className="h-4 w-4 mr-2 inline" />
+                        Create a New Venue
+                      </Link>
+                    </Button>
                   </li>
                   <li>
-                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
-                      Manage user accounts
-                    </a>{" "}
-                    and assign roles
-                  </li>
-                  <li>
-                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
-                      Configure system settings
-                    </a>{" "}
-                    for the entire platform
+                    <Button asChild variant="link" className="h-auto p-0 text-primary">
+                      <Link href="/company-selection">
+                        <Building className="h-4 w-4 mr-2 inline" />
+                        Select an Existing Venue
+                      </Link>
+                    </Button>
                   </li>
                 </ul>
               </div>
-              
-              <div className="grid gap-4 md:grid-cols-2 mt-4">
-                <Card className="border-l-4 border-l-green-500/70">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold">Create New Venue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Set up a new billiards venue or pool hall in the system
-                    </p>
-                    <a href="/dashboard/settings" 
-                      className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm">
-                      Create Venue
-                    </a>
-                  </CardContent>
-                </Card>
+            </CardContent>
+          </Card>
+          
+          {/* Admin Tools Section */}
+          <Card className="dashboard-card border-l-4 border-l-amber-500/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Administration Tools</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Manage the platform and users
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex justify-start items-center gap-2 hover:border-primary hover:bg-primary/5"
+                  asChild
+                >
+                  <Link href="/dashboard/admin/users">
+                    <UserCog className="h-5 w-5 text-primary" />
+                    <div className="text-left">
+                      <div className="font-medium">User Management</div>
+                      <div className="text-sm text-muted-foreground">
+                        Update roles and permissions
+                      </div>
+                    </div>
+                  </Link>
+                </Button>
                 
-                <Card className="border-l-4 border-l-purple-500/70">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold">Select Existing Venue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Choose a venue to manage from the existing ones
-                    </p>
-                    <a href="/company-selection" 
-                      className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm">
-                      Select Venue
-                    </a>
-                  </CardContent>
-                </Card>
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex justify-start items-center gap-2 hover:border-primary hover:bg-primary/5"
+                  asChild
+                >
+                  <Link href="/dashboard/settings">
+                    <Building className="h-5 w-5 text-primary" />
+                    <div className="text-left">
+                      <div className="font-medium">Venue Management</div>
+                      <div className="text-sm text-muted-foreground">
+                        Create and configure venues
+                      </div>
+                    </div>
+                  </Link>
+                </Button>
               </div>
             </CardContent>
           </Card>
