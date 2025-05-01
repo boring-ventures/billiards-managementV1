@@ -90,10 +90,12 @@ export function TransactionList({ profile }: TransactionListProps) {
       
       // Determine if there's a company ID to use for the request
       let url = "/api/finance/transactions";
+      let maintenanceUrl = "/api/tables/maintenance";
       
       // For superadmins, check if they have a selected company
       if (profile.role === "SUPERADMIN" && profile.companyId) {
         url += `?companyId=${profile.companyId}`;
+        maintenanceUrl += `?companyId=${profile.companyId}`;
       }
       
       const response = await fetch(url);
@@ -102,10 +104,10 @@ export function TransactionList({ profile }: TransactionListProps) {
       setTransactions(data.transactions);
       
       // Also fetch maintenance costs
-      const maintenanceResponse = await fetch("/api/tables/maintenance");
+      const maintenanceResponse = await fetch(maintenanceUrl);
       if (maintenanceResponse.ok) {
         const maintenanceData = await maintenanceResponse.json();
-        setMaintenanceCosts(maintenanceData.maintenances);
+        setMaintenanceCosts(maintenanceData.maintenanceRecords || []);
       }
     } catch (error) {
       console.error("Error fetching transactions:", error);
