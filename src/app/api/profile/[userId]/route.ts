@@ -9,87 +9,190 @@ export async function GET(
 ) {
   try {
     const userId = (await params).userId;
-    console.log("Fetching specific profile for user ID:", userId);
+    console.log("[API:userId] Fetching specific profile for user ID:", userId);
 
-    // Create Supabase client with awaited cookies
-    const supabase = createRouteHandlerClient({ cookies });
-
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-      console.error("Authentication error:", sessionError);
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // Only allow users to view their own profile (or admin users to view any profile)
-    const currentUser = session.user;
-    console.log("Current user ID:", currentUser.id);
-    
+    // Create Supabase client
     try {
-      const userProfile = await prisma.profile.findUnique({
-        where: { userId: currentUser.id },
-      });
+      const supabase = createRouteHandlerClient({ cookies });
 
-      // Check if user is a superadmin based on metadata if no profile exists
-      let isSuperadmin = userProfile?.role === "SUPERADMIN";
-      if (!userProfile && currentUser.user_metadata?.role === "SUPERADMIN") {
-        console.log("User has superadmin role in metadata");
-        isSuperadmin = true;
-      }
-
-      if (userId !== currentUser.id && !isSuperadmin) {
-        console.error("Unauthorized access attempt");
+      // Get the current user's session
+      console.log("[API:userId] Attempting to get Supabase session");
+      const sessionResult = await supabase.auth.getSession();
+      
+      if (!sessionResult || sessionResult.error) {
+        console.error("[API:userId] Session error:", sessionResult?.error);
         return NextResponse.json(
-          { error: "Unauthorized to view this profile" },
-          { status: 403 }
+          { error: "Authentication failed", details: sessionResult?.error?.message },
+          { status: 401 }
+        );
+      }
+      
+      const session = sessionResult.data.session;
+      
+      if (!session) {
+        console.error("[API:userId] No active session found");
+        return NextResponse.json(
+          { error: "Not authenticated", detail: "No active session" },
+          { status: 401 }
         );
       }
 
-      const profile = await prisma.profile.findUnique({
-        where: { userId },
-      });
+      // Only allow users to view their own profile (or admin users to view any profile)
+      const currentUser = session.user;
+      console.log("[API:userId] Current user ID:", currentUser.id);
+      console.log("[API:userId] User metadata:", JSON.stringify(currentUser.user_metadata));
+      
+      try {
+        // Get the current user's profile to check permissions
+        const userProfile = await prisma.profile.findUnique({
+          where: { userId: currentUser.id },
+        });
 
-      if (!profile) {
-        console.error("Profile not found for requested user ID:", userId);
+        // Check if user is a superadmin based on metadata if no profile exists
+        const userMetadata = currentUser.user_metadata || {};
+        let isSuperadmin = userProfile?.role === "SUPERADMIN";
         
-        // Check if this is for current user and they're a superadmin without profile
-        if (userId === currentUser.id && currentUser.user_metadata?.role === "SUPERADMIN") {
-          console.log("Creating profile for superadmin user");
+        if (!userProfile) {
+          // Handle case where user doesn't have a profile yet but might be a superadmin
+          isSuperadmin = 
+            userMetadata.role === "SUPERADMIN" || 
+            userMetadata.isSuperAdmin === true ||
+            (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin);
           
-          // Create a minimal profile for superadmins
-          const superadminProfile = await prisma.profile.create({
-            data: {
-              userId,
-              firstName: currentUser.user_metadata?.firstName || currentUser.user_metadata?.first_name || null,
-              lastName: currentUser.user_metadata?.lastName || currentUser.user_metadata?.last_name || null,
-              avatarUrl: currentUser.user_metadata?.avatarUrl || currentUser.user_metadata?.avatar_url || null,
-              role: "SUPERADMIN",
-              active: true,
-            },
-          });
+          console.log("[API:userId] User has superadmin role in metadata:", isSuperadmin);
           
-          return NextResponse.json({ profile: superadminProfile });
+          // If the user is a superadmin or looking at their own profile, create a profile for them
+          if (isSuperadmin || userId === currentUser.id) {
+            console.log("[API:userId] Creating profile for user");
+            
+            try {
+              const role = isSuperadmin ? "SUPERADMIN" : "USER";
+              const newProfile = await prisma.profile.create({
+                data: {
+                  userId: currentUser.id,
+                  firstName: userMetadata.firstName || userMetadata.first_name || null,
+                  lastName: userMetadata.lastName || userMetadata.last_name || null,
+                  avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
+                  role,
+                  active: true,
+                },
+              });
+              
+              console.log("[API:userId] Profile created successfully for current user");
+              
+              // Update userProfile and isSuperadmin with newly created data
+              isSuperadmin = role === "SUPERADMIN";
+            } catch (error: any) {
+              console.error("[API:userId] Error creating profile for current user:", error);
+              
+              // If it's a unique constraint error, the profile might have been created in a race condition
+              if (error.code !== 'P2002') {
+                return NextResponse.json(
+                  { error: "Failed to create profile for current user", detail: error.message },
+                  { status: 500 }
+                );
+              }
+              
+              // If there was a unique constraint error, try to fetch the profile again
+              const existingProfile = await prisma.profile.findUnique({
+                where: { userId: currentUser.id },
+              });
+              
+              if (existingProfile) {
+                isSuperadmin = existingProfile.role === "SUPERADMIN";
+              }
+            }
+          }
         }
-        
-        return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-      }
 
-      return NextResponse.json({ profile });
-    } catch (profileError) {
-      console.error("Error processing user profile:", profileError);
+        // Enforce access control: only allow users to view their own profile or superadmins to view any profile
+        if (userId !== currentUser.id && !isSuperadmin) {
+          console.error("[API:userId] Unauthorized access attempt");
+          return NextResponse.json(
+            { error: "Unauthorized to view this profile" },
+            { status: 403 }
+          );
+        }
+
+        // Fetch the requested profile
+        const profile = await prisma.profile.findUnique({
+          where: { userId },
+        });
+
+        if (!profile) {
+          console.error("[API:userId] Profile not found for requested user ID:", userId);
+          
+          // If this is the current user, create a profile for them
+          if (userId === currentUser.id) {
+            console.log("[API:userId] Creating profile for current user");
+            
+            try {
+              // Determine role - if user metadata indicates superadmin, set that role
+              const role = 
+                userMetadata.role === "SUPERADMIN" || 
+                userMetadata.isSuperAdmin === true ||
+                (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin)
+                  ? "SUPERADMIN" 
+                  : "USER";
+              
+              const newProfile = await prisma.profile.create({
+                data: {
+                  userId,
+                  firstName: userMetadata.firstName || userMetadata.first_name || null,
+                  lastName: userMetadata.lastName || userMetadata.last_name || null,
+                  avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
+                  role,
+                  active: true,
+                },
+              });
+              
+              console.log("[API:userId] Profile created successfully for requested user");
+              return NextResponse.json({ profile: newProfile });
+            } catch (error: any) {
+              console.error("[API:userId] Error creating profile for requested user:", error);
+              
+              // If it's a unique constraint error, try to fetch the profile again
+              if (error.code === 'P2002') {
+                const existingProfile = await prisma.profile.findUnique({
+                  where: { userId },
+                });
+                
+                if (existingProfile) {
+                  console.log("[API:userId] Found profile after creation attempt");
+                  return NextResponse.json({ profile: existingProfile });
+                }
+              }
+              
+              return NextResponse.json(
+                { error: "Failed to create profile", detail: error.message },
+                { status: 500 }
+              );
+            }
+          }
+          
+          return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+        }
+
+        console.log("[API:userId] Profile found, returning data");
+        return NextResponse.json({ profile });
+      } catch (error: any) {
+        console.error("[API:userId] Error processing user profile:", error);
+        return NextResponse.json(
+          { error: "Failed to process user profile", detail: error.message },
+          { status: 500 }
+        );
+      }
+    } catch (cookieError: any) {
+      console.error("[API:userId] Error accessing cookies:", cookieError);
       return NextResponse.json(
-        { error: "Failed to process user profile" },
+        { error: "Cookie store initialization failed", detail: cookieError.message },
         { status: 500 }
       );
     }
-  } catch (error) {
-    console.error("Error fetching profile:", error);
+  } catch (error: any) {
+    console.error("[API:userId] Error in profile endpoint:", error);
     return NextResponse.json(
-      { error: "Failed to fetch profile" },
+      { error: "Failed to fetch profile", detail: error.message },
       { status: 500 }
     );
   }
@@ -101,50 +204,95 @@ export async function PATCH(
 ) {
   try {
     const userId = params.userId;
+    console.log("[API:userId] Updating profile for user ID:", userId);
 
-    // Create Supabase client with awaited cookies
-    const supabase = createRouteHandlerClient({ cookies });
+    // Create Supabase client
+    try {
+      const supabase = createRouteHandlerClient({ cookies });
+      
+      // Get the current user's session
+      console.log("[API:userId] Getting auth session for update");
+      const sessionResult = await supabase.auth.getSession();
+      
+      if (!sessionResult || sessionResult.error) {
+        console.error("[API:userId] Session error during update:", sessionResult?.error);
+        return NextResponse.json(
+          { error: "Authentication failed", details: sessionResult?.error?.message },
+          { status: 401 }
+        );
+      }
+      
+      const session = sessionResult.data.session;
+      
+      if (!session) {
+        console.error("[API:userId] No active session found during update");
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
 
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      // Only allow users to update their own profile (or admin users to update any profile)
+      const currentUser = session.user;
+      console.log("[API:userId] Current user performing update:", currentUser.id);
+      
+      try {
+        const userProfile = await prisma.profile.findUnique({
+          where: { userId: currentUser.id },
+        });
 
-    if (sessionError || !session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+        // Check superadmin status from profile or metadata
+        const userMetadata = currentUser.user_metadata || {};
+        let isSuperadmin = userProfile?.role === "SUPERADMIN";
+        
+        if (!userProfile) {
+          isSuperadmin = 
+            userMetadata.role === "SUPERADMIN" || 
+            userMetadata.isSuperAdmin === true ||
+            (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin);
+        }
 
-    // Only allow users to update their own profile (or admin users to update any profile)
-    const currentUser = session.user;
-    const userProfile = await prisma.profile.findUnique({
-      where: { userId: currentUser.id },
-    });
+        if (userId !== currentUser.id && !isSuperadmin) {
+          console.error("[API:userId] Unauthorized update attempt");
+          return NextResponse.json(
+            { error: "Unauthorized to update this profile" },
+            { status: 403 }
+          );
+        }
 
-    if (userId !== currentUser.id && userProfile?.role !== "SUPERADMIN") {
+        const json = await request.json();
+        console.log("[API:userId] Update data:", JSON.stringify(json));
+
+        // Perform the update
+        const updatedProfile = await prisma.profile.update({
+          where: { userId },
+          data: {
+            firstName: json.firstName !== undefined ? json.firstName : undefined,
+            lastName: json.lastName !== undefined ? json.lastName : undefined,
+            avatarUrl: json.avatarUrl !== undefined ? json.avatarUrl : undefined,
+            active: json.active !== undefined ? json.active : undefined,
+            // Allow role updates only for superadmins
+            role: isSuperadmin && json.role !== undefined ? json.role : undefined,
+          },
+        });
+
+        console.log("[API:userId] Profile updated successfully");
+        return NextResponse.json({ profile: updatedProfile });
+      } catch (error: any) {
+        console.error("[API:userId] Error updating profile:", error);
+        return NextResponse.json(
+          { error: "Failed to update profile", detail: error.message },
+          { status: 500 }
+        );
+      }
+    } catch (cookieError: any) {
+      console.error("[API:userId] Cookie error during update:", cookieError);
       return NextResponse.json(
-        { error: "Unauthorized to update this profile" },
-        { status: 403 }
+        { error: "Cookie initialization failed", detail: cookieError.message },
+        { status: 500 }
       );
     }
-
-    const json = await request.json();
-
-    const updatedProfile = await prisma.profile.update({
-      where: { userId },
-      data: {
-        firstName: json.firstName || undefined,
-        lastName: json.lastName || undefined,
-        avatarUrl: json.avatarUrl || undefined,
-        active: json.active !== undefined ? json.active : undefined,
-      },
-    });
-
-    return NextResponse.json({ profile: updatedProfile });
-  } catch (error) {
-    console.error("Error updating profile:", error);
+  } catch (error: any) {
+    console.error("[API:userId] Unhandled error in profile update:", error);
     return NextResponse.json(
-      { error: "Failed to update profile" },
+      { error: "Failed to update profile", detail: error.message },
       { status: 500 }
     );
   }

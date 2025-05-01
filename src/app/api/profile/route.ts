@@ -6,66 +6,160 @@ import type { UserRole, Prisma } from "@prisma/client";
 
 // GET: Fetch profile for the current authenticated user
 export async function GET(_request: NextRequest) {
+  console.log("[API] Starting profile fetch request");
+  
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-      console.error("Authentication error:", sessionError);
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const userId = session.user.id;
-    console.log("Fetching profile for user ID:", userId);
-
-    // Fetch profile from the database
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
-
-    if (!profile) {
-      console.error("Profile not found for user ID:", userId);
+    // Create Supabase client
+    try {
+      const supabase = createRouteHandlerClient({ cookies });
       
-      // Check if this is a superadmin that might not have a profile
-      // We can create a minimal profile for superadmins on-the-fly
-      try {
-        const userMetadata = session.user.user_metadata;
-        const isSuperadmin = userMetadata?.role === "SUPERADMIN";
-        
-        if (isSuperadmin) {
-          console.log("Creating minimal profile for superadmin user");
-          
-          // Create a minimal profile for superadmins
-          const superadminProfile = await prisma.profile.create({
-            data: {
-              userId,
-              firstName: userMetadata?.firstName || userMetadata?.first_name || null,
-              lastName: userMetadata?.lastName || userMetadata?.last_name || null,
-              avatarUrl: userMetadata?.avatarUrl || userMetadata?.avatar_url || null,
-              role: "SUPERADMIN",
-              active: true,
-            },
-          });
-          
-          return NextResponse.json(superadminProfile);
-        }
-      } catch (createError) {
-        console.error("Error creating superadmin profile:", createError);
+      // Get the current user's session
+      console.log("[API] Attempting to get Supabase session");
+      const sessionResult = await supabase.auth.getSession();
+      
+      if (!sessionResult || sessionResult.error) {
+        console.error("[API] Session error:", sessionResult?.error);
+        return NextResponse.json(
+          { error: "Authentication failed", details: sessionResult?.error?.message },
+          { status: 401 }
+        );
       }
       
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-    }
+      const session = sessionResult.data.session;
+      
+      if (!session) {
+        console.error("[API] No active session found");
+        return NextResponse.json(
+          { error: "Not authenticated", detail: "No active session" },
+          { status: 401 }
+        );
+      }
 
-    return NextResponse.json(profile);
-  } catch (error) {
-    console.error("Error fetching profile:", error);
+      const userId = session.user.id;
+      console.log("[API] Authenticated user ID:", userId);
+      console.log("[API] User metadata:", JSON.stringify(session.user.user_metadata));
+
+      try {
+        // Fetch profile from the database
+        console.log("[API] Querying database for profile");
+        const profile = await prisma.profile.findUnique({
+          where: { userId },
+        });
+
+        if (!profile) {
+          console.log("[API] Profile not found, checking if superadmin");
+          
+          // Extract role from user metadata
+          const userMetadata = session.user.user_metadata || {};
+          const isSuperadmin = 
+            userMetadata.role === "SUPERADMIN" || 
+            userMetadata.isSuperAdmin === true ||
+            (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin);
+          
+          console.log("[API] Is superadmin from metadata:", isSuperadmin);
+          
+          if (isSuperadmin) {
+            console.log("[API] Creating superadmin profile");
+            
+            try {
+              // Create a minimal profile for superadmins
+              const superadminProfile = await prisma.profile.create({
+                data: {
+                  userId,
+                  firstName: userMetadata.firstName || userMetadata.first_name || null,
+                  lastName: userMetadata.lastName || userMetadata.last_name || null,
+                  avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
+                  role: "SUPERADMIN",
+                  active: true,
+                },
+              });
+              
+              console.log("[API] Superadmin profile created successfully");
+              return NextResponse.json(superadminProfile);
+            } catch (error: any) {
+              console.error("[API] Error creating superadmin profile:", error);
+              
+              // Check if it's a unique constraint error (profile might have been created in a race condition)
+              if (error.code === 'P2002') {
+                console.log("[API] Trying to fetch profile again after unique constraint error");
+                const existingProfile = await prisma.profile.findUnique({
+                  where: { userId },
+                });
+                
+                if (existingProfile) {
+                  console.log("[API] Found profile after creation attempt");
+                  return NextResponse.json(existingProfile);
+                }
+              }
+              
+              return NextResponse.json(
+                { 
+                  error: "Failed to create profile", 
+                  detail: error.message || "Database error during profile creation" 
+                },
+                { status: 500 }
+              );
+            }
+          }
+          
+          // Check if the user is in database but doesn't have a profile yet
+          try {
+            console.log("[API] Creating default profile for user");
+            // Create a default profile
+            const newProfile = await prisma.profile.create({
+              data: {
+                userId,
+                firstName: userMetadata.firstName || userMetadata.first_name || null,
+                lastName: userMetadata.lastName || userMetadata.last_name || null,
+                avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
+                role: "USER",
+                active: true,
+              },
+            });
+            
+            console.log("[API] Default profile created successfully");
+            return NextResponse.json(newProfile);
+          } catch (error: any) {
+            console.error("[API] Error creating default profile:", error);
+            
+            // Same race condition check as above
+            if (error.code === 'P2002') {
+              const existingProfile = await prisma.profile.findUnique({
+                where: { userId },
+              });
+              
+              if (existingProfile) {
+                return NextResponse.json(existingProfile);
+              }
+            }
+            
+            return NextResponse.json(
+              { error: "Profile not found and couldn't be created" },
+              { status: 404 }
+            );
+          }
+        }
+
+        console.log("[API] Profile found, returning data");
+        return NextResponse.json(profile);
+      } catch (error: any) {
+        console.error("[API] Database error:", error);
+        return NextResponse.json(
+          { error: "Database error", detail: error.message || "Error querying database" },
+          { status: 500 }
+        );
+      }
+    } catch (cookieError: any) {
+      console.error("[API] Error accessing cookies:", cookieError);
+      return NextResponse.json(
+        { error: "Cookie store initialization failed", detail: cookieError.message },
+        { status: 500 }
+      );
+    }
+  } catch (error: any) {
+    console.error("[API] Unhandled error in profile API:", error);
     return NextResponse.json(
-      { error: "Failed to fetch profile" },
+      { error: "Failed to fetch profile", detail: error.message || "Unexpected server error" },
       { status: 500 }
     );
   }
