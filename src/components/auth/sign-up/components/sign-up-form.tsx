@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/use-toast";
 import Image from "next/image";
 import { uploadAvatar } from "@/lib/supabase/upload-avatar";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 
 export function SignUpForm({ className, ...props }: SignUpFormProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -88,6 +89,18 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
               variant: "default",
             });
           }
+        }
+
+        // Add name data to user metadata for later profile creation
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              firstName: data.firstName,
+              lastName: data.lastName,
+            },
+          });
+        } catch (metadataError) {
+          console.error("Failed to update user metadata:", metadataError);
         }
 
         const response = await fetch("/api/profile", {

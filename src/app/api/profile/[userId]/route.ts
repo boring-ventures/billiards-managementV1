@@ -139,14 +139,17 @@ export async function GET(
                 userMetadata.first_name || 
                 userMetadata.given_name ||
                 userMetadata.name?.split(' ')[0] || 
-                (emailNameParts.length > 0 ? emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : null);
+                (emailNameParts.length > 0 ? 
+                  emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : 
+                  (currentUser.email ? currentUser.email.split('@')[0] : "User"));
               
               const lastName = 
                 userMetadata.lastName || 
                 userMetadata.last_name || 
                 userMetadata.family_name || 
                 userMetadata.name?.split(' ').slice(1).join(' ') || 
-                (emailNameParts.length > 1 ? emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : null);
+                (emailNameParts.length > 1 ? 
+                  emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : "");
               
               console.log("[API:userId] Extracted name info - First:", firstName, "Last:", lastName);
               
