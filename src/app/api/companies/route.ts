@@ -112,6 +112,24 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Optionally assign this company to the superadmin who created it
+    const assignToCreator = body.assignToCreator === true;
+    
+    if (assignToCreator) {
+      // Update the superadmin's profile with the new company ID
+      await db.profile.update({
+        where: { userId: session.user.id },
+        data: { companyId: company.id },
+      });
+      
+      // Indicate that the company was assigned
+      return NextResponse.json({ 
+        ...company, 
+        assigned: true,
+        message: "Company created and assigned to your profile" 
+      });
+    }
+
     return NextResponse.json(company);
   } catch (error) {
     if (error instanceof z.ZodError) {

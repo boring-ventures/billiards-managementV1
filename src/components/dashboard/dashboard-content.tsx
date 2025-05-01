@@ -19,6 +19,89 @@ export default function DashboardContent() {
   const activeCompanyId = getActiveCompanyId(profile);
 
   if (!activeCompanyId) {
+    // Special view for superadmins without a company
+    if (profile?.role === "SUPERADMIN") {
+      return (
+        <div className="flex flex-col gap-6">
+          <Card className="dashboard-card border-l-4 border-l-blue-500/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl font-semibold">Welcome to Billiards Management Platform</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                System Administration Dashboard
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-accent/30 p-4 rounded-md">
+                <h3 className="font-medium text-lg mb-2">Getting Started</h3>
+                <p className="text-muted-foreground mb-4">
+                  As a superadmin, you have full access to the entire system. Here are some actions you can take:
+                </p>
+                <ul className="list-disc pl-5 space-y-2 text-sm">
+                  <li>
+                    <a href="/company-selection" className="text-primary hover:underline font-medium">
+                      Select a venue
+                    </a>{" "}
+                    to manage from the existing venues
+                  </li>
+                  <li>
+                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
+                      Create a new venue
+                    </a>{" "}
+                    and set up its profile
+                  </li>
+                  <li>
+                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
+                      Manage user accounts
+                    </a>{" "}
+                    and assign roles
+                  </li>
+                  <li>
+                    <a href="/dashboard/settings" className="text-primary hover:underline font-medium">
+                      Configure system settings
+                    </a>{" "}
+                    for the entire platform
+                  </li>
+                </ul>
+              </div>
+              
+              <div className="grid gap-4 md:grid-cols-2 mt-4">
+                <Card className="border-l-4 border-l-green-500/70">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold">Create New Venue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Set up a new billiards venue or pool hall in the system
+                    </p>
+                    <a href="/dashboard/settings" 
+                      className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm">
+                      Create Venue
+                    </a>
+                  </CardContent>
+                </Card>
+                
+                <Card className="border-l-4 border-l-purple-500/70">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold">Select Existing Venue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Choose a venue to manage from the existing ones
+                    </p>
+                    <a href="/company-selection" 
+                      className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm">
+                      Select Venue
+                    </a>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+    
+    // Default view for non-superadmins without a company
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">No active company selected.</p>
