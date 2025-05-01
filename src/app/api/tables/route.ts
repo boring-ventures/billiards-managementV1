@@ -27,21 +27,27 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // For superadmins, check for a selected company in the request
-    let companyId = profile.companyId;
+    // Always check for a companyId parameter in the request
+    const searchParams = req.nextUrl.searchParams;
+    const requestCompanyId = searchParams.get("companyId");
     
-    if (profile.role === UserRole.SUPERADMIN && !companyId) {
-      const searchParams = req.nextUrl.searchParams;
-      const selectedCompanyId = searchParams.get("companyId");
+    // For superadmins, use the companyId from the request
+    // For regular users, verify the requested companyId matches their profile companyId
+    let companyId: string | null = null;
+    
+    if (profile.role === UserRole.SUPERADMIN) {
+      companyId = requestCompanyId;
+    } else {
+      // For regular users, enforce using their assigned company
+      companyId = profile.companyId;
       
-      if (!selectedCompanyId) {
+      // If they're trying to access another company's data, reject
+      if (requestCompanyId && requestCompanyId !== companyId) {
         return NextResponse.json(
-          { error: "Company ID is required for superadmins" },
-          { status: 400 }
+          { error: "Unauthorized access to company data" },
+          { status: 403 }
         );
       }
-      
-      companyId = selectedCompanyId;
     }
     
     // Ensure companyId is not null before querying
@@ -79,6 +85,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, hourlyRate, status, companyId } = body;
 
+    if (!companyId) {
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
+    }
+
     // Get the current user
     const session = await auth();
     if (!session?.user?.id) {
@@ -108,6 +121,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Only admins can create tables" },
         { status: 403 }
+      );
+    }
+
+    // For regular admins, ensure they're creating tables for their own company
+    if (profile.role === UserRole.ADMIN && companyId !== profile.companyId) {
+      return NextResponse.json(
+        { error: "Cannot create tables for other companies" },
+        { status: 403 }
+      );
+    }
+
+    // Verify the company exists
+    const company = await db.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return NextResponse.json(
+        { error: "Company not found" },
+        { status: 404 }
       );
     }
 

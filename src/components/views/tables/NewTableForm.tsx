@@ -62,7 +62,16 @@ export function NewTableForm() {
     setIsSubmitting(true);
     
     try {
-      const companyId = getActiveCompanyId(profile);
+      // Get companyId from profile or localStorage for superadmins
+      let companyId = profile?.companyId;
+      
+      // For superadmins, get selected company from localStorage
+      if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
+        const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+        if (selectedCompanyId) {
+          companyId = selectedCompanyId;
+        }
+      }
       
       if (!companyId) {
         throw new Error("No company selected");

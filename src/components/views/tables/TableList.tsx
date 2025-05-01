@@ -64,7 +64,24 @@ export function TableList({
   // Function to fetch tables data
   const fetchTables = async () => {
     try {
-      const response = await fetch("/api/tables");
+      // Get companyId from profile or localStorage for superadmins
+      let companyId = profile?.companyId;
+      
+      // For superadmins, get selected company from localStorage
+      if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
+        const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+        if (selectedCompanyId) {
+          companyId = selectedCompanyId;
+        }
+      }
+      
+      if (!companyId) {
+        console.error("No company ID available");
+        setLoading(false);
+        return;
+      }
+      
+      const response = await fetch(`/api/tables?companyId=${companyId}`);
       if (!response.ok) throw new Error("Failed to fetch tables");
       const data = await response.json();
       setTables(data.tables);
