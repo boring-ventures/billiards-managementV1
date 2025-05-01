@@ -127,29 +127,52 @@ export async function GET(
             console.log("[API:userId] Creating profile for current user");
             
             try {
+              // Extract name from user email if not available in metadata
+              const emailName = currentUser.email ? currentUser.email.split('@')[0] : null;
+              const emailNameParts = emailName ? emailName.split('.') : [];
+              
+              const userMetadata = currentUser.user_metadata || {};
+              
+              // Get first and last name with several fallback options
+              const firstName = 
+                userMetadata.firstName || 
+                userMetadata.first_name || 
+                userMetadata.given_name ||
+                userMetadata.name?.split(' ')[0] || 
+                (emailNameParts.length > 0 ? emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : null);
+              
+              const lastName = 
+                userMetadata.lastName || 
+                userMetadata.last_name || 
+                userMetadata.family_name || 
+                userMetadata.name?.split(' ').slice(1).join(' ') || 
+                (emailNameParts.length > 1 ? emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : null);
+              
+              console.log("[API:userId] Extracted name info - First:", firstName, "Last:", lastName);
+              
               // Determine role - if user metadata indicates superadmin, set that role
-              const role = 
+              const isSuperadmin = 
                 userMetadata.role === "SUPERADMIN" || 
                 userMetadata.isSuperAdmin === true ||
-                (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin)
-                  ? "SUPERADMIN" 
-                  : "USER";
+                (typeof userMetadata.is_superadmin === 'boolean' && userMetadata.is_superadmin);
+              
+              const role = isSuperadmin ? "SUPERADMIN" : "USER";
               
               const newProfile = await prisma.profile.create({
                 data: {
                   userId,
-                  firstName: userMetadata.firstName || userMetadata.first_name || null,
-                  lastName: userMetadata.lastName || userMetadata.last_name || null,
+                  firstName,
+                  lastName,
                   avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
                   role,
                   active: true,
                 },
               });
               
-              console.log("[API:userId] Profile created successfully for requested user");
+              console.log(`[API:userId] Profile created successfully for ${role}`);
               return NextResponse.json({ profile: newProfile });
             } catch (error: any) {
-              console.error("[API:userId] Error creating profile for requested user:", error);
+              console.error("[API:userId] Error creating profile for user:", error);
               
               // If it's a unique constraint error, try to fetch the profile again
               if (error.code === 'P2002') {

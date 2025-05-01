@@ -62,12 +62,33 @@ export async function GET(_request: NextRequest) {
             console.log("[API] Creating superadmin profile");
             
             try {
+              // Extract name from user email if not available in metadata
+              const emailName = session.user.email ? session.user.email.split('@')[0] : null;
+              const emailNameParts = emailName ? emailName.split('.') : [];
+              
+              // Get first and last name with several fallback options
+              const firstName = 
+                userMetadata.firstName || 
+                userMetadata.first_name || 
+                userMetadata.given_name ||
+                userMetadata.name?.split(' ')[0] || 
+                (emailNameParts.length > 0 ? emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : null);
+              
+              const lastName = 
+                userMetadata.lastName || 
+                userMetadata.last_name || 
+                userMetadata.family_name || 
+                userMetadata.name?.split(' ').slice(1).join(' ') || 
+                (emailNameParts.length > 1 ? emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : null);
+              
+              console.log("[API] Extracted name info - First:", firstName, "Last:", lastName);
+              
               // Create a minimal profile for superadmins
               const superadminProfile = await prisma.profile.create({
                 data: {
                   userId,
-                  firstName: userMetadata.firstName || userMetadata.first_name || null,
-                  lastName: userMetadata.lastName || userMetadata.last_name || null,
+                  firstName,
+                  lastName,
                   avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
                   role: "SUPERADMIN",
                   active: true,
