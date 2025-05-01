@@ -239,6 +239,21 @@ async function main() {
 
   console.log("Created finance transactions:", { incomeTransaction, expenseTransaction });
 
+  // Create a profile for the mock user
+  const mockProfile = await prisma.profile.upsert({
+    where: { userId: '123e4567-e89b-12d3-a456-426614174000' },
+    update: {},
+    create: {
+      userId: '123e4567-e89b-12d3-a456-426614174000',
+      firstName: 'Demo',
+      lastName: 'User',
+      role: UserRole.SUPERADMIN,
+      active: true,
+    },
+  });
+
+  console.log('Created profile:', mockProfile);
+
   console.log("Seed completed successfully!");
 }
 

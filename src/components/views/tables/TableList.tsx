@@ -15,7 +15,8 @@ import {
   Play, 
   StopCircle, 
   Trash,
-  Plus
+  Plus,
+  WrenchIcon
 } from "lucide-react";
 import { Table, TableSession } from "@prisma/client";
 import { 
@@ -27,6 +28,9 @@ import {
 import { hasAdminPermission } from "@/lib/rbac";
 import { StartSessionModal } from "@/components/modals/StartSessionModal";
 import { ConfirmDeleteModal } from "@/components/modals/ConfirmDeleteModal";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { ScheduleMaintenanceForm } from "@/components/views/tables/ScheduleMaintenanceForm";
+import Link from "next/link";
 
 type TableWithSession = Table & {
   sessions: TableSession[];
@@ -34,14 +38,24 @@ type TableWithSession = Table & {
 
 type TableListProps = {
   profile: any; // Replace with proper Profile type
+  searchQuery?: string;
+  statusFilter?: string;
+  refreshKey?: number;
 };
 
-export function TableList({ profile }: TableListProps) {
+export function TableList({ 
+  profile, 
+  searchQuery = "", 
+  statusFilter = "",
+  refreshKey = 0 
+}: TableListProps) {
   const router = useRouter();
   const [tables, setTables] = useState<TableWithSession[]>([]);
+  const [filteredTables, setFilteredTables] = useState<TableWithSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   
@@ -60,6 +74,30 @@ export function TableList({ profile }: TableListProps) {
       setLoading(false);
     }
   };
+
+  // Apply filters to tables
+  useEffect(() => {
+    if (!tables.length) return;
+    
+    let filtered = [...tables];
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(table => 
+        table.name.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply status filter
+    if (statusFilter) {
+      filtered = filtered.filter(table => 
+        table.status === statusFilter
+      );
+    }
+    
+    setFilteredTables(filtered);
+  }, [tables, searchQuery, statusFilter]);
 
   // Get active session for a table
   const getActiveSession = (table: TableWithSession): TableSession | undefined => {
@@ -141,7 +179,13 @@ export function TableList({ profile }: TableListProps) {
     }
   };
 
-  // Load tables on component mount
+  // Handle schedule maintenance button click
+  const handleScheduleMaintenance = (table: Table) => {
+    setSelectedTable(table);
+    setMaintenanceDialogOpen(true);
+  };
+
+  // Load tables on component mount and when refreshKey changes
   useEffect(() => {
     fetchTables();
     
@@ -152,16 +196,49 @@ export function TableList({ profile }: TableListProps) {
     return () => {
       if (refreshInterval) clearInterval(refreshInterval);
     };
-  }, []);
+  }, [refreshKey]);
 
   if (loading) {
     return <div>Loading tables...</div>;
   }
 
+  if (filteredTables.length === 0 && tables.length > 0) {
+    return (
+      <div className="my-8 text-center p-8 border border-dashed rounded-lg">
+        <p className="text-muted-foreground mb-4">No tables found matching your filters.</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            // Reset filters
+            router.push("/dashboard/tables");
+          }}
+        >
+          Reset Filters
+        </Button>
+      </div>
+    );
+  }
+
+  if (tables.length === 0) {
+    return (
+      <div className="my-8 text-center p-8 border border-dashed rounded-lg">
+        <p className="text-muted-foreground mb-4">No tables found.</p>
+        {isAdmin && (
+          <Link href="/dashboard/tables/new" passHref>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Table
+            </Button>
+          </Link>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {tables.map((table) => {
+        {filteredTables.map((table) => {
           const activeSession = getActiveSession(table);
           const isBusy = table.status === "BUSY" && !!activeSession;
           
@@ -215,6 +292,7 @@ export function TableList({ profile }: TableListProps) {
                   <Button 
                     className="flex-1"
                     onClick={() => handleStartSession(table)}
+                    disabled={table.status === "MAINTENANCE"}
                   >
                     <Play className="h-4 w-4 mr-2" />
                     Start Session
@@ -232,6 +310,34 @@ export function TableList({ profile }: TableListProps) {
                 
                 {isAdmin && (
                   <div className="flex gap-2">
+                    <Dialog open={maintenanceDialogOpen && selectedTable?.id === table.id} onOpenChange={(open) => !open && setMaintenanceDialogOpen(false)}>
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="icon"
+                          disabled={isBusy}
+                          onClick={() => handleScheduleMaintenance(table)}
+                          title="Schedule Maintenance"
+                        >
+                          <WrenchIcon className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-lg">
+                        {selectedTable && (
+                          <ScheduleMaintenanceForm
+                            tableId={selectedTable.id}
+                            tableName={selectedTable.name}
+                            companyId={selectedTable.companyId}
+                            onSuccess={() => {
+                              setMaintenanceDialogOpen(false);
+                              fetchTables();
+                            }}
+                            onCancel={() => setMaintenanceDialogOpen(false)}
+                          />
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                    
                     <Button 
                       variant="outline" 
                       size="icon"
@@ -255,19 +361,8 @@ export function TableList({ profile }: TableListProps) {
           );
         })}
       </div>
-      
-      {tables.length === 0 && (
-        <div className="text-center p-8">
-          <p className="text-muted-foreground mb-4">No tables found</p>
-          {isAdmin && (
-            <Button onClick={() => router.push("/dashboard/tables/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Your First Table
-            </Button>
-          )}
-        </div>
-      )}
-      
+
+      {/* Modals */}
       <StartSessionModal
         isOpen={sessionModalOpen}
         onClose={() => setSessionModalOpen(false)}
@@ -279,7 +374,8 @@ export function TableList({ profile }: TableListProps) {
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={deleteTable}
-        table={selectedTable}
+        title="Delete Table"
+        description="Are you sure you want to delete this table? This action cannot be undone and will remove all associated data."
       />
     </div>
   );
