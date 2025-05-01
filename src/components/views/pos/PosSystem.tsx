@@ -342,14 +342,14 @@ export function PosSystem({ companyId, profile }: PosSystemProps) {
               
               {tableSessions.length > 0 && (
                 <Select
-                  value={activeTableSession || ""}
-                  onValueChange={setActiveTableSession}
+                  value={activeTableSession || "none"}
+                  onValueChange={(value) => setActiveTableSession(value === "none" ? null : value)}
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Assign to table" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No table</SelectItem>
+                    <SelectItem value="none">No table</SelectItem>
                     {tableSessions.map((session) => (
                       <SelectItem key={session.id} value={session.id}>
                         {session.table.name}

@@ -21,7 +21,7 @@ export default function ActivityLogFeed({ companyId, limit = 10 }: ActivityLogFe
   const [activities, setActivities] = useState<ActivityLogWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({
-    entityType: "",
+    entityType: "all",
     userId: "",
     hours: 24
   });
@@ -34,7 +34,7 @@ export default function ActivityLogFeed({ companyId, limit = 10 }: ActivityLogFe
         let url = `/api/analytics/activity-logs?companyId=${companyId}&limit=${limit}`;
         
         // Add optional filters
-        if (filter.entityType) url += `&entityType=${filter.entityType}`;
+        if (filter.entityType && filter.entityType !== "all") url += `&entityType=${filter.entityType}`;
         if (filter.userId) url += `&userId=${filter.userId}`;
         if (filter.hours) url += `&hours=${filter.hours}`;
         
@@ -105,7 +105,7 @@ export default function ActivityLogFeed({ companyId, limit = 10 }: ActivityLogFe
             <SelectValue placeholder="Filter by type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All types</SelectItem>
+            <SelectItem value="all">All types</SelectItem>
             <SelectItem value="table">Table</SelectItem>
             <SelectItem value="tableSession">Session</SelectItem>
             <SelectItem value="inventoryItem">Inventory</SelectItem>
@@ -130,7 +130,7 @@ export default function ActivityLogFeed({ companyId, limit = 10 }: ActivityLogFe
         
         <Button 
           variant="outline"
-          onClick={() => setFilter({ entityType: "", userId: "", hours: 24 })}
+          onClick={() => setFilter({ entityType: "all", userId: "", hours: 24 })}
           className="ml-auto"
         >
           Clear Filters

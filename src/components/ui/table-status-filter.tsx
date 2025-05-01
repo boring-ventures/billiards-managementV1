@@ -28,7 +28,7 @@ export function TableStatusFilter({
           <SelectValue placeholder="All Statuses" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Statuses</SelectItem>
+          <SelectItem value="all">All Statuses</SelectItem>
           <SelectItem value="AVAILABLE">Available</SelectItem>
           <SelectItem value="BUSY">Busy</SelectItem>
           <SelectItem value="MAINTENANCE">Maintenance</SelectItem>

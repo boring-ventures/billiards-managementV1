@@ -15,7 +15,7 @@ export default function TablesPage() {
   const { profile, isLoading } = useCurrentUser();
   const isAdmin = hasAdminPermission(profile);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleRefresh = () => {

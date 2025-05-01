@@ -90,7 +90,7 @@ export function TableList({
     }
     
     // Apply status filter
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== "all") {
       filtered = filtered.filter(table => 
         table.status === statusFilter
       );
