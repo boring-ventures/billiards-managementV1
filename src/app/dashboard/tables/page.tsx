@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, BarChart3, Calendar } from "lucide-react";
+import { Plus, RefreshCw, BarChart3, Calendar, BookmarkIcon } from "lucide-react";
 import { TableList } from "@/components/views/tables/TableList";
 import { hasAdminPermission } from "@/lib/rbac";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { TableSearch } from "@/components/ui/table-search";
 import { TableStatusFilter } from "@/components/ui/table-status-filter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReservationList } from "@/components/views/tables/ReservationList";
 
 export default function TablesPage() {
   const { profile, isLoading } = useCurrentUser();
@@ -54,10 +55,14 @@ export default function TablesPage() {
       </div>
 
       <Tabs defaultValue="tables" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="tables">
             <BarChart3 className="mr-2 h-4 w-4" />
             Tables
+          </TabsTrigger>
+          <TabsTrigger value="reservations">
+            <BookmarkIcon className="mr-2 h-4 w-4" />
+            Reservations
           </TabsTrigger>
           <TabsTrigger value="maintenance">
             <Calendar className="mr-2 h-4 w-4" />
@@ -76,6 +81,23 @@ export default function TablesPage() {
               profile={profile} 
               searchQuery={searchQuery}
               statusFilter={statusFilter}
+              refreshKey={refreshKey}
+            />
+          )}
+        </TabsContent>
+        
+        <TabsContent value="reservations" className="mt-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold">Table Reservations</h2>
+            <Button onClick={handleRefresh} variant="outline" size="sm">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
+          
+          {!isLoading && profile?.companyId && (
+            <ReservationList 
+              profile={profile}
               refreshKey={refreshKey}
             />
           )}
