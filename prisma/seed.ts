@@ -252,7 +252,20 @@ async function main() {
     },
   });
 
-  console.log('Created profile:', mockProfile);
+  // Create a profile for the real Supabase user
+  const supabaseProfile = await prisma.profile.upsert({
+    where: { userId: 'f4785505-d83c-4f72-beeb-4156a72ccdc5' },
+    update: {},
+    create: {
+      userId: 'f4785505-d83c-4f72-beeb-4156a72ccdc5',
+      firstName: 'Supabase',
+      lastName: 'Admin',
+      role: UserRole.SUPERADMIN,
+      active: true,
+    },
+  });
+
+  console.log("Created profiles:", { mockProfile, supabaseProfile });
 
   console.log("Seed completed successfully!");
 }
