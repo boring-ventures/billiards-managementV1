@@ -21,14 +21,34 @@ export default function CompanySelectionPage() {
   const [selectingCompany, setSelectingCompany] = useState(false);
 
   useEffect(() => {
+    // Add detailed logging
+    if (!isLoading && profile) {
+      console.log("CompanySelection - User profile:", {
+        id: profile.id,
+        role: profile.role,
+        companyId: profile.companyId,
+        active: profile.active
+      });
+    }
+    
+    // Check if the user is a superadmin using multiple methods
+    const isSuperAdmin = profile && (
+      profile.role === "SUPERADMIN" || 
+      String(profile.role).toUpperCase() === "SUPERADMIN"
+    );
+    
+    console.log("CompanySelection - Is superadmin:", isSuperAdmin);
+    
     // If user is not a SUPERADMIN, redirect to the waiting page
-    if (!isLoading && profile && profile.role !== UserRole.SUPERADMIN) {
+    if (!isLoading && profile && !isSuperAdmin) {
+      console.log("CompanySelection - User is not a superadmin, redirecting to waiting-approval");
       router.push("/waiting-approval");
       return;
     }
 
     // If user is not a SUPERADMIN and has a companyId, redirect to dashboard
-    if (!isLoading && profile && profile.companyId) {
+    if (!isLoading && profile?.companyId) {
+      console.log("CompanySelection - User has company, redirecting to dashboard");
       router.push("/dashboard");
       return;
     }
@@ -36,7 +56,7 @@ export default function CompanySelectionPage() {
     // Fetch companies if user is a SUPERADMIN
     const fetchCompanies = async () => {
       try {
-        if (profile?.role === UserRole.SUPERADMIN) {
+        if (isSuperAdmin) {
           const response = await fetch("/api/companies");
           const data = await response.json();
           setCompanies(data.companies || []);
@@ -48,7 +68,7 @@ export default function CompanySelectionPage() {
       }
     };
 
-    if (!isLoading && profile?.role === UserRole.SUPERADMIN) {
+    if (!isLoading && isSuperAdmin) {
       fetchCompanies();
     }
   }, [isLoading, profile, router]);

@@ -20,7 +20,20 @@ async function checkSuperAdminRole(userId: string) {
       where: { userId },
       select: { role: true },
     });
-    return profile?.role === "SUPERADMIN";
+    
+    // More robust check for superadmin role
+    const isSuperAdmin = profile && (
+      profile.role === "SUPERADMIN" || 
+      String(profile.role).toUpperCase() === "SUPERADMIN"
+    );
+    
+    console.log("API:companies - Checking superadmin status", {
+      userId,
+      role: profile?.role,
+      isSuperAdmin
+    });
+    
+    return isSuperAdmin;
   } catch (error) {
     console.error("Failed to check user role:", error);
     return false;
@@ -49,8 +62,21 @@ export async function GET(_request: NextRequest) {
       where: { userId },
     });
 
+    console.log("API:companies:GET - User profile:", {
+      userId,
+      role: profile?.role
+    });
+
+    // Check if user is a superadmin
+    const isSuperAdmin = profile && (
+      profile.role === "SUPERADMIN" || 
+      String(profile.role).toUpperCase() === "SUPERADMIN"
+    );
+
+    console.log("API:companies:GET - Is superadmin:", isSuperAdmin);
+
     // Only superadmin can see all companies
-    if (!profile || profile.role !== UserRole.SUPERADMIN) {
+    if (!profile || !isSuperAdmin) {
       return NextResponse.json(
         { error: "Unauthorized: Only superadmins can access all companies" },
         { status: 403 }

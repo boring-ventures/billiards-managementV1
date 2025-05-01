@@ -12,10 +12,30 @@ export default function WaitingApprovalPage() {
   const { profile, isLoading } = useCurrentUser();
 
   useEffect(() => {
-    // If user is a SUPERADMIN, redirect to company selection
-    if (!isLoading && profile?.role === UserRole.SUPERADMIN) {
-      router.push("/company-selection");
-      return;
+    // Add detailed logging
+    if (!isLoading && profile) {
+      console.log("WaitingApproval - User profile:", {
+        id: profile.id,
+        role: profile.role,
+        companyId: profile.companyId,
+        active: profile.active
+      });
+    }
+    
+    // If user is a SUPERADMIN, redirect to company selection or dashboard
+    if (!isLoading && profile) {
+      // Check role in multiple ways to be robust
+      const isSuperAdmin = 
+        profile.role === "SUPERADMIN" || 
+        String(profile.role).toUpperCase() === "SUPERADMIN";
+      
+      console.log("WaitingApproval - Is superadmin:", isSuperAdmin);
+      
+      if (isSuperAdmin) {
+        console.log("WaitingApproval - Redirecting superadmin to company selection");
+        router.push("/company-selection");
+        return;
+      }
     }
 
     // If user has a company assigned, redirect to dashboard

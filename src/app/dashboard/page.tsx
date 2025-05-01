@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Loader2 } from "lucide-react";
 import DashboardContent from "@/components/dashboard/dashboard-content";
+import { UserRole } from "@prisma/client";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -34,8 +35,16 @@ export default function DashboardPage() {
 
         // Handle different user roles appropriately
         if (profile) {
-          // SUPERADMINS can access dashboard without a companyId
-          if (profile.role === "SUPERADMIN") {
+          console.log("Dashboard - Checking user role:", profile.role, typeof profile.role);
+          
+          // SUPERADMINS can access dashboard without a companyId - checking in multiple ways to be robust
+          const isSuperAdmin = 
+            profile.role === "SUPERADMIN" || 
+            String(profile.role).toUpperCase() === "SUPERADMIN";
+          
+          console.log("Dashboard - Is user a superadmin?", isSuperAdmin);
+          
+          if (isSuperAdmin) {
             // If they don't have a companyId but there are companies available,
             // give them option to select one, otherwise proceed to dashboard
             if (!profile.companyId) {
@@ -62,6 +71,7 @@ export default function DashboardPage() {
           // Regular users need a companyId
           else if (!profile.companyId) {
             console.log("Dashboard - Regular user without companyId, redirecting to waiting-approval");
+            console.log("Dashboard - User role:", profile.role);
             router.push("/waiting-approval");
             return;
           }
