@@ -16,10 +16,12 @@ export async function GET(_request: NextRequest) {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
+      console.error("Authentication error:", sessionError);
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
     const userId = session.user.id;
+    console.log("Fetching profile for user ID:", userId);
 
     // Fetch profile from the database
     const profile = await prisma.profile.findUnique({
@@ -27,6 +29,35 @@ export async function GET(_request: NextRequest) {
     });
 
     if (!profile) {
+      console.error("Profile not found for user ID:", userId);
+      
+      // Check if this is a superadmin that might not have a profile
+      // We can create a minimal profile for superadmins on-the-fly
+      try {
+        const userMetadata = session.user.user_metadata;
+        const isSuperadmin = userMetadata?.role === "SUPERADMIN";
+        
+        if (isSuperadmin) {
+          console.log("Creating minimal profile for superadmin user");
+          
+          // Create a minimal profile for superadmins
+          const superadminProfile = await prisma.profile.create({
+            data: {
+              userId,
+              firstName: userMetadata?.firstName || userMetadata?.first_name || null,
+              lastName: userMetadata?.lastName || userMetadata?.last_name || null,
+              avatarUrl: userMetadata?.avatarUrl || userMetadata?.avatar_url || null,
+              role: "SUPERADMIN",
+              active: true,
+            },
+          });
+          
+          return NextResponse.json(superadminProfile);
+        }
+      } catch (createError) {
+        console.error("Error creating superadmin profile:", createError);
+      }
+      
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 

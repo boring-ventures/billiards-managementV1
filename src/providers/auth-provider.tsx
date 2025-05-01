@@ -37,8 +37,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch profile function
   const fetchProfile = async (userId: string) => {
     try {
+      // First try direct profile fetch
       const response = await fetch(`/api/profile/${userId}`);
-      if (!response.ok) throw new Error("Failed to fetch profile");
+      
+      if (!response.ok) {
+        console.error(`Profile fetch failed with status: ${response.status}`);
+        
+        // Try to get detailed error if possible
+        try {
+          const errorData = await response.json();
+          console.error("Profile error details:", errorData);
+        } catch (parseError) {
+          console.error("Could not parse error response");
+        }
+        
+        // Try regular profile endpoint as fallback
+        console.log("Trying fallback profile fetch");
+        const fallbackResponse = await fetch('/api/profile');
+        
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          setProfile(fallbackData);
+          return;
+        }
+        
+        throw new Error("Failed to fetch profile");
+      }
+      
       const data = await response.json();
       setProfile(data.profile);
     } catch (error) {

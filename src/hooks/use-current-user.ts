@@ -44,20 +44,52 @@ export function useCurrentUser(): CurrentUserData {
       setUser(session.user);
 
       // Fetch the user's profile from our API
-      const response = await fetch("/api/profile");
+      try {
+        const response = await fetch("/api/profile");
+        
+        if (!response.ok) {
+          console.error(`Profile fetch failed with status: ${response.status}`);
+          
+          // Try to get detailed error if possible
+          try {
+            const errorData = await response.json();
+            console.error("Profile error details:", errorData);
+          } catch (parseError) {
+            console.error("Could not parse error response");
+          }
+          
+          // For superadmins, try fetching by user ID as fallback
+          if (session.user.id) {
+            console.log("Attempting to fetch profile by user ID");
+            const userIdResponse = await fetch(`/api/profile/${session.user.id}`);
+            
+            if (userIdResponse.ok) {
+              const userData = await userIdResponse.json();
+              if (userData.profile) {
+                console.log("Successfully fetched profile by user ID");
+                setProfile(userData.profile);
+                return;
+              }
+            } else {
+              console.error(`User ID profile fetch also failed: ${userIdResponse.status}`);
+            }
+          }
+          
+          throw new Error("Failed to fetch profile");
+        }
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch profile");
+        const profileData = await response.json();
+        
+        // Ensure companyId is set correctly from company_id
+        if (profileData.company_id && !profileData.companyId) {
+          profileData.companyId = profileData.company_id;
+        }
+        
+        setProfile(profileData);
+      } catch (profileError) {
+        console.error("Error in profile fetch logic:", profileError);
+        setError(profileError instanceof Error ? profileError : new Error(String(profileError)));
       }
-
-      const profileData = await response.json();
-      
-      // Ensure companyId is set correctly from company_id
-      if (profileData.company_id && !profileData.companyId) {
-        profileData.companyId = profileData.company_id;
-      }
-      
-      setProfile(profileData);
     } catch (err) {
       console.error("Error fetching user data:", err);
       setError(err instanceof Error ? err : new Error(String(err)));
