@@ -1,39 +1,31 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
-// DELETE: Delete an inventory category
-export async function DELETE(request: Request, { params }: RouteParams) {
+// DELETE - Delete a category
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const session = await getServerSession();
-    const categoryId = params.id;
+    const session = await auth();
+    const id = params.id;
     
-    // Check authentication
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
     
-    // Get user profile to check role
-    const userEmail = session.user.email;
-    if (!userEmail) {
-      return NextResponse.json({ error: "User email not found" }, { status: 401 });
-    }
-    
-    const profile = await prisma.profile.findFirst({
-      where: { 
-        email: userEmail
-      },
+    // Get the user's profile for role check
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
     });
     
-    // Verify admin permissions
-    if (!profile || ![UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role)) {
+    // Only admins can delete categories
+    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
       return NextResponse.json(
         { error: "Unauthorized. Admin privileges required." },
         { status: 403 }
@@ -41,17 +33,14 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
     
     // Check if category exists
-    const existingCategory = await prisma.inventoryCategory.findUnique({
-      where: { id: categoryId },
+    const category = await prisma.inventoryCategory.findUnique({
+      where: { id },
       include: {
-        items: {
-          select: { id: true },
-          take: 1,
-        },
+        items: true,
       },
     });
     
-    if (!existingCategory) {
+    if (!category) {
       return NextResponse.json(
         { error: "Category not found" },
         { status: 404 }
@@ -59,20 +48,21 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
     
     // Check if category has items
-    if (existingCategory.items.length > 0) {
+    if (category.items.length > 0) {
       return NextResponse.json(
-        { error: "Cannot delete category that contains items. Remove or reassign items first." },
+        { error: "Cannot delete category with associated items" },
         { status: 400 }
       );
     }
     
     // Delete the category
     await prisma.inventoryCategory.delete({
-      where: { id: categoryId },
+      where: { id },
     });
     
     return NextResponse.json(
-      { message: "Category deleted successfully" }
+      { message: "Category deleted successfully" },
+      { status: 200 }
     );
   } catch (error) {
     console.error("Error deleting category:", error);

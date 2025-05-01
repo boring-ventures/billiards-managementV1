@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { z } from "zod";
 
 interface RouteParams {
   params: {
@@ -21,20 +21,36 @@ const inventoryItemSchema = z.object({
   price: z.number().min(0, "Price can't be negative").optional().nullable(),
 });
 
-// GET: Fetch a specific inventory item
-export async function GET(request: Request, { params }: RouteParams) {
+// GET - Get a single inventory item
+export async function GET(
+  request: NextRequest, 
+  { params }: { params: { id: string } }
+) {
   try {
-    const itemId = params.id;
+    const id = params.id;
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: "Item ID is required" },
+        { status: 400 }
+      );
+    }
     
     const item = await prisma.inventoryItem.findUnique({
-      where: {
-        id: itemId,
-      },
+      where: { id },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
+        category: true,
+        transactions: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          include: {
+            staff: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
           },
         },
       },
@@ -42,7 +58,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     
     if (!item) {
       return NextResponse.json(
-        { error: "Inventory item not found" }, 
+        { error: "Item not found" },
         { status: 404 }
       );
     }
@@ -57,33 +73,37 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 }
 
-// PUT: Update an inventory item
-export async function PUT(request: Request, { params }: RouteParams) {
+// PUT - Update an inventory item
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const session = await getServerSession();
-    const itemId = params.id;
+    const session = await auth();
     
-    // Check authentication
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
     
-    // Get user profile to check role
-    const userEmail = session.user.email;
-    if (!userEmail) {
-      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    const id = params.id;
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: "Item ID is required" },
+        { status: 400 }
+      );
     }
     
-    const profile = await prisma.profile.findFirst({
-      where: { 
-        user: {
-          email: userEmail
-        }
-      },
+    // Get the user's profile for role check
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
     });
     
-    // Verify admin permissions
-    if (!profile || ![UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role)) {
+    // Only admins can update inventory items
+    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
       return NextResponse.json(
         { error: "Unauthorized. Admin privileges required." },
         { status: 403 }
@@ -92,7 +112,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     
     // Check if item exists
     const existingItem = await prisma.inventoryItem.findUnique({
-      where: { id: itemId },
+      where: { id: id },
     });
     
     if (!existingItem) {
@@ -120,7 +140,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     
     // Update the inventory item
     const updatedItem = await prisma.inventoryItem.update({
-      where: { id: itemId },
+      where: { id: id },
       data: {
         name: data.name,
         categoryId: data.categoryId || null,
@@ -155,33 +175,36 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
-// DELETE: Delete an inventory item
-export async function DELETE(request: Request, { params }: RouteParams) {
+// DELETE - Delete an inventory item
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const session = await getServerSession();
-    const itemId = params.id;
+    const session = await auth();
+    const id = params.id;
     
-    // Check authentication
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
     
-    // Get user profile to check role
-    const userEmail = session.user.email;
-    if (!userEmail) {
-      return NextResponse.json({ error: "User email not found" }, { status: 401 });
+    if (!id) {
+      return NextResponse.json(
+        { error: "Item ID is required" },
+        { status: 400 }
+      );
     }
     
-    const profile = await prisma.profile.findFirst({
-      where: { 
-        user: {
-          email: userEmail
-        }
-      },
+    // Get the user's profile for role check
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
     });
     
-    // Verify admin permissions
-    if (!profile || ![UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role)) {
+    // Only admins can delete inventory items
+    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
       return NextResponse.json(
         { error: "Unauthorized. Admin privileges required." },
         { status: 403 }
@@ -190,28 +213,29 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     
     // Check if item exists
     const existingItem = await prisma.inventoryItem.findUnique({
-      where: { id: itemId },
+      where: { id },
     });
     
     if (!existingItem) {
       return NextResponse.json(
-        { error: "Inventory item not found" },
+        { error: "Item not found" },
         { status: 404 }
       );
     }
     
-    // Delete related inventory transactions first
+    // Delete related transactions first
     await prisma.inventoryTransaction.deleteMany({
-      where: { itemId },
+      where: { itemId: id },
     });
     
-    // Delete the inventory item
+    // Delete the item
     await prisma.inventoryItem.delete({
-      where: { id: itemId },
+      where: { id },
     });
     
     return NextResponse.json(
-      { message: "Inventory item deleted successfully" }
+      { message: "Item deleted successfully" },
+      { status: 200 }
     );
   } catch (error) {
     console.error("Error deleting inventory item:", error);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
@@ -59,7 +59,7 @@ const inventoryItemSchema = z.object({
 // POST: Create a new inventory item
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await auth();
     
     // Check authentication
     if (!session?.user) {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     });
     
     // Verify admin permissions
-    if (!profile || ![UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role)) {
+    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
       return NextResponse.json(
         { error: "Unauthorized. Admin privileges required." },
         { status: 403 }

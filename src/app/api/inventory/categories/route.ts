@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
@@ -41,13 +41,13 @@ export async function GET(request: Request) {
 const categorySchema = z.object({
   companyId: z.string().uuid(),
   name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
+  description: z.string().optional().nullable(),
 });
 
 // POST: Create a new inventory category
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
+    const session = await auth();
     
     // Check authentication
     if (!session?.user) {
@@ -55,21 +55,12 @@ export async function POST(request: Request) {
     }
     
     // Get user profile to check role
-    const userEmail = session.user.email;
-    if (!userEmail) {
-      return NextResponse.json({ error: "User email not found" }, { status: 401 });
-    }
-    
-    const profile = await prisma.profile.findFirst({
-      where: { 
-        userId: {
-          email: userEmail
-        }
-      },
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
     });
     
     // Verify admin permissions
-    if (!profile || ![UserRole.ADMIN, UserRole.SUPERADMIN].includes(profile.role)) {
+    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
       return NextResponse.json(
         { error: "Unauthorized. Admin privileges required." },
         { status: 403 }
@@ -112,7 +103,7 @@ export async function POST(request: Request) {
       data: {
         companyId: data.companyId,
         name: data.name,
-        description: data.description || null,
+        description: data.description,
       },
     });
     
