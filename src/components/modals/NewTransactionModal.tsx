@@ -55,6 +55,15 @@ const formSchema = z.object({
   description: z.string().optional(),
 });
 
+// Define an interface for the request data
+interface TransactionRequest {
+  categoryId: string;
+  amount: number;
+  transactionDate: string;
+  description?: string;
+  companyId?: string;
+}
+
 export function NewTransactionModal({ isOpen, onClose }: NewTransactionModalProps) {
   const { toast } = useToast();
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
@@ -95,13 +104,26 @@ export function NewTransactionModal({ isOpen, onClose }: NewTransactionModalProp
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setSubmitting(true);
     try {
+      // Check if we need to add companyId to the request (for superadmin)
+      const userData = await fetch("/api/profile");
+      const userDataJson = await userData.json();
+      const currentProfile = userDataJson?.profile;
+      
+      // Prepare request data with the correct typing
+      const requestData: TransactionRequest = {
+        ...values,
+        transactionDate: format(values.transactionDate, "yyyy-MM-dd"),
+      };
+      
+      // If user is a superadmin with a selected company, include the companyId
+      if (currentProfile?.role === "SUPERADMIN" && currentProfile?.companyId) {
+        requestData.companyId = currentProfile.companyId;
+      }
+      
       const response = await fetch("/api/finance/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...values,
-          transactionDate: format(values.transactionDate, "yyyy-MM-dd"),
-        }),
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {

@@ -8,6 +8,8 @@ import { db } from "@/lib/db";
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
+    const { searchParams } = new URL(req.url);
+    const specificCompanyId = searchParams.get("companyId");
     
     // Check if user is authenticated
     if (!session || !session.user) {
@@ -30,7 +32,7 @@ export async function GET(req: NextRequest) {
     
     console.log("Finance transactions: Trying to find profile for user ID:", user.id);
     
-    // Get the profile with company ID
+    // Get the profile with role information
     const profile = await db.profile.findUnique({
       where: { userId: user.id },
     });
@@ -40,13 +42,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No profile found for user" }, { status: 400 });
     }
     
-    if (!profile.companyId) {
-      console.log("Finance transactions: Profile has no companyId:", profile.id);
-      return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
+    let companyId: string | null = null;
+    
+    // Check if the user is a SUPERADMIN
+    if (profile.role && profile.role.toString() === "SUPERADMIN") {
+      // For superadmins, use the company ID from the query params if provided
+      if (specificCompanyId) {
+        companyId = specificCompanyId;
+        console.log("Finance transactions: SUPERADMIN accessing company:", companyId);
+      } else {
+        // Superadmin with no company specified - return all transactions grouped by company
+        // This could be a fallback behavior or you could require a company ID
+        console.log("Finance transactions: SUPERADMIN but no company specified in query");
+        
+        // Return appropriate response for superadmin with no company specified
+        return NextResponse.json({ 
+          error: "Please select a company to view transactions", 
+          isSuperAdmin: true 
+        }, { status: 400 });
+      }
+    } else {
+      // For regular users, use their assigned company
+      if (!profile.companyId) {
+        console.log("Finance transactions: Profile has no companyId:", profile.id);
+        return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
+      }
+      companyId = profile.companyId;
     }
     
-    const companyId = profile.companyId;
-    console.log("Finance transactions: Found companyId:", companyId);
+    if (!companyId) {
+      return NextResponse.json({ error: "No company ID available" }, { status: 400 });
+    }
+    
+    console.log("Finance transactions: Using companyId:", companyId);
     
     // Fetch all transactions for this company with related data
     const transactions = await db.financeTransaction.findMany({

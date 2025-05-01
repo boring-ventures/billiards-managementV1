@@ -87,7 +87,16 @@ export function TransactionList({ profile }: TransactionListProps) {
   const fetchTransactions = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/finance/transactions");
+      
+      // Determine if there's a company ID to use for the request
+      let url = "/api/finance/transactions";
+      
+      // For superadmins, check if they have a selected company
+      if (profile.role === "SUPERADMIN" && profile.companyId) {
+        url += `?companyId=${profile.companyId}`;
+      }
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch transactions");
       const data = await response.json();
       setTransactions(data.transactions);

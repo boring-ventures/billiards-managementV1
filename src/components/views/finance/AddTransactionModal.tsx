@@ -102,14 +102,32 @@ export function AddTransactionModal({
         throw new Error("Invalid category selected");
       }
       
+      // Check current user profile first to determine if companyId needs to be passed
+      const userProfileResponse = await fetch("/api/profile");
+      const userProfileData = await userProfileResponse.json();
+      const userProfile = userProfileData?.profile;
+      
       // Prepare transaction data
-      const transactionData = {
-        companyId,
+      const transactionData: Record<string, any> = {
         categoryId: data.categoryId,
         amount: data.amount,
         description: data.description || null,
         transactionDate: data.transactionDate,
       };
+      
+      // Only add companyId directly if not a superadmin, otherwise get it from query or profile
+      if (userProfile?.role === "SUPERADMIN") {
+        // If superadmin with a selected company, use that company
+        if (userProfile.companyId) {
+          transactionData.companyId = userProfile.companyId;
+        } else if (companyId) {
+          // Use the companyId passed to the component
+          transactionData.companyId = companyId;
+        }
+      } else {
+        // Regular users always use their assigned company
+        transactionData.companyId = companyId;
+      }
       
       // Create transaction
       const response = await fetch("/api/finance/transactions", {
