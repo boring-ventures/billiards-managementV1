@@ -17,7 +17,12 @@ export const cookieUtils = {
    */
   get: (key: string): string | undefined => {
     if (typeof window === 'undefined') return undefined;
-    return Cookies.get(key);
+    try {
+      return Cookies.get(key);
+    } catch (error) {
+      console.error(`Error getting cookie ${key}:`, error);
+      return undefined;
+    }
   },
   
   /**
@@ -29,15 +34,28 @@ export const cookieUtils = {
   set: (key: string, value: string, options?: Cookies.CookieAttributes): void => {
     if (typeof window === 'undefined') return;
     
-    // Set secure by default in production
-    const isProduction = process.env.NODE_ENV === 'production';
-    const secureByDefault = isProduction && options?.secure !== false;
-    
-    Cookies.set(key, value, {
-      ...options,
-      secure: secureByDefault || options?.secure,
-      sameSite: options?.sameSite || 'lax',
-    });
+    try {
+      // Set secure by default in production
+      const isProduction = process.env.NODE_ENV === 'production';
+      const secureByDefault = isProduction && options?.secure !== false;
+      
+      // Always set path to '/' by default for consistency
+      const path = options?.path || '/';
+      
+      Cookies.set(key, value, {
+        ...options,
+        secure: secureByDefault || options?.secure,
+        sameSite: options?.sameSite || 'lax',
+        path,
+      });
+      
+      // Verify cookie was set
+      if (!Cookies.get(key) && key.startsWith('sb-')) {
+        console.warn(`Warning: Cookie ${key} may not have been set properly`);
+      }
+    } catch (error) {
+      console.error(`Error setting cookie ${key}:`, error);
+    }
   },
   
   /**
@@ -47,7 +65,15 @@ export const cookieUtils = {
    */
   remove: (key: string, options?: Cookies.CookieAttributes): void => {
     if (typeof window === 'undefined') return;
-    Cookies.remove(key, options);
+    
+    try {
+      // Always set path to '/' by default for consistency with set method
+      const path = options?.path || '/';
+      
+      Cookies.remove(key, { ...options, path });
+    } catch (error) {
+      console.error(`Error removing cookie ${key}:`, error);
+    }
   },
   
   /**
@@ -55,12 +81,24 @@ export const cookieUtils = {
    */
   clearAuthCookies: (): void => {
     if (typeof window === 'undefined') return;
-    Cookies.remove(AUTH_TOKEN_COOKIE);
-    Cookies.remove(REFRESH_TOKEN_COOKIE);
-    Cookies.remove(COMPANY_SELECTION_COOKIE);
-    Cookies.remove(VIEW_MODE_COOKIE);
-    Cookies.remove(USER_ID_COOKIE);
-    Cookies.remove(FALLBACK_PROFILE_COOKIE);
+    
+    try {
+      const cookies = [
+        AUTH_TOKEN_COOKIE,
+        REFRESH_TOKEN_COOKIE,
+        COMPANY_SELECTION_COOKIE,
+        VIEW_MODE_COOKIE,
+        USER_ID_COOKIE,
+        FALLBACK_PROFILE_COOKIE
+      ];
+      
+      // Remove each cookie with consistent path
+      cookies.forEach(cookie => {
+        Cookies.remove(cookie, { path: '/' });
+      });
+    } catch (error) {
+      console.error('Error clearing auth cookies:', error);
+    }
   }
 };
 

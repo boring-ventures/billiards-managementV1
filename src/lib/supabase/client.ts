@@ -11,8 +11,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Global instance that is shared between calls in the same browser session
-// Use explicit Database type to avoid type mismatch between "public" and "never"
-let globalInstance: ReturnType<typeof createClient<Database>> | null = null;
+let globalInstance: any = null;
 
 /**
  * Creates a custom storage interface that uses cookies instead of localStorage
@@ -29,12 +28,13 @@ const createCookieStorage = () => {
       cookieUtils.set(key, value, { 
         expires: 7, // 7 days
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
+        sameSite: 'lax',
+        path: '/', // Ensure cookies are available for entire domain
       });
     },
     removeItem: (key: string) => {
       if (typeof document === 'undefined') return;
-      cookieUtils.remove(key);
+      cookieUtils.remove(key, { path: '/' }); // Ensure the same path is used for removal
     }
   };
 };
@@ -65,7 +65,7 @@ export function createSupabaseClient() {
   // Create a cookie-based storage system
   const cookieStorage = createCookieStorage();
   
-  // Create a new client instance for browser
+  // Create a new client instance for browser with additional debug info
   const newInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
@@ -73,9 +73,19 @@ export function createSupabaseClient() {
       storage: cookieStorage,
       flowType: 'pkce',
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: true,
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'supabase-js/2.0.0',
+      },
     },
   });
+  
+  // Add debug information to console if not in production
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('Supabase client initialized with cookie storage');
+  }
   
   // Store the instance globally
   globalInstance = newInstance;

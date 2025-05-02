@@ -14,31 +14,51 @@ export async function updateSession(request: NextRequest) {
     // Create a Supabase client specifically for this middleware request
     const supabase = createMiddlewareClient({ req: request, res: response })
     
+    // Log the request path to help debug routing issues
+    const requestPath = request.nextUrl.pathname;
+    console.log(`[Middleware] Processing request for: ${requestPath}`);
+    
+    // Log available cookies for debugging (without sensitive values)
+    const hasCookie = request.cookies.has('sb-auth-token');
+    console.log(`[Middleware] Has auth token cookie: ${hasCookie}`);
+    
     // First refresh the session - this will update cookies if token is expired
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     
+    if (sessionError) {
+      console.error('[Middleware] Session error:', sessionError.message);
+    }
+    
     // If we have a session, ensure it's valid and refresh if needed
     if (sessionData?.session) {
+      console.log('[Middleware] Active session found');
+      
       // Verify the user is still valid
       const { data: userData, error: userError } = await supabase.auth.getUser()
       
       if (userError || !userData?.user) {
-        console.error('Error in middleware user verification:', userError?.message)
+        console.error('[Middleware] Error in middleware user verification:', userError?.message)
         // Clear invalid session
         await supabase.auth.signOut()
         
         // If trying to access protected route, redirect to login
         if (isProtectedRoute(request.nextUrl.pathname)) {
+          console.log('[Middleware] Redirecting to login due to invalid user');
           const redirectUrl = new URL('/sign-in', request.url)
           return NextResponse.redirect(redirectUrl)
         }
+      } else {
+        console.log('[Middleware] Valid user found:', userData.user.id);
       }
     } 
     // No session but trying to access protected route
     else if (isProtectedRoute(request.nextUrl.pathname)) {
+      console.log('[Middleware] No active session for protected route');
+      
       // Check if this is an API route
       if (request.nextUrl.pathname.startsWith('/api/')) {
         // For API routes, just return 401 instead of redirecting
+        console.log('[Middleware] API route - returning 401');
         return NextResponse.json(
           { error: 'Not authenticated', message: 'Authentication required' },
           { status: 401 }
@@ -46,15 +66,19 @@ export async function updateSession(request: NextRequest) {
       }
       
       // For browser routes, redirect to sign-in
+      console.log('[Middleware] Redirecting to sign-in');
       const redirectUrl = new URL('/sign-in', request.url)
       // Add original URL as a query parameter to redirect back after login
       redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
       return NextResponse.redirect(redirectUrl)
+    } else {
+      console.log('[Middleware] No session, but not a protected route');
     }
     
+    console.log('[Middleware] Proceeding with request');
     return response
   } catch (error) {
-    console.error('Error in updateSession middleware:', error)
+    console.error('[Middleware] Error in updateSession middleware:', error)
     
     // If there's an error with auth and path requires auth, redirect to sign-in
     if (isProtectedRoute(request.nextUrl.pathname)) {
