@@ -292,32 +292,85 @@ USING (
 -- 6. FINANCE REPORTS
  
 DO $$
+DECLARE
+  column_exists boolean;
 BEGIN
   IF EXISTS (
     SELECT FROM information_schema.tables 
     WHERE table_schema = 'public' 
     AND table_name = 'finance_reports'
   ) THEN
+    -- Check which column exists for user identification
+    SELECT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'finance_reports' 
+      AND column_name = 'profile_id'
+    ) INTO column_exists;
+    
+    -- Enable RLS on the table
     EXECUTE 'ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;';
-
-    -- Users can access finance reports for their company
-    EXECUTE 'CREATE POLICY "finance_reports_policy"
-    ON public.finance_reports
-    FOR ALL
-    USING (
-      (profile_id = auth.uid())
-      OR
-      (
-        EXISTS (
-          SELECT 1 FROM profiles 
-          WHERE finance_reports.profile_id = profiles.id
-          AND profiles.company_id = get_user_company_id()
+    
+    -- Create appropriate policy based on column name
+    IF column_exists THEN
+      -- Use profile_id if it exists
+      EXECUTE 'CREATE POLICY "finance_reports_policy"
+      ON public.finance_reports
+      FOR ALL
+      USING (
+        (profile_id = auth.uid())
+        OR
+        (
+          EXISTS (
+            SELECT 1 FROM profiles 
+            WHERE finance_reports.profile_id = profiles.id
+            AND profiles.company_id = get_user_company_id()
+          )
+          AND is_admin_or_superadmin()
         )
-        AND is_admin_or_superadmin()
-      )
-      OR
-      is_superadmin()
-    );';
+        OR
+        is_superadmin()
+      );';
+    ELSE
+      -- Check if user_id exists
+      SELECT EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'finance_reports' 
+        AND column_name = 'user_id'
+      ) INTO column_exists;
+      
+      IF column_exists THEN
+        -- Use user_id if it exists
+        EXECUTE 'CREATE POLICY "finance_reports_policy"
+        ON public.finance_reports
+        FOR ALL
+        USING (
+          (user_id = auth.uid())
+          OR
+          (
+            EXISTS (
+              SELECT 1 FROM profiles 
+              WHERE finance_reports.user_id = profiles."userId"
+              AND profiles.company_id = get_user_company_id()
+            )
+            AND is_admin_or_superadmin()
+          )
+          OR
+          is_superadmin()
+        );';
+      ELSE
+        -- Fall back to company_id only
+        EXECUTE 'CREATE POLICY "finance_reports_policy"
+        ON public.finance_reports
+        FOR ALL
+        USING (
+          (company_id = get_user_company_id())
+          OR
+          is_superadmin()
+        );';
+      END IF;
+    END IF;
   END IF;
 END $$;
 
