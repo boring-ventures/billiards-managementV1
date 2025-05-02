@@ -186,44 +186,54 @@ USING (
 
 -- 3. COMPANY JOIN REQUESTS
 
--- CompanyJoinRequest table
-ALTER TABLE public.company_join_requests ENABLE ROW LEVEL SECURITY;
+-- Check if CompanyJoinRequest table exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = 'company_join_requests'
+  ) THEN
+    -- CompanyJoinRequest table
+    EXECUTE 'ALTER TABLE public.company_join_requests ENABLE ROW LEVEL SECURITY;';
 
--- Users can see their own join requests
-CREATE POLICY "join_requests_view_own_policy"
-ON public.company_join_requests
-FOR SELECT
-USING (
-  user_id = auth.uid()
-);
+    -- Users can see their own join requests
+    EXECUTE 'CREATE POLICY "join_requests_view_own_policy"
+    ON public.company_join_requests
+    FOR SELECT
+    USING (
+      user_id = auth.uid()
+    );';
 
--- Users can create their own join requests
-CREATE POLICY "join_requests_insert_policy"
-ON public.company_join_requests
-FOR INSERT
-WITH CHECK (
-  user_id = auth.uid()
-);
+    -- Users can create their own join requests
+    EXECUTE 'CREATE POLICY "join_requests_insert_policy"
+    ON public.company_join_requests
+    FOR INSERT
+    WITH CHECK (
+      user_id = auth.uid()
+    );';
 
--- Admins can see join requests for their company
-CREATE POLICY "join_requests_admin_view_policy"
-ON public.company_join_requests
-FOR SELECT
-USING (
-  (company_id = get_user_company_id() AND is_admin_or_superadmin())
-  OR
-  is_superadmin()
-);
+    -- Admins can see join requests for their company
+    EXECUTE 'CREATE POLICY "join_requests_admin_view_policy"
+    ON public.company_join_requests
+    FOR SELECT
+    USING (
+      (company_id = get_user_company_id() AND is_admin_or_superadmin())
+      OR
+      is_superadmin()
+    );';
 
--- Admins can update join requests for their company
-CREATE POLICY "join_requests_admin_update_policy"
-ON public.company_join_requests
-FOR UPDATE
-USING (
-  (company_id = get_user_company_id() AND is_admin_or_superadmin())
-  OR
-  is_superadmin()
-);
+    -- Admins can update join requests for their company
+    EXECUTE 'CREATE POLICY "join_requests_admin_update_policy"
+    ON public.company_join_requests
+    FOR UPDATE
+    USING (
+      (company_id = get_user_company_id() AND is_admin_or_superadmin())
+      OR
+      is_superadmin()
+    );';
+  END IF;
+END $$;
 
 -- 4. COMPANIES TABLE
 
@@ -281,26 +291,35 @@ USING (
 
 -- 6. FINANCE REPORTS
  
-ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = 'finance_reports'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;';
 
--- Users can access finance reports for their company
-CREATE POLICY "finance_reports_policy"
-ON public.finance_reports
-FOR ALL
-USING (
-  (profile_id = auth.uid())
-  OR
-  (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE finance_reports.profile_id = profiles.id
-      AND profiles.company_id = get_user_company_id()
-    )
-    AND is_admin_or_superadmin()
-  )
-  OR
-  is_superadmin()
-);
+    -- Users can access finance reports for their company
+    EXECUTE 'CREATE POLICY "finance_reports_policy"
+    ON public.finance_reports
+    FOR ALL
+    USING (
+      (profile_id = auth.uid())
+      OR
+      (
+        EXISTS (
+          SELECT 1 FROM profiles 
+          WHERE finance_reports.profile_id = profiles.id
+          AND profiles.company_id = get_user_company_id()
+        )
+        AND is_admin_or_superadmin()
+      )
+      OR
+      is_superadmin()
+    );';
+  END IF;
+END $$;
 
 -- Add RLS validation queries to verify policies are working
 
