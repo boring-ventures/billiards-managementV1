@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Building, Loader2 } from "lucide-react";
 import { UserRole } from "@prisma/client";
+import { useCompany } from "@/context/company-context";
 
 interface Company {
   id: string;
@@ -15,7 +16,8 @@ interface Company {
 
 export default function CompanySelectionPage() {
   const router = useRouter();
-  const { profile, isLoading, refetch } = useCurrentUser();
+  const { profile, isLoading } = useCurrentUser();
+  const { setSelectedCompanyId } = useCompany();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fetchingCompanies, setFetchingCompanies] = useState(true);
   const [selectingCompany, setSelectingCompany] = useState(false);
@@ -26,15 +28,14 @@ export default function CompanySelectionPage() {
       console.log("CompanySelection - User profile:", {
         id: profile.id,
         role: profile.role,
-        companyId: profile.companyId,
-        active: profile.active
+        companyId: profile.companyId
       });
     }
     
     // Check if the user is a superadmin using multiple methods
     const isSuperAdmin = profile && (
-      profile.role === "SUPERADMIN" || 
-      String(profile.role).toUpperCase() === "SUPERADMIN"
+      profile.role === UserRole.SUPERADMIN || 
+      String(profile.role).toUpperCase() === UserRole.SUPERADMIN
     );
     
     console.log("CompanySelection - Is superadmin:", isSuperAdmin);
@@ -47,7 +48,7 @@ export default function CompanySelectionPage() {
     }
 
     // If user is not a SUPERADMIN and has a companyId, redirect to dashboard
-    if (!isLoading && profile?.companyId) {
+    if (!isLoading && profile?.companyId && !isSuperAdmin) {
       console.log("CompanySelection - User has company, redirecting to dashboard");
       router.push("/dashboard");
       return;
@@ -80,22 +81,8 @@ export default function CompanySelectionPage() {
       // Save the selected company to localStorage
       localStorage.setItem("selectedCompanyId", companyId);
       
-      // Call API endpoint to update the user's profile with the company ID
-      const response = await fetch(`/api/companies/${companyId}/select`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to select company');
-      }
-      
-      // Refetch profile data to get updated companyId
-      if (refetch) {
-        await refetch();
-      }
+      // Set the selected company in the context
+      setSelectedCompanyId(companyId);
       
       // Redirect to dashboard
       router.push("/dashboard");

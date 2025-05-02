@@ -1,15 +1,26 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Building } from "lucide-react";
 import { UserRole } from "@prisma/client";
+import { Button } from "@/components/ui/button";
+
+// Interface for company selection
+interface Company {
+  id: string;
+  name: string;
+}
 
 export default function WaitingApprovalPage() {
   const router = useRouter();
   const { profile, isLoading } = useCurrentUser();
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [fetchingCompanies, setFetchingCompanies] = useState(true);
+  const [requestingJoin, setRequestingJoin] = useState(false);
+  const [requestMessage, setRequestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // Add detailed logging
@@ -17,8 +28,7 @@ export default function WaitingApprovalPage() {
       console.log("WaitingApproval - User profile:", {
         id: profile.id,
         role: profile.role,
-        companyId: profile.companyId,
-        active: profile.active
+        companyId: profile.companyId
       });
     }
     
@@ -26,8 +36,8 @@ export default function WaitingApprovalPage() {
     if (!isLoading && profile) {
       // Check role in multiple ways to be robust
       const isSuperAdmin = 
-        profile.role === "SUPERADMIN" || 
-        String(profile.role).toUpperCase() === "SUPERADMIN";
+        profile.role === UserRole.SUPERADMIN || 
+        String(profile.role).toUpperCase() === UserRole.SUPERADMIN;
       
       console.log("WaitingApproval - Is superadmin:", isSuperAdmin);
       
@@ -43,9 +53,58 @@ export default function WaitingApprovalPage() {
       router.push("/dashboard");
       return;
     }
+
+    // Fetch available companies for selection
+    const fetchCompanies = async () => {
+      try {
+        const response = await fetch("/api/companies/available");
+        if (response.ok) {
+          const data = await response.json();
+          setCompanies(data.companies || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch companies:", error);
+      } finally {
+        setFetchingCompanies(false);
+      }
+    };
+
+    if (!isLoading && profile && !profile.companyId) {
+      fetchCompanies();
+    }
   }, [isLoading, profile, router]);
 
-  if (isLoading) {
+  // Function to request joining a company
+  const requestJoinCompany = async (companyId: string) => {
+    setRequestingJoin(true);
+    
+    try {
+      const response = await fetch("/api/companies/join-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId,
+          message: `I'd like to join this venue.`
+        }),
+      });
+
+      if (response.ok) {
+        setRequestMessage("Your request has been sent. Please wait for approval from the venue admin.");
+      } else {
+        const data = await response.json();
+        setRequestMessage(`Error: ${data.error || "Failed to send request"}`);
+      }
+    } catch (error) {
+      console.error("Error requesting to join company:", error);
+      setRequestMessage("An unexpected error occurred. Please try again later.");
+    } finally {
+      setRequestingJoin(false);
+    }
+  };
+
+  if (isLoading || requestingJoin) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -69,12 +128,40 @@ export default function WaitingApprovalPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center pt-2 pb-8">
+            {requestMessage ? (
+              <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md">
+                {requestMessage}
+              </div>
+            ) : null}
+            
             <p className="mb-4 text-base">
-              Please wait for your venue manager to assign you to a pool hall or billiards venue.
+              Please select a venue you would like to join, or wait for an admin to assign you.
             </p>
-            <p className="text-sm text-muted-foreground">
-              Once assigned, you&apos;ll receive an email notification and be able to access your venue dashboard.
-            </p>
+            
+            {fetchingCompanies ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : companies.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No venues are available for selection. Please wait for a venue manager to assign you.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-medium mb-2">Available venues:</p>
+                {companies.map((company) => (
+                  <Button
+                    key={company.id}
+                    variant="outline"
+                    className="w-full text-left justify-start"
+                    onClick={() => requestJoinCompany(company.id)}
+                  >
+                    <Building className="h-4 w-4 mr-2" />
+                    {company.name}
+                  </Button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

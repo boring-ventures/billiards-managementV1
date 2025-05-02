@@ -1,14 +1,16 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { auth } from "@/lib/auth";
+import { hasCompanyAccess } from "@/lib/auth";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 
 // This endpoint allows updating a user's role by a superadmin
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { session } } = await supabase.auth.getSession();
+    // Use our new auth system
+    const session = await auth();
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,8 +24,8 @@ export async function POST(request: NextRequest) {
 
     // Verify the requester is a superadmin
     const isSuperAdmin = requesterProfile && (
-      requesterProfile.role === "SUPERADMIN" || 
-      String(requesterProfile.role).toUpperCase() === "SUPERADMIN"
+      requesterProfile.role === UserRole.SUPERADMIN || 
+      String(requesterProfile.role).toUpperCase() === UserRole.SUPERADMIN
     );
 
     if (!isSuperAdmin) {
@@ -53,6 +55,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // For Supabase admin operations, we still need the Supabase client
+    const supabase = createRouteHandlerClient({ cookies });
+    
     // Get the user to verify they exist
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId);
     
