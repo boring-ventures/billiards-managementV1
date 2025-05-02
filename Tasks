@@ -60,20 +60,20 @@
    [✓] - Document policy requirements for each table
    [✓] - Define roles and access patterns for each table
 
-3.2. Implement base RLS policies for company-scoped tables
-   - Enable RLS on all tables with company_id
-   - Create policies for company-specific data access
-   - Test policies with different user roles
+[✓] 3.2. Implement base RLS policies for company-scoped tables
+   [✓] - Enable RLS on all tables with company_id
+   [✓] - Create policies for company-specific data access
+   [✓] - Test policies with different user roles
 
-3.3. Create user-specific RLS policies
-   - Implement RLS for Profile table based on user_id
-   - Create policies for user-specific data
-   - Add special handling for superadmin access
+[✓] 3.3. Create user-specific RLS policies
+   [✓] - Implement RLS for Profile table based on user_id
+   [✓] - Create policies for user-specific data
+   [✓] - Add special handling for superadmin access
 
-3.4. Implement global data RLS policies
-   - Create policies for data accessible to all authenticated users
-   - Add role-based filtering for semi-restricted data
-   - Test access with different user scenarios
+[✓] 3.4. Implement global data RLS policies
+   [✓] - Create policies for data accessible to all authenticated users
+   [✓] - Add role-based filtering for semi-restricted data
+   [✓] - Test access with different user scenarios
 
 [✓] 3.5. Create SQL migration scripts
    [✓] - Package all RLS policies in reusable migrations
