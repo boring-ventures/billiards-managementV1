@@ -24,7 +24,22 @@ export interface Session {
 export async function getCurrentUser(): Promise<User | null> {
   try {
     // Get current session from Supabase
-    const { data } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('Session error:', error.message);
+      
+      // If there's a refresh token error, try to handle it by signing out and redirecting
+      if (error.message.includes('Invalid Refresh Token') || 
+          error.message.includes('Token expired') ||
+          error.message.includes('JWT expired')) {
+        await supabase.auth.signOut();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/sign-in';
+        }
+        return null;
+      }
+    }
     
     if (!data.session?.user) {
       return null;
@@ -72,13 +87,34 @@ export async function getCurrentUser(): Promise<User | null> {
  * Client-side check if user is logged in
  */
 export async function isLoggedIn(): Promise<boolean> {
-  const { data } = await supabase.auth.getSession();
-  return !!data.session;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('Session check error:', error.message);
+      return false;
+    }
+    
+    return !!data.session;
+  } catch (error) {
+    console.error('IsLoggedIn error:', error);
+    return false;
+  }
 }
 
 /**
  * Client-side sign out
  */
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
+    // Clear any local storage items we might have set
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('currentUserId');
+      localStorage.removeItem('fallbackProfile');
+      localStorage.removeItem('selectedCompanyId');
+    }
+  } catch (error) {
+    console.error('Error signing out:', error);
+  }
 } 
