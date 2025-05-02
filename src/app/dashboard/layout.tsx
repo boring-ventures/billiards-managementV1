@@ -9,26 +9,26 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   try {
-    // Check for token errors first
+    // First, try to get the user using supabase.auth.getUser() which is more reliable
+    // than getSession() according to Supabase docs
     const supabase = getServerSupabase();
-    const { data, error } = await supabase.auth.getSession();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     
-    // If there's a token error, we need to redirect to sign-in
-    if (error || !data.session) {
-      console.error("Dashboard session error:", error?.message);
-      redirect("/sign-in");
+    // If there's no valid user session, redirect to sign-in
+    if (userError || !userData.user) {
+      return redirect("/sign-in");
     }
     
     // Get the full session with role and company info
     const session = await auth();
 
     if (!session) {
-      redirect("/sign-in");
+      return redirect("/sign-in");
     }
 
     return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
   } catch (error) {
     console.error("Error in dashboard layout:", error);
-    redirect("/sign-in");
+    return redirect("/sign-in");
   }
 } 

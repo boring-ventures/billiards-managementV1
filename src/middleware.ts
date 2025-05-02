@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 // Use the Experimental Edge Runtime for better performance
 export const runtime = 'experimental-edge';
 
-// Simplified middleware - only checks session existence
+// Middleware to handle auth session and refreshing tokens
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
@@ -23,41 +23,34 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  // Get the Supabase client and check for session
-  const supabase = createMiddlewareClient({ req, res });
-  
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    // Create a Supabase client for this request
+    const supabase = createMiddlewareClient({ req, res });
     
-    // Auth routes handling
+    // Refresh session if expired - necessary for server components to work properly
+    await supabase.auth.getUser();
+    
+    // Auth routes handling - use URL checks without additional auth checks
     if (
-      session &&
-      (req.nextUrl.pathname.startsWith("/sign-in") ||
-       req.nextUrl.pathname.startsWith("/sign-up"))
+      req.nextUrl.pathname.startsWith("/sign-in") ||
+      req.nextUrl.pathname.startsWith("/sign-up")
     ) {
-      // Redirect authenticated users away from auth pages
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = "/dashboard";
-      return NextResponse.redirect(redirectUrl);
+      // Let the page handle whether to redirect authenticated users
+      return res;
     }
 
-    // Protect private routes
+    // Check for protected routes - simple pattern matching only
+    // Let the actual page component handle detailed authorization
     if (
-      !session && 
-      (req.nextUrl.pathname.startsWith("/dashboard") || 
-       req.nextUrl.pathname.startsWith("/company-selection") || 
-       req.nextUrl.pathname.startsWith("/waiting-approval"))
+      req.nextUrl.pathname.startsWith("/dashboard") || 
+      req.nextUrl.pathname.startsWith("/company-selection") || 
+      req.nextUrl.pathname.startsWith("/waiting-approval")
     ) {
-      // Redirect unauthenticated users to login
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = "/sign-in";
-      redirectUrl.searchParams.set("redirectTo", req.nextUrl.pathname);
-      return NextResponse.redirect(redirectUrl);
+      // Return response as is - page will handle auth check
+      return res;
     }
     
-    // Let client components handle detailed permission checks
+    // For all other routes, just pass through
     return res;
   } catch (error) {
     console.error("Error in middleware:", error);
