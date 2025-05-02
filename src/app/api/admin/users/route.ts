@@ -1,87 +1,233 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+/**
+ * Admin API route for user management
+ * Allows superadmins to manage users across the platform
+ */
+import { NextRequest, NextResponse } from 'next/server';
+import { UserRole } from '@prisma/client';
+import { serverClient, logAdminOperation } from '@/lib/serverClient';
+import { verifySuperAdmin } from '@/lib/middleware/adminApiAuth';
+import { updateUserAuthMetadata } from '@/lib/auth-metadata';
+import { createOrUpdateUserProfile } from '@/lib/auth';
 
-// GET: Fetch all users with their profiles (for admin)
-export async function GET(request: NextRequest) {
+// GET /api/admin/users - List all users
+export async function GET(req: NextRequest) {
+  // Verify superadmin access
+  const authResponse = await verifySuperAdmin(req, 'USERS_LIST');
+  if (authResponse) return authResponse;
+  
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Get query parameters
+    const searchParams = req.nextUrl.searchParams;
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const searchQuery = searchParams.get('search') || '';
+    const role = searchParams.get('role') || null;
+    const companyId = searchParams.get('companyId') || null;
+    
+    // Calculate pagination
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    
+    // Build the base query with profile and company data
+    let query = serverClient
+      .from('profiles')
+      .select(`
+        *,
+        companies:companies(id, name),
+        user:auth.users!userId(id, email, created_at, confirmed_at, last_sign_in_at)
+      `, { count: 'exact' });
+    
+    // Apply filters
+    if (searchQuery) {
+      query = query.or(`
+        firstName.ilike.%${searchQuery}%,
+        lastName.ilike.%${searchQuery}%,
+        user.email.ilike.%${searchQuery}%
+      `);
     }
-
-    // Check if requester is a superadmin
-    const requesterId = session.user.id;
-    const requesterProfile = await prisma.profile.findUnique({
-      where: { userId: requesterId },
+    
+    if (role) {
+      query = query.eq('role', role);
+    }
+    
+    if (companyId) {
+      query = query.eq('companyId', companyId);
+    }
+    
+    // Get paginated results
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    
+    if (error) throw error;
+    
+    return NextResponse.json({
+      users: data,
+      pagination: {
+        page,
+        limit,
+        total: count,
+        pages: count ? Math.ceil(count / limit) : 0
+      }
     });
-
-    // Verify the requester is a superadmin
-    const isSuperAdmin = requesterProfile && (
-      requesterProfile.role === "SUPERADMIN" || 
-      String(requesterProfile.role).toUpperCase() === "SUPERADMIN"
-    );
-
-    if (!isSuperAdmin) {
-      return NextResponse.json(
-        { error: "Forbidden: Only superadmins can access user list" },
-        { status: 403 }
-      );
-    }
-
-    // Fetch all users from Supabase
-    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 100, // Adjust as needed
-    });
-
-    if (usersError) {
-      return NextResponse.json(
-        { error: "Failed to fetch users from Supabase", details: usersError.message },
-        { status: 500 }
-      );
-    }
-
-    if (!users) {
-      return NextResponse.json({ users: [] });
-    }
-
-    // Get all user IDs
-    const userIds = users.map(user => user.id);
-
-    // Fetch all profiles in a single query to reduce database load
-    const profiles = await prisma.profile.findMany({
-      where: {
-        userId: {
-          in: userIds,
-        },
-      },
-    });
-
-    // Create a map of userId to profile for quick lookups
-    const profilesMap = profiles.reduce((acc, profile) => {
-      acc[profile.userId] = profile;
-      return acc;
-    }, {} as Record<string, typeof profiles[number]>);
-
-    // Format the user data with profiles
-    const formattedUsers = users.map(user => ({
-      id: user.id,
-      email: user.email,
-      createdAt: user.created_at,
-      lastSignIn: user.last_sign_in_at,
-      metadata: user.user_metadata,
-      profile: profilesMap[user.id] || null,
-    }));
-
-    return NextResponse.json({ users: formattedUsers });
-  } catch (error) {
-    console.error("[API:admin:users] Error fetching users:", error);
+  } catch (error: any) {
+    console.error('Error in admin users GET:', error);
     return NextResponse.json(
-      { error: "Failed to fetch users", details: error instanceof Error ? error.message : String(error) },
+      { error: error.message || 'Failed to fetch users' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/admin/users - Create a new user
+export async function POST(req: NextRequest) {
+  // Verify superadmin access
+  const authResponse = await verifySuperAdmin(req, 'USER_CREATE');
+  if (authResponse) return authResponse;
+  
+  try {
+    const body = await req.json();
+    
+    // Validate required fields
+    if (!body.email || typeof body.email !== 'string') {
+      return NextResponse.json(
+        { error: 'Email is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Check if user already exists
+    const { data: existingUser } = await serverClient
+      .from('auth.users')
+      .select('id')
+      .eq('email', body.email)
+      .maybeSingle();
+    
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'User with this email already exists' },
+        { status: 409 }
+      );
+    }
+    
+    // Create the user in auth system
+    const { data: newUser, error: createError } = await serverClient.auth.admin.createUser({
+      email: body.email,
+      password: body.password || null,
+      email_confirm: true,
+      app_metadata: {
+        role: body.role || UserRole.USER,
+        companyId: body.companyId || null,
+        initialized: true
+      },
+      user_metadata: {
+        firstName: body.firstName || null,
+        lastName: body.lastName || null
+      }
+    });
+    
+    if (createError) throw createError;
+    
+    // Create the user profile
+    const profile = await createOrUpdateUserProfile(
+      newUser.user.id,
+      {
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName
+      },
+      {
+        forcedRole: body.role || UserRole.USER,
+        companyId: body.companyId || null,
+        active: body.active !== undefined ? body.active : true
+      }
+    );
+    
+    return NextResponse.json({ user: profile }, { status: 201 });
+  } catch (error: any) {
+    console.error('Error in admin users POST:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to create user' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/admin/users/:userId - Update a user
+export async function PUT(req: NextRequest) {
+  // Verify superadmin access
+  const authResponse = await verifySuperAdmin(req, 'USER_UPDATE');
+  if (authResponse) return authResponse;
+  
+  try {
+    const userId = req.nextUrl.pathname.split('/').pop();
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    const body = await req.json();
+    
+    // Update the profile
+    const { data: profile, error } = await serverClient
+      .from('profiles')
+      .update({
+        firstName: body.firstName,
+        lastName: body.lastName,
+        role: body.role,
+        companyId: body.companyId,
+        active: body.active
+      })
+      .eq('userId', userId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    // Also update app_metadata to keep it in sync
+    await updateUserAuthMetadata(userId, {
+      role: body.role,
+      companyId: body.companyId
+    });
+    
+    return NextResponse.json({ user: profile });
+  } catch (error: any) {
+    console.error('Error in admin users PUT:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to update user' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/admin/users/:userId - Delete a user
+export async function DELETE(req: NextRequest) {
+  // Verify superadmin access - this is a high-risk operation
+  const authResponse = await verifySuperAdmin(req, 'USER_DELETE');
+  if (authResponse) return authResponse;
+  
+  try {
+    const userId = req.nextUrl.pathname.split('/').pop();
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Delete the user from auth system
+    const { error } = await serverClient.auth.admin.deleteUser(userId);
+    
+    if (error) throw error;
+    
+    // Note: This will cascade delete the profile through foreign key constraints
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error in admin users DELETE:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete user' },
       { status: 500 }
     );
   }

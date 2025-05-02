@@ -12,6 +12,10 @@ A modern Next.js template with Supabase authentication, profiles, and file uploa
 - 🔄 Type-safe database queries
 - 🎭 Dark mode with next-themes
 - 🛠 Complete TypeScript support
+- 🔐 JWT-based auth metadata with role management
+- 🛡️ Secure service role client with admin API endpoints
+- 📊 Cross-company data operations for superadmins
+- 📝 Security audit logging for compliance
 
 ## 📦 Prerequisites
 
@@ -51,6 +55,7 @@ cp .env.example .env.local
 # Supabase Project Settings
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Database URLs
 DATABASE_URL="postgresql://postgres.[YOUR-PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[YOUR-REGION].pooler.supabase.com:6543/postgres?pgbouncer=true"
@@ -64,6 +69,20 @@ NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET=avatars
 ```bash
 pnpm prisma generate
 pnpm prisma db push
+```
+
+7. Run database setup scripts:
+```bash
+# Create audit logs table
+psql -h [YOUR-DB-HOST] -U postgres -d postgres -f scripts/create-admin-audit-logs.sql
+
+# Create admin stored procedures
+psql -h [YOUR-DB-HOST] -U postgres -d postgres -f scripts/create-admin-stored-procedures.sql
+```
+
+8. Migrate existing users to use app_metadata:
+```bash
+pnpm migrate-metadata
 ```
 
 ## 🚀 Development
@@ -80,15 +99,54 @@ Your app will be available at `http://localhost:3000`
 ```
 ├── app/                   # Next.js App Router
 │   ├── api/              # API routes
+│   │   ├── admin/       # Admin-only API endpoints
 │   ├── auth/             # Auth routes
 │   └── (dashboard)/      # Protected routes
 ├── components/           # React components
 │   ├── ui/              # UI components
 │   └── settings/        # Settings components
+├── docs/                 # Project documentation
+│   ├── auth-metadata.md # Auth metadata implementation
+│   └── secure-service-role.md # Service role client docs
 ├── lib/                  # Utility functions
+│   ├── admin/           # Admin utilities
+│   ├── auth/            # Auth utilities
+│   ├── auth-metadata.ts # JWT metadata management
+│   ├── serverClient.ts  # Secure service role client
+│   └── middleware/      # Middleware components
+├── scripts/             # Database scripts
 ├── providers/           # React context providers
 └── public/              # Static assets
 ```
+
+## 📚 Advanced Features
+
+### Auth Metadata with JWT Claims
+
+The project uses Supabase JWT claims (app_metadata) to store user roles and company assignments. This provides better performance and security by reducing database queries for permission checks.
+
+See `docs/auth-metadata.md` for implementation details.
+
+### Secure Service Role Client
+
+The project includes a secure service role client for admin operations that need to bypass RLS policies. This implementation includes:
+
+- Server-side only validation with `server-only` package
+- Runtime checks to prevent client-side usage
+- Security audit logging for all privileged operations
+- Admin-only API endpoints with strict access control
+
+See `docs/secure-service-role.md` for implementation details.
+
+### Admin API Endpoints
+
+The following API endpoints are available for superadmins:
+
+- `/api/admin/companies` - Manage companies across the platform
+- `/api/admin/users` - Manage users across all companies
+- `/api/admin/audit-logs` - View security audit logs
+
+All admin endpoints use the `verifySuperAdmin` middleware which verifies the user has superadmin privileges and logs all access attempts.
 
 ## 📝 Database Management
 

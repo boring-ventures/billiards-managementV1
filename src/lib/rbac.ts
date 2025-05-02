@@ -2,10 +2,35 @@ import { redirect } from "next/navigation";
 import { UserRole } from "@prisma/client";
 import { getActiveCompanyId } from "./authUtils";
 import type { Profile } from "@/types/profile";
+import { cookies } from "next/headers";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 // Client-side utility to get the current effective role (considering view mode)
-export const getEffectiveRole = (profile: Profile | null, viewMode: UserRole | null): UserRole | null => {
+export const getEffectiveRole = async (profile: Profile | null, viewMode: UserRole | null): Promise<UserRole | null> => {
   if (!profile) return null;
+  
+  // First try to get role from JWT claims if we're server-side
+  if (typeof window === 'undefined') {
+    try {
+      const supabase = createRouteHandlerClient({ cookies });
+      const { data } = await supabase.auth.getSession();
+      
+      if (data?.session?.user?.app_metadata?.role) {
+        const jwtRole = data.session.user.app_metadata.role;
+        
+        // For superadmins with a view mode set, return the view mode
+        if (jwtRole === UserRole.SUPERADMIN && viewMode) {
+          return viewMode;
+        }
+        
+        // Otherwise return the JWT role
+        return jwtRole;
+      }
+    } catch (error) {
+      console.error("Error getting role from JWT:", error);
+      // Fall back to profile role
+    }
+  }
   
   // For superadmins with a view mode set, return the view mode
   if (profile.role === UserRole.SUPERADMIN && viewMode) {
@@ -20,12 +45,12 @@ export const getEffectiveRole = (profile: Profile | null, viewMode: UserRole | n
  * Assert that the user has the required role and company context
  * Redirects to appropriate page if requirements aren't met
  */
-export const assertRoleAndCompany = (
+export const assertRoleAndCompany = async (
   profile: Profile | null,
   allowedRoles: UserRole[],
   redirectTo = "/dashboard",
   viewMode: UserRole | null = null
-): { companyId: string; userId: string } => {
+): Promise<{ companyId: string; userId: string }> => {
   // No profile means not authenticated
   if (!profile) {
     redirect("/auth/login");
@@ -44,7 +69,7 @@ export const assertRoleAndCompany = (
   }
 
   // Get the effective role (considering view mode for superadmins)
-  const effectiveRole = getEffectiveRole(profile, viewMode);
+  const effectiveRole = await getEffectiveRole(profile, viewMode);
 
   // Check if user has required role
   if (!allowedRoles.includes(effectiveRole as UserRole)) {
@@ -61,11 +86,11 @@ export const assertRoleAndCompany = (
  * Check if user has admin permissions (Admin or Superadmin)
  * Respects view mode for superadmins
  */
-export const hasAdminPermission = (profile: Profile | null, viewMode: UserRole | null = null): boolean => {
+export const hasAdminPermission = async (profile: Profile | null, viewMode: UserRole | null = null): Promise<boolean> => {
   if (!profile) return false;
   
   // Get the effective role (respecting view mode)
-  const effectiveRole = getEffectiveRole(profile, viewMode);
+  const effectiveRole = await getEffectiveRole(profile, viewMode);
   
   return [UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(effectiveRole?.toString() || "");
 };
@@ -74,11 +99,11 @@ export const hasAdminPermission = (profile: Profile | null, viewMode: UserRole |
  * Check if user has staff permissions (Seller, Admin, or Superadmin)
  * Respects view mode for superadmins
  */
-export const hasStaffPermission = (profile: Profile | null, viewMode: UserRole | null = null): boolean => {
+export const hasStaffPermission = async (profile: Profile | null, viewMode: UserRole | null = null): Promise<boolean> => {
   if (!profile) return false;
   
   // Get the effective role (respecting view mode)
-  const effectiveRole = getEffectiveRole(profile, viewMode);
+  const effectiveRole = await getEffectiveRole(profile, viewMode);
   
   return [UserRole.SELLER.toString(), UserRole.ADMIN.toString(), UserRole.SUPERADMIN.toString()].includes(effectiveRole?.toString() || "");
 };

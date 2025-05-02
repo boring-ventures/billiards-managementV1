@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "migrate-metadata": "tsx scripts/migrate-user-metadata.ts",
+    "setup-admin": "tsx scripts/setup-admin.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

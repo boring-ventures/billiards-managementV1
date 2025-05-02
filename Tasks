@@ -1,0 +1,150 @@
+# Implementation Task List - Role & Multi-Tenancy Enhancement
+
+## 1. ENHANCE AUTH METADATA STORAGE
+
+[✓] 1.1. Create auth helpers for metadata management
+   [✓] - Create helper function to update user app_metadata with role and companyId
+   [✓] - Create helper to retrieve role and companyId from JWT claims
+   [✓] - Add type definitions for app_metadata structure
+
+[✓] 1.2. Update user creation flow
+   [✓] - Modify signup handler to initialize basic user app_metadata
+   [✓] - Ensure user creation adds necessary default values in app_metadata
+
+[✓] 1.3. Update user role & company management
+   [✓] - Refactor admin role assignment to update app_metadata
+   [✓] - Modify company assignment flow to update app_metadata
+   [✓] - Create migration script to populate app_metadata for existing users
+
+[✓] 1.4. Update session handling
+   [✓] - Modify session retrieval to extract role/company from JWT claims
+   [✓] - Update Profile entity to maintain compatibility with both approaches
+   [✓] - Create utility to synchronize Profile table with app_metadata
+
+[✓] 1.5. Update permission checking utilities
+   [✓] - Modify getEffectiveRole() to check JWT claims first
+   [✓] - Update hasAdminPermission() to use JWT-based role when available
+   [✓] - Update hasStaffPermission() to use JWT-based role when available
+
+## 2. CREATE SECURE SERVICE ROLE CLIENT
+
+[✓] 2.1. Set up secure service role client
+   [✓] - Create serverClient.ts utility with service_role client initialization
+   [✓] - Add environment variables for SUPABASE_SERVICE_ROLE_KEY
+   [✓] - Implement safeguards to prevent client-side usage
+
+[✓] 2.2. Create admin API endpoints for cross-company operations
+   [✓] - Create /api/admin/companies endpoint for company management
+   [✓] - Create /api/admin/users endpoint for user management
+   [✓] - Add strict role verification middleware for admin routes
+
+[✓] 2.3. Implement company-wide data operations
+   [✓] - Create utility for fetching data across all companies
+   [✓] - Add cross-company analytics and reporting endpoints
+   [✓] - Implement admin dashboard data retrieval functions
+
+[✓] 2.4. Add security logging
+   [✓] - Create audit log mechanism for privileged operations
+   [✓] - Add security tracing for service_role usage
+   [✓] - Implement alerts for potential security issues
+
+2.5. Add testing for admin operations
+   - Create tests for superadmin data access
+   - Implement security validation tests
+   - Add test fixtures for admin-level operations
+
+## 3. IMPLEMENT RLS POLICIES
+
+[✓] 3.1. Analyze and document required RLS policies
+   [✓] - Create comprehensive list of tables requiring RLS
+   [✓] - Document policy requirements for each table
+   [✓] - Define roles and access patterns for each table
+
+3.2. Implement base RLS policies for company-scoped tables
+   - Enable RLS on all tables with company_id
+   - Create policies for company-specific data access
+   - Test policies with different user roles
+
+3.3. Create user-specific RLS policies
+   - Implement RLS for Profile table based on user_id
+   - Create policies for user-specific data
+   - Add special handling for superadmin access
+
+3.4. Implement global data RLS policies
+   - Create policies for data accessible to all authenticated users
+   - Add role-based filtering for semi-restricted data
+   - Test access with different user scenarios
+
+[✓] 3.5. Create SQL migration scripts
+   [✓] - Package all RLS policies in reusable migrations
+   [✓] - Create setup script for new environments
+   [✓] - Add validation queries to verify policy effectiveness
+
+3.6. Test and debug RLS implementation
+   - Create comprehensive test suite for access scenarios
+   - Verify expected behavior for each role type
+   - Document edge cases and their resolution
+
+## 4. REFINE DATA ACCESS LOGIC
+
+[✓] 4.1. Create Data Access Layer (DAL) structure
+   [✓] - Set up folder structure for data access modules
+   [✓] - Create base utilities for data operations
+   [✓] - Implement consistent error handling
+
+[✓] 4.2. Implement role-aware data access patterns
+   [✓] - Create separate data access patterns for regular operations
+   [✓] - Implement user-specific data access functions
+   [✓] - Add superadmin cross-company data operations
+
+4.3. Make companyId handling flexible
+   - Update function signatures to make companyId optional where appropriate
+   - Implement fallback mechanisms for users without companies
+   - Add validation to prevent security issues
+
+4.4. Implement DataTransferObjects (DTOs)
+   - Create DTO interfaces for all entity types
+   - Implement functions to convert database entities to DTOs
+   - Add role-based field filtering for sensitive data
+
+4.5. Add caching layer for performance
+   - Implement in-memory request-level caching
+   - Add cache invalidation for data modifications
+   - Test performance improvements
+
+4.6. Improve error handling
+   - Create custom error types for data access issues
+   - Implement consistent error messaging
+   - Add proper error logging and monitoring
+
+## 5. UPDATE MIDDLEWARE
+
+[✓] 5.1. Refine middleware route protection
+   [✓] - Update route matchers for better performance
+   [✓] - Add more granular protection based on role
+   [✓] - Improve handling of static assets
+
+5.2. Enhance session refreshing
+   - Optimize token refresh logic
+   - Add better error handling for auth failures
+   - Implement progressive backoff for auth retries
+
+5.3. Improve handling of users without companies
+   - Add special case for newly registered users
+   - Create proper redirection flow for company assignment
+   - Implement waiting state for users pending approval
+
+5.4. Add company-switching support for superadmins
+   - Enhance cookie handling for company selection
+   - Create cleanup for expired selections
+   - Implement security checks for selection validity
+
+5.5. Add proper logging and monitoring
+   - Implement structured logging for auth events
+   - Add performance metrics collection
+   - Create dashboard for auth-related issues
+
+5.6. Improve error responses
+   - Create user-friendly error messages
+   - Add proper HTTP status codes for different scenarios
+   - Implement graceful degradation for auth failures

@@ -8,6 +8,7 @@ import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from "next/headers";
+import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
 
 // Define the JoinRequestStatus enum since it might not be exported yet
 enum JoinRequestStatus {
@@ -102,10 +103,21 @@ export async function createOrUpdateUserProfile(
       
       // Only update if there are changes
       if (Object.keys(updateData).length > 0) {
-        return await prisma.profile.update({
+        const updatedProfile = await prisma.profile.update({
           where: { userId },
           data: updateData
         });
+
+        // Also update the user's app_metadata to keep in sync
+        if (options.forcedRole) {
+          await updateUserRole(userId, options.forcedRole);
+        }
+        
+        if (options.companyId !== undefined) {
+          await updateUserCompany(userId, options.companyId);
+        }
+        
+        return updatedProfile;
       }
       
       return existingProfile;
@@ -144,7 +156,7 @@ export async function createOrUpdateUserProfile(
     const role = options.forcedRole || (isSuperAdmin ? UserRole.SUPERADMIN : UserRole.USER);
     
     // Create the profile
-    return await prisma.profile.create({
+    const newProfile = await prisma.profile.create({
       data: {
         userId,
         firstName,
@@ -155,6 +167,16 @@ export async function createOrUpdateUserProfile(
         active: options.active ?? true,
       }
     });
+
+    // Initialize the user's app_metadata with role and companyId
+    await initializeUserMetadata(userId, role);
+    
+    // If a company is specified, update that in metadata too
+    if (options.companyId) {
+      await updateUserCompany(userId, options.companyId);
+    }
+    
+    return newProfile;
   } catch (error) {
     console.error("Error creating/updating user profile:", error);
     throw error;
@@ -163,9 +185,9 @@ export async function createOrUpdateUserProfile(
 
 /**
  * Get authentication information using a three-tier approach:
- * 1. Supabase authenticated session (if available)
- * 2. Find a superadmin in the database as fallback
- * 3. Fallback to a dummy user if neither is available
+ * 1. Supabase authenticated session with app_metadata from JWT claims
+ * 2. Find profile in database if JWT metadata is not available
+ * 3. Fallback to a dummy user if neither is available (dev only)
  * 
  * The returned user will include role and company information.
  */
@@ -193,8 +215,41 @@ export async function auth(): Promise<Session | null> {
       console.error("Error getting Supabase user:", supabaseError);
     }
     
-    // If we have a userId, get or create the profile
+    // If we have a userId, try to get metadata from JWT claims first
     if (userId) {
+      // First attempt to get role and companyId from JWT claims (app_metadata)
+      const authMetadata = await getAuthMetadataFromSession();
+      
+      if (authMetadata?.initialized) {
+        console.log("Using app_metadata from JWT claims for user", userId);
+        
+        // Find profile to get name data, but we'll use the role/companyId from JWT
+        const userProfile = await prisma.profile.findUnique({
+          where: { userId },
+          select: { 
+            id: true,
+            userId: true,
+            firstName: true, 
+            lastName: true
+          }
+        });
+        
+        // User authenticated with valid JWT claims
+        return {
+          user: {
+            id: userId,
+            email: userEmail || undefined,
+            name: userProfile?.firstName ? 
+              `${userProfile.firstName} ${userProfile.lastName || ''}` : 
+              userData?.name || undefined,
+            role: authMetadata.role,
+            companyId: authMetadata.companyId || undefined
+          },
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        };
+      }
+      
+      // Fallback to database profile if JWT claims are not initialized
       // Find existing profile
       const userProfile = await prisma.profile.findUnique({
         where: { userId },
@@ -231,7 +286,7 @@ export async function auth(): Promise<Session | null> {
         };
       }
       
-      // Return session with existing profile data
+      // Return session with existing profile data from database
       return {
         user: {
           id: userId,

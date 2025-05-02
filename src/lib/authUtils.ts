@@ -1,14 +1,32 @@
 import { UserRole } from "@prisma/client";
 import type { Profile } from "@/types/profile";
 import { cookieUtils, COMPANY_SELECTION_COOKIE, VIEW_MODE_COOKIE } from "./cookie-utils";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 
 /**
  * Gets the active company ID for the current user
- * - For regular users, returns their assigned company ID
+ * - Checks JWT claims first (for all users)
+ * - For regular users, returns their assigned company ID from profile
  * - For superadmins, returns the selected company ID from cookies or null
  */
-export const getActiveCompanyId = (profile: Profile | null): string | null => {
+export const getActiveCompanyId = async (profile: Profile | null): Promise<string | null> => {
   if (!profile) return null;
+  
+  // First try to get companyId from JWT claims if we're server-side
+  if (typeof window === 'undefined') {
+    try {
+      const supabase = createRouteHandlerClient({ cookies });
+      const { data } = await supabase.auth.getSession();
+      
+      if (data?.session?.user?.app_metadata?.companyId) {
+        return data.session.user.app_metadata.companyId;
+      }
+    } catch (error) {
+      console.error("Error getting companyId from JWT:", error);
+      // Fall back to profile or cookie
+    }
+  }
   
   // For regular users, return the company they're assigned to
   if (profile.role !== UserRole.SUPERADMIN) {
@@ -24,16 +42,12 @@ export const getActiveCompanyId = (profile: Profile | null): string | null => {
  * - Regular users need an assigned company
  * - Superadmins need to have selected a company
  */
-export const canAccessDashboard = (profile: Profile | null): boolean => {
+export const canAccessDashboard = async (profile: Profile | null): Promise<boolean> => {
   if (!profile) return false;
   
-  // Regular users need a company assignment
-  if (profile.role !== UserRole.SUPERADMIN) {
-    return !!profile.companyId;
-  }
-  
-  // Superadmins need to have selected a company
-  return !!cookieUtils.get(COMPANY_SELECTION_COOKIE);
+  // Get the active company ID using the updated function
+  const companyId = await getActiveCompanyId(profile);
+  return !!companyId;
 };
 
 /**
@@ -42,18 +56,17 @@ export const canAccessDashboard = (profile: Profile | null): boolean => {
  * - Regular users without company assignment go to waiting-approval
  * - Users with proper access go to dashboard
  */
-export const getRedirectPath = (profile: Profile | null): string => {
+export const getRedirectPath = async (profile: Profile | null): Promise<string> => {
   if (!profile) return '/sign-in';
   
   const isSuperadmin = profile.role === UserRole.SUPERADMIN;
-  const hasCompany = !!profile.companyId;
-  const hasSelectedCompany = !!cookieUtils.get(COMPANY_SELECTION_COOKIE);
+  const companyId = await getActiveCompanyId(profile);
   
-  if (isSuperadmin && !hasSelectedCompany) {
+  if (isSuperadmin && !companyId) {
     return '/company-selection';
   }
   
-  if (!isSuperadmin && !hasCompany) {
+  if (!isSuperadmin && !companyId) {
     return '/waiting-approval';
   }
   
