@@ -26,6 +26,7 @@ model Company {
   tableReservations     TableReservation[]
   tableSessions         TableSession[]
   tables                Table[]
+  joinRequests          CompanyJoinRequest[]
 
   @@map("companies")
 }
@@ -47,6 +48,7 @@ model Profile {
   company               Company?               @relation(fields: [companyId], references: [id])
   activityLogs          TableActivityLog[]
   tableSessions         TableSession[]
+  joinRequests          CompanyJoinRequest[]
 
   @@index([companyId, userId])
   @@map("profiles")
@@ -269,6 +271,23 @@ model finance_reports {
   @@index([created_by])
 }
 
+model CompanyJoinRequest {
+  id          String    @id @default(uuid()) @db.Uuid
+  profileId   String    @map("profile_id") @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  status      JoinRequestStatus @default(PENDING)
+  message     String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  profile     Profile   @relation(fields: [profileId], references: [id])
+  company     Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, status])
+  @@index([profileId])
+  @@map("company_join_requests")
+}
+
 enum UserRole {
   USER
   SELLER
@@ -285,4 +304,10 @@ enum InventoryTransactionType {
 enum FinanceCategoryType {
   INCOME
   EXPENSE
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

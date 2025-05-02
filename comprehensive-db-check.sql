@@ -24,9 +24,8 @@ WHERE
 -- 3. Check actual profile data structure (masked for security)
 SELECT 
     id,
-    SUBSTRING("userId" FOR 8) || '...' AS userId_masked,
-    CASE WHEN company_id IS NOT NULL THEN SUBSTRING(company_id FOR 8) || '...' ELSE NULL END AS company_id_masked,
-    CASE WHEN "companyId" IS NOT NULL THEN SUBSTRING("companyId" FOR 8) || '...' ELSE NULL END AS companyId_masked,
+    SUBSTRING("userId"::text FOR 8) || '...' AS userId_masked,
+    CASE WHEN company_id IS NOT NULL THEN SUBSTRING(company_id::text FOR 8) || '...' ELSE NULL END AS company_id_masked,
     role,
     active
 FROM 
