@@ -2,8 +2,8 @@ import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Use the Edge Runtime for better performance
-export const runtime = 'edge';
+// Use the Experimental Edge Runtime for better performance
+export const runtime = 'experimental-edge';
 
 // Simplified middleware - only checks session existence
 export async function middleware(req: NextRequest) {

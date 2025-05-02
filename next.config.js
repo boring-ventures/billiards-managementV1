@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Improve build performance with Terser
-  swcMinify: true,
   // Improve caching for static assets
   assetPrefix: process.env.NODE_ENV === 'production' ? undefined : undefined,
   images: {
@@ -36,11 +34,6 @@ const nextConfig = {
         'billiards-management-v1-7rneq5217.vercel.app',
         '*.vercel.app'
       ]
-    },
-    // Run middleware in the Edge Runtime for better performance
-    middleware: {
-      // Enable Edge runtime for faster middleware execution
-      writableDir: true,
     }
   },
   // Improve response to timeouts in serverless environments
