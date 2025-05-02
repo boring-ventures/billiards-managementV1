@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useViewMode } from "@/context/view-mode-context";
 import { UserRole } from "@prisma/client";
+import { getLocalStorage } from "@/lib/client-utils";
 
 export default function InventoryPage() {
   const { profile, isLoading } = useCurrentUser();
@@ -22,9 +23,9 @@ export default function InventoryPage() {
 
     let companyId = profile.companyId;
     
-    // For superadmins, check localStorage
-    if (profile.role === UserRole.SUPERADMIN && typeof window !== 'undefined') {
-      const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+    // For superadmins, check localStorage safely
+    if (profile.role === UserRole.SUPERADMIN) {
+      const selectedCompanyId = getLocalStorage('selectedCompanyId');
       if (selectedCompanyId) {
         companyId = selectedCompanyId;
       }

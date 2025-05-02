@@ -12,12 +12,16 @@ import { ProfileDropdown } from "@/components/sidebar/profile-dropdown";
 import { ViewAsDropdown } from "@/components/ui/view-as-dropdown";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { UserRole } from "@prisma/client";
+import { UserSwitcher } from "@/components/user-switcher";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export function DashboardLayoutClient({ children }: DashboardLayoutProps) {
+  const { profile } = useCurrentUser();
+  const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
+
   return (
     <SearchProvider>
       <SidebarProvider defaultOpen={true}>
@@ -43,6 +47,14 @@ export function DashboardLayoutClient({ children }: DashboardLayoutProps) {
               <ProfileDropdown />
             </div>
           </Header>
+          
+          {/* Add the UserSwitcher for superadmins */}
+          {isSuperAdmin && (
+            <div className="container mx-auto pt-4 px-4">
+              <UserSwitcher />
+            </div>
+          )}
+          
           {children}
         </div>
       </SidebarProvider>
