@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { InventoryList } from "@/components/views/inventory/InventoryList";
 import { hasAdminPermission } from "@/lib/rbac";
@@ -7,11 +8,30 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useViewMode } from "@/context/view-mode-context";
+import { UserRole } from "@prisma/client";
 
 export default function InventoryPage() {
   const { profile, isLoading } = useCurrentUser();
   const { viewMode } = useViewMode();
   const isAdmin = hasAdminPermission(profile, viewMode);
+  const [effectiveCompanyId, setEffectiveCompanyId] = useState<string | null>(null);
+
+  // Determine the effective company ID (from profile or localStorage for superadmins)
+  useEffect(() => {
+    if (!profile) return;
+
+    let companyId = profile.companyId;
+    
+    // For superadmins, check localStorage
+    if (profile.role === UserRole.SUPERADMIN && typeof window !== 'undefined') {
+      const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+      if (selectedCompanyId) {
+        companyId = selectedCompanyId;
+      }
+    }
+    
+    setEffectiveCompanyId(companyId);
+  }, [profile]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -32,8 +52,9 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {!isLoading && profile?.companyId && (
-        <InventoryList adminView={isAdmin} companyId={profile.companyId} />
+      {!isLoading && (
+        // Pass the effectiveCompanyId which can be null for superadmins with no selected company
+        <InventoryList adminView={isAdmin} companyId={effectiveCompanyId || ""} />
       )}
     </div>
   );

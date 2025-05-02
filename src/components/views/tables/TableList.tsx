@@ -68,22 +68,26 @@ export function TableList({
     try {
       // Get companyId from profile or localStorage for superadmins
       let companyId = profile?.companyId;
+      let apiUrl = '/api/tables';
       
       // For superadmins, get selected company from localStorage
       if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
         const selectedCompanyId = localStorage.getItem('selectedCompanyId');
         if (selectedCompanyId) {
           companyId = selectedCompanyId;
+          apiUrl += `?companyId=${companyId}`;
         }
-      }
-      
-      if (!companyId) {
+        // If no company is selected, don't append companyId parameter
+      } else if (companyId) {
+        // For regular users, always use their assigned company
+        apiUrl += `?companyId=${companyId}`;
+      } else {
         console.error("No company ID available");
         setLoading(false);
         return;
       }
       
-      const response = await fetch(`/api/tables?companyId=${companyId}`);
+      const response = await fetch(apiUrl);
       if (!response.ok) throw new Error("Failed to fetch tables");
       const data = await response.json();
       setTables(data.tables);

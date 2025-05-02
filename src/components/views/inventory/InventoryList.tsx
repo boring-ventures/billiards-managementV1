@@ -83,13 +83,22 @@ export function InventoryList({ adminView, companyId }: InventoryListProps) {
     async function fetchInventoryData() {
       try {
         setLoading(true);
+        let apiUrlItems = '/api/inventory';
+        let apiUrlCategories = '/api/inventory/categories';
+        
+        // Only append companyId if it's provided
+        if (companyId) {
+          apiUrlItems += `?companyId=${companyId}`;
+          apiUrlCategories += `?companyId=${companyId}`;
+        }
+        
         // Fetch inventory items
-        const itemsResponse = await fetch(`/api/inventory?companyId=${companyId}`);
+        const itemsResponse = await fetch(apiUrlItems);
         if (!itemsResponse.ok) throw new Error("Failed to fetch inventory items");
         const itemsData = await itemsResponse.json();
         
         // Fetch categories
-        const categoriesResponse = await fetch(`/api/inventory/categories?companyId=${companyId}`);
+        const categoriesResponse = await fetch(apiUrlCategories);
         if (!categoriesResponse.ok) throw new Error("Failed to fetch categories");
         const categoriesData = await categoriesResponse.json();
         
@@ -107,9 +116,7 @@ export function InventoryList({ adminView, companyId }: InventoryListProps) {
       }
     }
     
-    if (companyId) {
-      fetchInventoryData();
-    }
+    fetchInventoryData();
   }, [companyId, toast]);
 
   // Handle delete item

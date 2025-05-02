@@ -88,17 +88,25 @@ export function TransactionList({ profile }: TransactionListProps) {
     try {
       setLoading(true);
       
-      // Determine if there's a company ID to use for the request
-      let url = "/api/finance/transactions";
+      // Initialize base URLs
+      let transactionsUrl = "/api/finance/transactions";
       let maintenanceUrl = "/api/tables/maintenance";
       
       // For superadmins, check if they have a selected company
-      if (profile.role === "SUPERADMIN" && profile.companyId) {
-        url += `?companyId=${profile.companyId}`;
+      if (profile.role === "SUPERADMIN") {
+        const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+        if (selectedCompanyId) {
+          transactionsUrl += `?companyId=${selectedCompanyId}`;
+          maintenanceUrl += `?companyId=${selectedCompanyId}`;
+        }
+        // If no company selected, don't append companyId parameter
+      } else if (profile.companyId) {
+        // For regular users, always use their assigned company
+        transactionsUrl += `?companyId=${profile.companyId}`;
         maintenanceUrl += `?companyId=${profile.companyId}`;
       }
       
-      const response = await fetch(url);
+      const response = await fetch(transactionsUrl);
       if (!response.ok) throw new Error("Failed to fetch transactions");
       const data = await response.json();
       setTransactions(data.transactions);
