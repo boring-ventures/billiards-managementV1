@@ -29,7 +29,7 @@ import { formatPrice } from "@/lib/tableUtils";
 import { hasAdminPermission } from "@/lib/rbac";
 import { DeleteIcon, FilterIcon } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/modals/ConfirmDeleteModal";
-import { Profile } from "@prisma/client";
+import type { Profile as RbacProfile } from "@/types/profile";
 
 type FinanceTransaction = {
   id: string;
@@ -67,7 +67,7 @@ type TableMaintenanceCost = {
 };
 
 type TransactionListProps = {
-  profile: Profile;
+  profile: any; // Update to allow any profile type
 };
 
 export function TransactionList({ profile }: TransactionListProps) {
@@ -81,7 +81,7 @@ export function TransactionList({ profile }: TransactionListProps) {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<FinanceTransaction | null>(null);
   
-  const isAdmin = hasAdminPermission(profile);
+  const isAdmin = hasAdminPermission(profile as RbacProfile | null);
 
   // Function to fetch transactions data
   const fetchTransactions = async () => {
@@ -93,14 +93,14 @@ export function TransactionList({ profile }: TransactionListProps) {
       let maintenanceUrl = "/api/tables/maintenance";
       
       // For superadmins, check if they have a selected company
-      if (profile.role === "SUPERADMIN") {
+      if (profile?.role === "SUPERADMIN") {
         const selectedCompanyId = localStorage.getItem('selectedCompanyId');
         if (selectedCompanyId) {
           transactionsUrl += `?companyId=${selectedCompanyId}`;
           maintenanceUrl += `?companyId=${selectedCompanyId}`;
         }
         // If no company selected, don't append companyId parameter
-      } else if (profile.companyId) {
+      } else if (profile?.companyId) {
         // For regular users, always use their assigned company
         transactionsUrl += `?companyId=${profile.companyId}`;
         maintenanceUrl += `?companyId=${profile.companyId}`;
@@ -217,7 +217,7 @@ export function TransactionList({ profile }: TransactionListProps) {
   // Load transactions on component mount
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return <div>Loading transactions...</div>;

@@ -7,12 +7,15 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { hasAdminPermission } from "@/lib/rbac";
 import { NewTableForm } from "@/components/views/tables/NewTableForm";
 import { ArrowLeft } from "lucide-react";
+import type { Profile as RbacProfile } from "@/types/profile";
+import { useRouter } from "next/navigation";
 
 export default function NewTablePage() {
+  const router = useRouter();
   const { profile, isLoading } = useCurrentUser();
-  const isAdmin = hasAdminPermission(profile);
+  const isAdmin = hasAdminPermission(profile as RbacProfile | null);
   
-  if (!profile?.companyId || !hasAdminPermission(profile)) {
+  if (!profile?.companyId || !hasAdminPermission(profile as RbacProfile | null)) {
     return (
       <div className="container mx-auto py-6">
         <p>You do not have permission to access this page.</p>
@@ -43,7 +46,7 @@ export default function NewTablePage() {
         </Link>
       </div>
       
-      <NewTableForm companyId={profile.companyId} />
+      <NewTableForm />
     </div>
   );
 } 

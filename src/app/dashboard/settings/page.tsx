@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
+import type { Profile as RbacProfile } from "@/types/profile";
 
 // Schema for company creation
 const companySchema = z.object({
@@ -33,7 +34,7 @@ type CompanyFormData = z.infer<typeof companySchema>;
 
 export default function SettingsPage() {
   const { profile, isLoading } = useCurrentUser();
-  const isAdmin = hasAdminPermission(profile);
+  const isAdmin = hasAdminPermission(profile as RbacProfile | null);
   const isSuperAdmin = profile?.role === "SUPERADMIN";
   const [activeTab, setActiveTab] = useState("profile");
   const [isSubmitting, setIsSubmitting] = useState(false);

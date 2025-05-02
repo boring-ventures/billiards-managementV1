@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { hasAdminPermission } from "@/lib/rbac";
 import InventoryForm from "@/components/views/inventory/InventoryForm";
 import { Loader2 } from "lucide-react";
+import type { Profile as RbacProfile } from "@/types/profile";
 
 interface EditInventoryItemPageProps {
   params: {
@@ -20,7 +21,7 @@ export default function EditInventoryItemPage({ params }: EditInventoryItemPageP
 
   // Check if user has admin permissions
   useEffect(() => {
-    if (!isLoading && !hasAdminPermission(profile)) {
+    if (!isLoading && !hasAdminPermission(profile as RbacProfile | null)) {
       router.push("/dashboard");
     }
   }, [profile, isLoading, router]);
@@ -34,7 +35,7 @@ export default function EditInventoryItemPage({ params }: EditInventoryItemPageP
   }
 
   // Only render form if user has admin access and there's a company context
-  if (!profile?.companyId || !hasAdminPermission(profile)) {
+  if (!profile?.companyId || !hasAdminPermission(profile as RbacProfile | null)) {
     return null;
   }
 

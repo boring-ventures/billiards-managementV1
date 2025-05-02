@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { hasAdminPermission } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { TransactionList } from "@/components/views/finance/TransactionList";
 import { NewTransactionModal } from "@/components/modals/NewTransactionModal";
+import type { Profile as RbacProfile } from "@/types/profile";
 
 export default function FinanceTransactionsPage() {
   const { profile, isLoading } = useCurrentUser();
-  const isAdmin = hasAdminPermission(profile);
+  const isAdmin = hasAdminPermission(profile as RbacProfile | null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (

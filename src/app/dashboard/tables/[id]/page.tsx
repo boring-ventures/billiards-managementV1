@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
+import { getLocalStorage } from "@/lib/client-utils";
+import type { Profile as RbacProfile } from "@/types/profile";
 
 interface TableDetailPageProps {
   params: {
@@ -27,15 +29,26 @@ interface TableDetailPageProps {
   };
 }
 
+// Define a Table interface to replace any
+interface BilliardsTable {
+  id: string;
+  companyId: string;
+  name: string;
+  hourlyRate: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function TableDetailPage({ params }: TableDetailPageProps) {
   const { id } = params;
   const router = useRouter();
   const { toast } = useToast();
   const { profile, isLoading } = useCurrentUser();
-  const [table, setTable] = useState<any | null>(null);
+  const [table, setTable] = useState<BilliardsTable | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const isAdmin = hasAdminPermission(profile);
+  const isAdmin = hasAdminPermission(profile as RbacProfile | null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +56,7 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
       if (isLoading) return;
       
       // Get companyId from local storage for superadmins
-      const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+      const selectedCompanyId = getLocalStorage('selectedCompanyId');
       
       try {
         setLoading(true);
@@ -82,7 +95,7 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
   const handleDelete = async () => {
     if (!table) return;
     
-    const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+    const selectedCompanyId = getLocalStorage('selectedCompanyId');
     
     try {
       setLoading(true);
