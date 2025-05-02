@@ -20,6 +20,16 @@ export async function GET(request: Request) {
       where: { userId: session.user.id },
     });
     
+    // Log the profile for debugging
+    console.log("Profile retrieved:", {
+      id: profile?.id,
+      userId: profile?.userId,
+      role: profile?.role,
+      // Check both potential column names
+      companyId: profile?.companyId,
+      company_id: (profile as any)?.company_id
+    });
+    
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
@@ -27,8 +37,11 @@ export async function GET(request: Request) {
     // Check for superadmin
     const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
 
+    // Get the effective company ID, checking both potential column names
+    const profileCompanyId = profile.companyId || (profile as any).company_id;
+
     // For non-superadmins, companyId is required
-    if (!isSuperAdmin && !companyId && !profile.companyId) {
+    if (!isSuperAdmin && !companyId && !profileCompanyId) {
       return NextResponse.json(
         { error: "Company ID is required" },
         { status: 400 }
@@ -40,15 +53,15 @@ export async function GET(request: Request) {
     
     if (companyId) {
       where = { companyId };
-    } else if (!isSuperAdmin && profile?.companyId) {
-      where = { companyId: profile.companyId };
+    } else if (!isSuperAdmin && profileCompanyId) {
+      where = { companyId: profileCompanyId };
     }
     
     // Log the query we're about to execute
     console.log("Inventory query:", { 
       isSuperAdmin, 
       requestCompanyId: companyId,
-      profileCompanyId: profile.companyId,
+      profileCompanyId,
       whereClause: where 
     });
 

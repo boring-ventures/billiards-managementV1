@@ -47,12 +47,25 @@ export async function GET(
       where: { userId: session.user.id },
     });
     
+    // Log the profile for debugging
+    console.log("Item API - Profile retrieved:", {
+      id: profile?.id,
+      userId: profile?.userId,
+      role: profile?.role,
+      // Check both potential column names
+      companyId: profile?.companyId,
+      company_id: (profile as any)?.company_id
+    });
+    
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
     
     // Check for superadmin
     const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
+    
+    // Get the effective company ID, checking both potential column names
+    const profileCompanyId = profile.companyId || (profile as any).company_id;
     
     // Fetch the item
     const item = await prisma.inventoryItem.findUnique({
@@ -83,7 +96,7 @@ export async function GET(
     }
     
     // For non-superadmins, verify the item belongs to their company
-    if (!isSuperAdmin && item.companyId !== profile.companyId) {
+    if (!isSuperAdmin && item.companyId !== profileCompanyId) {
       return NextResponse.json(
         { error: "Unauthorized to access this item" },
         { status: 403 }
