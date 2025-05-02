@@ -11,18 +11,25 @@ export default async function AuthLayout({
   try {
     // First check the Supabase session directly to handle token issues
     const supabase = getServerSupabase();
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getUser();
     
-    // If there's a valid session and no errors, use our main auth function
-    if (data.session && !error) {
-      const session = await auth();
-      
-      if (session) {
-        redirect("/dashboard");
+    // Only redirect if we have a valid user and no errors
+    if (data?.user && !error) {
+      try {
+        const session = await auth();
+        
+        // Only redirect if we have a full session with role info
+        if (session?.user?.id) {
+          // Redirect to dashboard only if we're on an auth page
+          return redirect("/dashboard");
+        }
+      } catch (authError) {
+        console.error("Error in auth layout while calling auth():", authError);
+        // If there are errors getting the full session, still show auth pages
       }
     }
     
-    // If we have token errors or no session, we should stay on the auth page
+    // Otherwise, show the auth pages
     return <>{children}</>;
   } catch (error) {
     console.error("Error in auth layout:", error);
