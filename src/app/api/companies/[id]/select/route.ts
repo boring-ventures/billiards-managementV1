@@ -12,17 +12,14 @@ export async function POST(
     const { id: companyId } = params;
     const supabase = createRouteHandlerClient({ cookies });
 
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    // Get the current user - using getUser() instead of getSession() as recommended
+    const { data, error } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (error || !data.user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const userId = data.user.id;
 
     // Fetch user profile to check role
     const profile = await db.profile.findUnique({

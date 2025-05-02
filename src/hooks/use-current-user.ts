@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getCurrentUser } from "@/lib/auth-client";
 import type { Profile as ProfileType } from "@/types/profile";
-import { getLocalStorage, setLocalStorage } from "@/lib/client-utils";
+import { cookieUtils, FALLBACK_PROFILE_COOKIE, USER_ID_COOKIE } from "@/lib/cookie-utils";
 import { UserRole } from "@prisma/client";
 
 // Simplified Profile interface for internal use
@@ -43,10 +43,10 @@ export function useCurrentUser() {
         // Get the current user from the auth-client library
         const currentUser = await getCurrentUser();
         
-        // Check if we have a specific user ID in localStorage (for user switching in admin)
-        const currentUserId = getLocalStorage('currentUserId');
+        // Check if we have a specific user ID in cookies (for user switching in admin)
+        const currentUserId = cookieUtils.get(USER_ID_COOKIE);
         
-        // Use the localStorage userId if available, otherwise use the one from auth
+        // Use the cookie userId if available, otherwise use the one from auth
         const effectiveUserId = currentUserId || currentUser?.id;
         
         if (effectiveUserId) {
@@ -64,8 +64,11 @@ export function useCurrentUser() {
               const profileData = data.profile || data;
               setProfile(profileData);
               
-              // Store profile in localStorage for fallback
-              setLocalStorage('fallbackProfile', JSON.stringify(profileData));
+              // Store profile in cookie for fallback
+              cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profileData), {
+                expires: 1, // 1 day
+                sameSite: 'lax'
+              });
               
               // Reset retry counter on successful fetch
               setApiRetries(0);
@@ -76,8 +79,8 @@ export function useCurrentUser() {
               if (apiRetries >= 2) {
                 console.warn("Using fallback profile due to API unavailability");
                 
-                // Try to load from localStorage first
-                const savedFallback = getLocalStorage('fallbackProfile');
+                // Try to load from cookie first
+                const savedFallback = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
                 if (savedFallback) {
                   try {
                     const parsed = JSON.parse(savedFallback);
@@ -86,20 +89,26 @@ export function useCurrentUser() {
                     // If parsing fails, use the mock profile
                     const fallbackProfile = createMockProfile(effectiveUserId);
                     setProfile(fallbackProfile);
-                    setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                    cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(fallbackProfile), {
+                      expires: 1, // 1 day
+                      sameSite: 'lax'
+                    });
                   }
                 } else {
                   // Create and store a new fallback profile
                   const fallbackProfile = createMockProfile(effectiveUserId);
                   setProfile(fallbackProfile);
-                  setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                  cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(fallbackProfile), {
+                    expires: 1, // 1 day
+                    sameSite: 'lax'
+                  });
                 }
               } else {
                 // Increment retry counter
                 setApiRetries(prev => prev + 1);
                 
-                // Try to load from localStorage if available
-                const savedFallback = getLocalStorage('fallbackProfile');
+                // Try to load from cookie if available
+                const savedFallback = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
                 if (savedFallback) {
                   try {
                     const parsed = JSON.parse(savedFallback);
@@ -115,8 +124,8 @@ export function useCurrentUser() {
           } catch (error) {
             console.error("Error fetching profile data:", error);
             // Use fallback on network/fetch errors
-            // Try to load from localStorage first
-            const savedFallback = getLocalStorage('fallbackProfile');
+            // Try to load from cookie first
+            const savedFallback = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
             if (savedFallback) {
               try {
                 const parsed = JSON.parse(savedFallback);
@@ -124,12 +133,18 @@ export function useCurrentUser() {
               } catch (e) {
                 const fallbackProfile = createMockProfile(effectiveUserId);
                 setProfile(fallbackProfile);
-                setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(fallbackProfile), {
+                  expires: 1, // 1 day
+                  sameSite: 'lax'
+                });
               }
             } else {
               const fallbackProfile = createMockProfile(effectiveUserId);
               setProfile(fallbackProfile);
-              setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+              cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(fallbackProfile), {
+                expires: 1, // 1 day
+                sameSite: 'lax'
+              });
             }
           }
         } else {

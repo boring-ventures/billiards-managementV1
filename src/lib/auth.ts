@@ -6,7 +6,8 @@
 import 'server-only';
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
-import { supabase } from "@/lib/supabase/server";
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from "next/headers";
 
 // Define the JoinRequestStatus enum since it might not be exported yet
 enum JoinRequestStatus {
@@ -170,63 +171,79 @@ export async function createOrUpdateUserProfile(
  */
 export async function auth(): Promise<Session | null> {
   try {
+    // Use Supabase's recommended client for server components
+    const supabase = createRouteHandlerClient({ cookies });
+    
     // Try to get Supabase auth user - using getUser instead of getSession as recommended by Supabase
+    let userId = null;
+    let userEmail = null;
+    let userData = null;
+    
     try {
       const { data, error } = await supabase.auth.getUser();
       
-      if (data?.user && !error) {
-        // We have an authenticated user, now get their profile including role and company
-        const userProfile = await prisma.profile.findUnique({
-          where: { userId: data.user.id },
-          select: { 
-            id: true,
-            userId: true,
-            firstName: true, 
-            lastName: true, 
-            role: true,
-            companyId: true
-          }
+      if (error) {
+        console.error("Supabase auth error:", error.message);
+      } else if (data?.user) {
+        userId = data.user.id;
+        userEmail = data.user.email;
+        userData = data.user.user_metadata;
+      }
+    } catch (supabaseError) {
+      console.error("Error getting Supabase user:", supabaseError);
+    }
+    
+    // If we have a userId, get or create the profile
+    if (userId) {
+      // Find existing profile
+      const userProfile = await prisma.profile.findUnique({
+        where: { userId },
+        select: { 
+          id: true,
+          userId: true,
+          firstName: true, 
+          lastName: true, 
+          role: true,
+          companyId: true
+        }
+      });
+      
+      // If no profile exists, create one
+      if (!userProfile) {
+        console.log("Creating profile for authenticated user", userId);
+        const newProfile = await createOrUpdateUserProfile(userId, {
+          ...userData,
+          email: userEmail
         });
         
-        // If no profile exists, create one
-        if (!userProfile) {
-          console.log("Creating profile for authenticated user", data.user.id);
-          const newProfile = await createOrUpdateUserProfile(data.user.id, {
-            ...data.user.user_metadata,
-            email: data.user.email
-          });
-          
-          // Return session with newly created profile data
-          return {
-            user: {
-              id: data.user.id,
-              email: data.user.email || undefined,
-              name: newProfile.firstName ? 
-                `${newProfile.firstName} ${newProfile.lastName || ''}` : 
-                data.user.user_metadata?.name || undefined,
-              role: newProfile.role || UserRole.USER,
-              companyId: newProfile.companyId || undefined
-            },
-            expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-          };
-        }
-        
-        // Return session with existing profile data
+        // Return session with newly created profile data
         return {
           user: {
-            id: data.user.id,
-            email: data.user.email || undefined,
-            name: userProfile.firstName ? 
-              `${userProfile.firstName} ${userProfile.lastName || ''}` : 
-              data.user.user_metadata?.name || undefined,
-            role: userProfile.role || UserRole.USER,
-            companyId: userProfile.companyId || undefined
+            id: userId,
+            email: userEmail || undefined,
+            name: newProfile.firstName ? 
+              `${newProfile.firstName} ${newProfile.lastName || ''}` : 
+              userData?.name || undefined,
+            role: newProfile.role || UserRole.USER,
+            companyId: newProfile.companyId || undefined
           },
           expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         };
       }
-    } catch (supabaseError) {
-      console.error("Error getting Supabase user:", supabaseError);
+      
+      // Return session with existing profile data
+      return {
+        user: {
+          id: userId,
+          email: userEmail || undefined,
+          name: userProfile.firstName ? 
+            `${userProfile.firstName} ${userProfile.lastName || ''}` : 
+            userData?.name || undefined,
+          role: userProfile.role || UserRole.USER,
+          companyId: userProfile.companyId || undefined
+        },
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      };
     }
     
     // If no auth found, try finding a superadmin in the database as fallback for development only

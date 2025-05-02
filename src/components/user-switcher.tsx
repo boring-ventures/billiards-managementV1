@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
+import { cookieUtils, USER_ID_COOKIE } from "@/lib/cookie-utils";
 
 // TypeScript interface for Superadmin user
 interface SuperAdmin {
@@ -13,26 +14,6 @@ interface SuperAdmin {
   firstName: string | null;
   lastName: string | null;
   role: string;
-}
-
-// Helper function to get a cookie value by name
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-}
-
-// Helper function to set a cookie
-function setCookie(name: string, value: string, days: number = 7) {
-  if (typeof document === 'undefined') return;
-  
-  const date = new Date();
-  date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-  const expires = "; expires=" + date.toUTCString();
-  document.cookie = name + "=" + value + expires + "; path=/";
 }
 
 export function UserSwitcher() {
@@ -55,14 +36,16 @@ export function UserSwitcher() {
         const data = await response.json();
         setSuperadmins(data.superadmins);
         
-        // Set the initially selected user ID
-        const currentUserId = localStorage.getItem('currentUserId') || getCookie('currentUserId');
+        // Set the initially selected user ID from cookie
+        const currentUserId = cookieUtils.get(USER_ID_COOKIE);
         if (currentUserId && data.superadmins.some((admin: SuperAdmin) => admin.userId === currentUserId)) {
           setSelectedUser(currentUserId);
         } else if (data.superadmins.length > 0) {
           setSelectedUser(data.superadmins[0].userId);
-          localStorage.setItem('currentUserId', data.superadmins[0].userId);
-          setCookie('currentUserId', data.superadmins[0].userId);
+          cookieUtils.set(USER_ID_COOKIE, data.superadmins[0].userId, {
+            expires: 1, // 1 day
+            sameSite: 'lax'
+          });
         }
       } catch (error) {
         console.error("Error fetching superadmins:", error);
@@ -83,9 +66,11 @@ export function UserSwitcher() {
   const handleUserChange = (userId: string) => {
     setSelectedUser(userId);
     
-    // Store in both localStorage and cookies for cross-compatibility
-    localStorage.setItem('currentUserId', userId);
-    setCookie('currentUserId', userId);
+    // Store in cookie using our utility
+    cookieUtils.set(USER_ID_COOKIE, userId, {
+      expires: 1, // 1 day
+      sameSite: 'lax'
+    });
     
     // Reload the page to apply the new user
     window.location.reload();

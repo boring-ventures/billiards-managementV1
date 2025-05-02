@@ -2,11 +2,7 @@
 
 import { supabase } from '@/lib/supabase/client';
 import { UserRole } from '@prisma/client';
-import Cookies from "js-cookie";
-
-// Cookie names
-const FALLBACK_PROFILE_COOKIE = 'fallback-profile';
-const USER_ID_COOKIE = 'current-user-id';
+import { cookieUtils, FALLBACK_PROFILE_COOKIE, USER_ID_COOKIE } from './cookie-utils';
 
 // Types (mimicking the server-side auth.ts)
 export interface User {
@@ -52,11 +48,9 @@ export async function getCurrentUser(): Promise<User | null> {
     
     // Check if we're overriding the user ID for admin view
     let userId = data.session.user.id;
-    if (typeof window !== 'undefined') {
-      const overrideUserId = Cookies.get(USER_ID_COOKIE);
-      if (overrideUserId) {
-        userId = overrideUserId;
-      }
+    const overrideUserId = cookieUtils.get(USER_ID_COOKIE);
+    if (overrideUserId) {
+      userId = overrideUserId;
     }
     
     // Use the profile API to get role and company info
@@ -68,13 +62,11 @@ export async function getCurrentUser(): Promise<User | null> {
         const profile = data.profile || data;
         
         // Store profile in cookie for fallback
-        if (typeof window !== 'undefined') {
-          Cookies.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profile), {
-            expires: 1, // 1 day
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'Lax'
-          });
-        }
+        cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profile), {
+          expires: 1, // 1 day
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax'
+        });
         
         // Return user with combined data
         return {
@@ -92,24 +84,22 @@ export async function getCurrentUser(): Promise<User | null> {
     }
     
     // Try to load from cookie fallback
-    if (typeof window !== 'undefined') {
-      try {
-        const fallbackJson = Cookies.get(FALLBACK_PROFILE_COOKIE);
-        if (fallbackJson) {
-          const fallbackProfile = JSON.parse(fallbackJson);
-          return {
-            id: userId,
-            email: data.session.user.email || undefined,
-            name: fallbackProfile.firstName 
-              ? `${fallbackProfile.firstName} ${fallbackProfile.lastName || ''}` 
-              : data.session.user.user_metadata?.name,
-            role: fallbackProfile.role || data.session.user.user_metadata?.role || UserRole.USER,
-            companyId: fallbackProfile.companyId
-          };
-        }
-      } catch (e) {
-        console.error("Error parsing fallback profile:", e);
+    try {
+      const fallbackJson = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
+      if (fallbackJson) {
+        const fallbackProfile = JSON.parse(fallbackJson);
+        return {
+          id: userId,
+          email: data.session.user.email || undefined,
+          name: fallbackProfile.firstName 
+            ? `${fallbackProfile.firstName} ${fallbackProfile.lastName || ''}` 
+            : data.session.user.user_metadata?.name,
+          role: fallbackProfile.role || data.session.user.user_metadata?.role || UserRole.USER,
+          companyId: fallbackProfile.companyId
+        };
       }
+    } catch (e) {
+      console.error("Error parsing fallback profile:", e);
     }
     
     // Fallback to just the session data without profile info
@@ -129,16 +119,14 @@ export async function getCurrentUser(): Promise<User | null> {
  * Sets the current user ID for admin view switching
  */
 export function setCurrentUserId(userId: string | null): void {
-  if (typeof window !== 'undefined') {
-    if (userId) {
-      Cookies.set(USER_ID_COOKIE, userId, {
-        expires: 1, // 1 day
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax'
-      });
-    } else {
-      Cookies.remove(USER_ID_COOKIE);
-    }
+  if (userId) {
+    cookieUtils.set(USER_ID_COOKIE, userId, {
+      expires: 1, // 1 day
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+  } else {
+    cookieUtils.remove(USER_ID_COOKIE);
   }
 }
 
@@ -168,13 +156,7 @@ export async function signOut(): Promise<void> {
   try {
     await supabase.auth.signOut();
     // Clear any cookies we might have set
-    if (typeof window !== 'undefined') {
-      Cookies.remove(USER_ID_COOKIE);
-      Cookies.remove(FALLBACK_PROFILE_COOKIE);
-      // Also clear any company selection
-      Cookies.remove('selected-company-id');
-      Cookies.remove('view-mode');
-    }
+    cookieUtils.clearAuthCookies();
   } catch (error) {
     console.error('Error signing out:', error);
   }

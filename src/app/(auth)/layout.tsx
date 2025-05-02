@@ -31,7 +31,12 @@ export default async function AuthLayout({
     
     // Otherwise, show the auth pages
     return <>{children}</>;
-  } catch (error) {
+  } catch (error: any) {
+    // Catch NEXT_REDIRECT errors and let them pass through
+    if (error.message === 'NEXT_REDIRECT') {
+      throw error; // Let Next.js handle the redirect
+    }
+    
     console.error("Error in auth layout:", error);
     // If there are any errors, show the auth pages
     return <>{children}</>;
