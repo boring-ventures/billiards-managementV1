@@ -41,8 +41,12 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/api/profile',
+        destination: '/api/profile',
+      },
+      {
         source: '/api/profile/by-id',
-        destination: '/api/profile/by-id',
+        destination: '/api/profile',
       },
       {
         source: '/api/admin/superadmins',

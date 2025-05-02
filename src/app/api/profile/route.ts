@@ -3,12 +3,42 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import type { UserRole, Prisma } from "@prisma/client";
+import { auth } from "@/lib/auth";
 
 // GET: Fetch profile for the current authenticated user
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   console.log("[API] Starting profile fetch request");
   
   try {
+    // Check if there's a userId query parameter (for compatibility with by-id endpoint)
+    const { searchParams } = new URL(request.url);
+    const userIdParam = searchParams.get("userId");
+    
+    if (userIdParam) {
+      console.log("[API] Fetching profile by userId param:", userIdParam);
+      try {
+        // Fetch the profile based on userId
+        const profile = await prisma.profile.findUnique({
+          where: { userId: userIdParam },
+        });
+        
+        if (!profile) {
+          console.log("[API] Profile not found for userId:", userIdParam);
+          return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+        }
+        
+        console.log("[API] Found profile for userId:", userIdParam);
+        return NextResponse.json({ profile });
+      } catch (error) {
+        console.error("[API] Error fetching profile by userId:", error);
+        return NextResponse.json(
+          { error: "Failed to fetch profile by userId" },
+          { status: 500 }
+        );
+      }
+    }
+    
+    // Regular authentication flow for current user
     // Create Supabase client
     try {
       const supabase = createRouteHandlerClient({ cookies });

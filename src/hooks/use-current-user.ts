@@ -54,25 +54,46 @@ export function useCurrentUser() {
           setUser({ id: effectiveUserId });
           
           try {
-            // Fetch the user's profile
-            const response = await fetch(`/api/profile/by-id?userId=${effectiveUserId}`);
+            // Use a more direct API path to avoid routing issues with Next.js/Vercel
+            const profileEndpoint = '/api/profile';
+            const response = await fetch(`${profileEndpoint}?userId=${effectiveUserId}`);
             
             if (response.ok) {
               const data = await response.json();
-              setProfile(data.profile);
+              // Handle both response formats: data.profile (from by-id format) or data directly
+              const profileData = data.profile || data;
+              setProfile(profileData);
+              
+              // Store profile in localStorage for fallback
+              setLocalStorage('fallbackProfile', JSON.stringify(profileData));
+              
               // Reset retry counter on successful fetch
               setApiRetries(0);
             } else {
-              console.error("Error fetching profile:", response.statusText);
+              console.warn("Profile API returned an error:", response.status);
               
               // If we've tried multiple times and still getting errors, use a fallback
               if (apiRetries >= 2) {
                 console.warn("Using fallback profile due to API unavailability");
-                const fallbackProfile = createMockProfile(effectiveUserId);
-                setProfile(fallbackProfile);
                 
-                // Store in localStorage as temporary fallback
-                setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                // Try to load from localStorage first
+                const savedFallback = getLocalStorage('fallbackProfile');
+                if (savedFallback) {
+                  try {
+                    const parsed = JSON.parse(savedFallback);
+                    setProfile(parsed);
+                  } catch (e) {
+                    // If parsing fails, use the mock profile
+                    const fallbackProfile = createMockProfile(effectiveUserId);
+                    setProfile(fallbackProfile);
+                    setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                  }
+                } else {
+                  // Create and store a new fallback profile
+                  const fallbackProfile = createMockProfile(effectiveUserId);
+                  setProfile(fallbackProfile);
+                  setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+                }
               } else {
                 // Increment retry counter
                 setApiRetries(prev => prev + 1);
@@ -94,8 +115,22 @@ export function useCurrentUser() {
           } catch (error) {
             console.error("Error fetching profile data:", error);
             // Use fallback on network/fetch errors
-            const fallbackProfile = createMockProfile(effectiveUserId);
-            setProfile(fallbackProfile);
+            // Try to load from localStorage first
+            const savedFallback = getLocalStorage('fallbackProfile');
+            if (savedFallback) {
+              try {
+                const parsed = JSON.parse(savedFallback);
+                setProfile(parsed);
+              } catch (e) {
+                const fallbackProfile = createMockProfile(effectiveUserId);
+                setProfile(fallbackProfile);
+                setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+              }
+            } else {
+              const fallbackProfile = createMockProfile(effectiveUserId);
+              setProfile(fallbackProfile);
+              setLocalStorage('fallbackProfile', JSON.stringify(fallbackProfile));
+            }
           }
         } else {
           setUser(null);
