@@ -81,38 +81,41 @@ export async function updateSession(request: NextRequest) {
       }
     )
 
-    // This gets the user and refreshes the session if needed
-    try {
-      const { data } = await supabase.auth.getUser()
-      const user = data?.user
+    // CRITICAL: This is the key part - we need to get the user from Supabase
+    // using getUser() rather than getSession() to ensure the token is validated
+    // and refreshed if needed
+    const { data, error } = await supabase.auth.getUser()
+    
+    if (error) {
+      console.error(`[Middleware] Error getting user: ${error.message}`)
       
-      if (user) {
-        console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
-        
-        // Force refresh the session to ensure we have the latest tokens
+      // For protected routes, redirect to login on error
+      if (isProtectedRoute(pathname)) {
+        return NextResponse.redirect(new URL('/sign-in', request.url))
+      }
+      
+      return response
+    }
+    
+    const user = data?.user
+    
+    if (user) {
+      console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
+      
+      // CRITICAL: For requests that come from the browser, we need to refresh the session
+      // This will update the auth tokens and set cookies with the latest values
+      if (!request.headers.get('authorization')) {
         const { error: refreshError } = await supabase.auth.refreshSession()
         if (refreshError) {
           console.error(`[Middleware] Error refreshing session: ${refreshError.message}`)
         }
-      } else {
-        console.log(`[Middleware] No session found for path ${pathname}`)
-        
-        // If requesting a protected route, redirect to login
-        if (isProtectedRoute(pathname)) {
-          console.log(`[Middleware] Redirecting to sign-in from protected route: ${pathname}`)
-          return NextResponse.redirect(new URL('/sign-in', request.url))
-        }
       }
-    } catch (error) {
-      console.error(`[Middleware] Error checking auth: ${error instanceof Error ? error.message : String(error)}`)
+    } else {
+      console.log(`[Middleware] No session found for path ${pathname}`)
       
-      // Don't redirect API routes on error, just continue the request
-      if (pathname.startsWith('/api/')) {
-        return response
-      }
-      
-      // For protected routes, redirect to login on error
+      // If requesting a protected route, redirect to login
       if (isProtectedRoute(pathname)) {
+        console.log(`[Middleware] Redirecting to sign-in from protected route: ${pathname}`)
         return NextResponse.redirect(new URL('/sign-in', request.url))
       }
     }

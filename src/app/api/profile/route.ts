@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       }
     );
     
-    // Get the authenticated user - prefer using getUser() over getSession() for more reliable auth
+    // Get the authenticated user - ALWAYS use getUser() over getSession() for more reliable auth
     let userId = null;
     
     // First try Authorization header if present (Bearer token)
