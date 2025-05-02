@@ -107,7 +107,12 @@ export function TransactionList({ profile }: TransactionListProps) {
       }
       
       const response = await fetch(transactionsUrl);
-      if (!response.ok) throw new Error("Failed to fetch transactions");
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch transactions");
+      }
+      
       const data = await response.json();
       setTransactions(data.transactions);
       

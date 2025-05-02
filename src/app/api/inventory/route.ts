@@ -74,7 +74,7 @@ export async function GET(request: Request) {
 
 // Validation schema for creating/updating inventory items
 const inventoryItemSchema = z.object({
-  companyId: z.string().uuid(),
+  companyId: z.string().uuid().optional(),
   name: z.string().min(1, "Name is required"),
   categoryId: z.string().uuid().optional().nullable(),
   sku: z.string().optional().nullable(),
@@ -159,6 +159,14 @@ export async function POST(request: Request) {
     }
     
     const data = result.data;
+    
+    // Make sure we have a companyId when creating the record
+    if (!data.companyId) {
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
+    }
     
     // Create the inventory item
     const newItem = await prisma.inventoryItem.create({

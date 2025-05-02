@@ -86,8 +86,8 @@ export function InventoryList({ adminView, companyId }: InventoryListProps) {
         let apiUrlItems = '/api/inventory';
         let apiUrlCategories = '/api/inventory/categories';
         
-        // Only append companyId if it's provided
-        if (companyId) {
+        // Only append companyId if it's a non-empty string
+        if (companyId && companyId.trim() !== '') {
           apiUrlItems += `?companyId=${companyId}`;
           apiUrlCategories += `?companyId=${companyId}`;
         }

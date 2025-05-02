@@ -53,7 +53,7 @@ export default function InventoryPage() {
       </div>
 
       {!isLoading && (
-        // Pass the effectiveCompanyId which can be null for superadmins with no selected company
+        // Pass the effectiveCompanyId only if it's not null
         <InventoryList adminView={isAdmin} companyId={effectiveCompanyId || ""} />
       )}
     </div>

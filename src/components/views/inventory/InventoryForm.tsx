@@ -128,19 +128,23 @@ export default function InventoryForm({ companyId, itemId }: InventoryFormProps)
       
       const method = itemId ? "PUT" : "POST";
       
+      // Create the payload, only including companyId if it's a valid value
+      const payload = {
+        ...values,
+        ...(companyId ? { companyId } : {})
+      };
+      
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...values,
-          companyId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save inventory item");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save inventory item");
       }
 
       toast({
@@ -155,7 +159,7 @@ export default function InventoryForm({ companyId, itemId }: InventoryFormProps)
       console.error("Error saving item:", error);
       toast({
         title: "Error",
-        description: "Failed to save inventory item. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to save inventory item. Please try again.",
         variant: "destructive",
       });
     } finally {

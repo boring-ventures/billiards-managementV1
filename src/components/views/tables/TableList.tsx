@@ -88,7 +88,12 @@ export function TableList({
       }
       
       const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error("Failed to fetch tables");
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch tables");
+      }
+      
       const data = await response.json();
       setTables(data.tables);
     } catch (error) {
