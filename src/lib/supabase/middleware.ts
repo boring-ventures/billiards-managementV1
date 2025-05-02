@@ -4,6 +4,7 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 /**
  * Middleware helper for Supabase authentication
  * This function refreshes the user's session and updates cookies
+ * following Supabase's recommended pattern
  */
 export async function updateSession(request: NextRequest) {
   try {
@@ -13,7 +14,8 @@ export async function updateSession(request: NextRequest) {
     // Create a Supabase client specifically for this middleware request
     const supabase = createMiddlewareClient({ req: request, res: response })
     
-    // This will refresh the user's session if needed and store in the response cookies
+    // This refreshes the user's session and automatically updates cookies
+    // Important: Using getUser() instead of getSession() as recommended by Supabase
     await supabase.auth.getUser()
     
     return response

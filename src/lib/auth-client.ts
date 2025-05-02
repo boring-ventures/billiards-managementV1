@@ -2,6 +2,11 @@
 
 import { supabase } from '@/lib/supabase/client';
 import { UserRole } from '@prisma/client';
+import Cookies from "js-cookie";
+
+// Cookie names
+const FALLBACK_PROFILE_COOKIE = 'fallback-profile';
+const USER_ID_COOKIE = 'current-user-id';
 
 // Types (mimicking the server-side auth.ts)
 export interface User {
@@ -45,7 +50,14 @@ export async function getCurrentUser(): Promise<User | null> {
       return null;
     }
     
-    const userId = data.session.user.id;
+    // Check if we're overriding the user ID for admin view
+    let userId = data.session.user.id;
+    if (typeof window !== 'undefined') {
+      const overrideUserId = Cookies.get(USER_ID_COOKIE);
+      if (overrideUserId) {
+        userId = overrideUserId;
+      }
+    }
     
     // Use the profile API to get role and company info
     try {
@@ -54,6 +66,15 @@ export async function getCurrentUser(): Promise<User | null> {
       if (response.ok) {
         const data = await response.json();
         const profile = data.profile || data;
+        
+        // Store profile in cookie for fallback
+        if (typeof window !== 'undefined') {
+          Cookies.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profile), {
+            expires: 1, // 1 day
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'Lax'
+          });
+        }
         
         // Return user with combined data
         return {
@@ -70,6 +91,27 @@ export async function getCurrentUser(): Promise<User | null> {
       console.error("Error fetching profile:", error);
     }
     
+    // Try to load from cookie fallback
+    if (typeof window !== 'undefined') {
+      try {
+        const fallbackJson = Cookies.get(FALLBACK_PROFILE_COOKIE);
+        if (fallbackJson) {
+          const fallbackProfile = JSON.parse(fallbackJson);
+          return {
+            id: userId,
+            email: data.session.user.email || undefined,
+            name: fallbackProfile.firstName 
+              ? `${fallbackProfile.firstName} ${fallbackProfile.lastName || ''}` 
+              : data.session.user.user_metadata?.name,
+            role: fallbackProfile.role || data.session.user.user_metadata?.role || UserRole.USER,
+            companyId: fallbackProfile.companyId
+          };
+        }
+      } catch (e) {
+        console.error("Error parsing fallback profile:", e);
+      }
+    }
+    
     // Fallback to just the session data without profile info
     return {
       id: userId,
@@ -80,6 +122,23 @@ export async function getCurrentUser(): Promise<User | null> {
   } catch (error) {
     console.error("Error in client-side getCurrentUser:", error);
     return null;
+  }
+}
+
+/**
+ * Sets the current user ID for admin view switching
+ */
+export function setCurrentUserId(userId: string | null): void {
+  if (typeof window !== 'undefined') {
+    if (userId) {
+      Cookies.set(USER_ID_COOKIE, userId, {
+        expires: 1, // 1 day
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Lax'
+      });
+    } else {
+      Cookies.remove(USER_ID_COOKIE);
+    }
   }
 }
 
@@ -108,11 +167,13 @@ export async function isLoggedIn(): Promise<boolean> {
 export async function signOut(): Promise<void> {
   try {
     await supabase.auth.signOut();
-    // Clear any local storage items we might have set
+    // Clear any cookies we might have set
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('currentUserId');
-      localStorage.removeItem('fallbackProfile');
-      localStorage.removeItem('selectedCompanyId');
+      Cookies.remove(USER_ID_COOKIE);
+      Cookies.remove(FALLBACK_PROFILE_COOKIE);
+      // Also clear any company selection
+      Cookies.remove('selected-company-id');
+      Cookies.remove('view-mode');
     }
   } catch (error) {
     console.error('Error signing out:', error);

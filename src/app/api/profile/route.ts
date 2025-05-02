@@ -3,7 +3,7 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import type { UserRole, Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { auth, createOrUpdateUserProfile } from "@/lib/auth";
 
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
@@ -27,17 +27,17 @@ export async function GET(request: NextRequest) {
     // Regular authentication flow for current user
     const supabase = createRouteHandlerClient({ cookies });
     
-    // Get the current user's session
-    const { data, error } = await supabase.auth.getSession();
+    // Get the current user - using getUser instead of getSession
+    const { data, error } = await supabase.auth.getUser();
     
-    if (error || !data.session) {
+    if (error || !data.user) {
       return NextResponse.json(
         { error: error?.message || "Not authenticated" },
         { status: 401 }
       );
     }
 
-    const userId = data.session.user.id;
+    const userId = data.user.id;
     
     // Check if we already have a profile
     let profile = await prisma.profile.findUnique({
@@ -45,20 +45,15 @@ export async function GET(request: NextRequest) {
     });
 
     if (!profile) {
-      // Create a new profile
-      const userMetadata = data.session.user.user_metadata || {};
-      
+      // Use the centralized function to create a profile
       try {
-        profile = await prisma.profile.create({
-          data: {
-            userId,
-            firstName: userMetadata.firstName || userMetadata.first_name || null,
-            lastName: userMetadata.lastName || userMetadata.last_name || null,
-            avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
-            role: userMetadata.role || "USER",
-            active: true,
-          },
-        });
+        profile = await createOrUpdateUserProfile(
+          userId,
+          {
+            ...data.user.user_metadata,
+            email: data.user.email
+          }
+        );
       } catch (error) {
         console.error("Error creating profile:", error);
         return NextResponse.json(
@@ -83,32 +78,33 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
 
-    // Get the current user's session
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    // Get the current user - using getUser instead of getSession
+    const { data, error } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (error || !data.user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const userId = session.user.id;
-    const data = await request.json();
-    const { firstName, lastName, avatarUrl, active } = data;
+    const userId = data.user.id;
+    const requestData = await request.json();
+    const { firstName, lastName, avatarUrl, active } = requestData;
 
-    // Update profile in the database
-    const updatedProfile = await prisma.profile.update({
-      where: { userId },
-      data: {
-        firstName,
-        lastName,
-        avatarUrl,
-        active,
-      },
-    });
-
-    return NextResponse.json(updatedProfile);
+    // Use the centralized function to update the profile
+    try {
+      const updatedProfile = await createOrUpdateUserProfile(
+        userId,
+        { firstName, lastName, avatarUrl },
+        { active }
+      );
+      
+      return NextResponse.json(updatedProfile);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      return NextResponse.json(
+        { error: "Failed to update profile" },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("Error updating profile:", error);
     return NextResponse.json(
@@ -122,7 +118,7 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { userId, firstName, lastName, avatarUrl } = data;
+    const { userId, firstName, lastName, avatarUrl, role } = data;
 
     if (!userId) {
       return NextResponse.json(
@@ -131,7 +127,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If userId is provided directly (during signup flow)
+    // Use the centralized function to create the profile
     try {
       // Check if profile already exists
       const existingProfile = await prisma.profile.findUnique({
@@ -145,23 +141,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Create profile in the database
-      const newProfile = await prisma.profile.create({
-        data: {
-          userId,
-          firstName: firstName || null,
-          lastName: lastName || null,
-          avatarUrl: avatarUrl || null,
-          role: "USER", // This field has a default in the schema but we set it explicitly
-          active: true, // This field has a default in the schema but we set it explicitly
-        },
-      });
+      const newProfile = await createOrUpdateUserProfile(
+        userId,
+        { firstName, lastName, avatarUrl },
+        { forcedRole: role as UserRole }
+      );
 
       return NextResponse.json(newProfile, { status: 201 });
-    } catch (dbError) {
-      console.error("Database error creating profile:", dbError);
+    } catch (error) {
+      console.error("Database error creating profile:", error);
       const errorMessage =
-        dbError instanceof Error ? dbError.message : String(dbError);
+        error instanceof Error ? error.message : String(error);
       return NextResponse.json(
         { error: "Database error creating profile", details: errorMessage },
         { status: 500 }

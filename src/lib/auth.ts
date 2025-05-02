@@ -43,10 +43,14 @@ export interface JoinRequest {
 export interface ProfileType {
   id: string;
   userId: string;
-  firstName?: string;
-  lastName?: string;
+  firstName: string | null;
+  lastName: string | null;
   role: string;
-  companyId?: string;
+  companyId: string | null;
+  avatarUrl: string | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Define request type for type safety
@@ -69,6 +73,94 @@ interface JoinRequestType {
 }
 
 /**
+ * Centralized function to create or update a user profile
+ * This ensures consistent role assignment and profile creation
+ */
+export async function createOrUpdateUserProfile(
+  userId: string,
+  metadata: any = {},
+  options: {
+    forcedRole?: UserRole;
+    companyId?: string;
+    active?: boolean;
+  } = {}
+): Promise<ProfileType> {
+  try {
+    // Check if profile already exists
+    const existingProfile = await prisma.profile.findUnique({
+      where: { userId }
+    });
+    
+    if (existingProfile) {
+      // If profile exists, update if necessary
+      const updateData: any = {};
+      
+      if (options.companyId) updateData.companyId = options.companyId;
+      if (options.forcedRole) updateData.role = options.forcedRole;
+      if (options.active !== undefined) updateData.active = options.active;
+      
+      // Only update if there are changes
+      if (Object.keys(updateData).length > 0) {
+        return await prisma.profile.update({
+          where: { userId },
+          data: updateData
+        });
+      }
+      
+      return existingProfile;
+    }
+    
+    // Extract user information from metadata
+    // Handle various metadata formats consistently
+    const emailName = metadata.email ? metadata.email.split('@')[0] : null;
+    const emailNameParts = emailName ? emailName.split('.') : [];
+    
+    const firstName = 
+      metadata.firstName || 
+      metadata.first_name || 
+      metadata.given_name ||
+      metadata.name?.split(' ')[0] || 
+      (emailNameParts.length > 0 ? 
+        emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : 
+        "User");
+    
+    const lastName = 
+      metadata.lastName || 
+      metadata.last_name || 
+      metadata.family_name || 
+      metadata.name?.split(' ').slice(1).join(' ') || 
+      (emailNameParts.length > 1 ? 
+        emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : 
+        "");
+    
+    // Determine role - check various possible indicators
+    const isSuperAdmin = 
+      metadata.role === UserRole.SUPERADMIN || 
+      metadata.isSuperAdmin === true ||
+      (typeof metadata.is_superadmin === 'boolean' && metadata.is_superadmin);
+    
+    // Use forcedRole if provided, otherwise determine from metadata
+    const role = options.forcedRole || (isSuperAdmin ? UserRole.SUPERADMIN : UserRole.USER);
+    
+    // Create the profile
+    return await prisma.profile.create({
+      data: {
+        userId,
+        firstName,
+        lastName,
+        avatarUrl: metadata.avatarUrl || metadata.avatar_url || null,
+        role,
+        companyId: options.companyId || null,
+        active: options.active ?? true,
+      }
+    });
+  } catch (error) {
+    console.error("Error creating/updating user profile:", error);
+    throw error;
+  }
+}
+
+/**
  * Get authentication information using a three-tier approach:
  * 1. Supabase authenticated session (if available)
  * 2. Find a superadmin in the database as fallback
@@ -78,14 +170,14 @@ interface JoinRequestType {
  */
 export async function auth(): Promise<Session | null> {
   try {
-    // Try to get Supabase auth session
+    // Try to get Supabase auth user - using getUser instead of getSession as recommended by Supabase
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getUser();
       
-      if (data.session?.user) {
+      if (data?.user && !error) {
         // We have an authenticated user, now get their profile including role and company
         const userProfile = await prisma.profile.findUnique({
-          where: { userId: data.session.user.id },
+          where: { userId: data.user.id },
           select: { 
             id: true,
             userId: true,
@@ -96,77 +188,80 @@ export async function auth(): Promise<Session | null> {
           }
         });
         
-        // Return session with combined user data
+        // If no profile exists, create one
+        if (!userProfile) {
+          console.log("Creating profile for authenticated user", data.user.id);
+          const newProfile = await createOrUpdateUserProfile(data.user.id, {
+            ...data.user.user_metadata,
+            email: data.user.email
+          });
+          
+          // Return session with newly created profile data
+          return {
+            user: {
+              id: data.user.id,
+              email: data.user.email || undefined,
+              name: newProfile.firstName ? 
+                `${newProfile.firstName} ${newProfile.lastName || ''}` : 
+                data.user.user_metadata?.name || undefined,
+              role: newProfile.role || UserRole.USER,
+              companyId: newProfile.companyId || undefined
+            },
+            expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          };
+        }
+        
+        // Return session with existing profile data
         return {
           user: {
-            id: data.session.user.id,
-            email: data.session.user.email || undefined,
-            name: userProfile?.firstName ? 
+            id: data.user.id,
+            email: data.user.email || undefined,
+            name: userProfile.firstName ? 
               `${userProfile.firstName} ${userProfile.lastName || ''}` : 
-              data.session.user.user_metadata?.name || undefined,
-            role: userProfile?.role || data.session.user.user_metadata?.role || UserRole.USER,
-            companyId: userProfile?.companyId || undefined
+              data.user.user_metadata?.name || undefined,
+            role: userProfile.role || UserRole.USER,
+            companyId: userProfile.companyId || undefined
           },
-          expires: new Date(data.session.expires_at ? data.session.expires_at * 1000 : Date.now() + 24 * 60 * 60 * 1000),
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         };
       }
     } catch (supabaseError) {
-      console.error("Error getting Supabase session:", supabaseError);
+      console.error("Error getting Supabase user:", supabaseError);
     }
     
-    // If no auth found, try finding a superadmin in the database as fallback
-    const superAdmin = await prisma.profile.findFirst({
-      where: { role: UserRole.SUPERADMIN },
-      select: { 
-        id: true,
-        userId: true, 
-        firstName: true, 
-        lastName: true, 
-        role: true,
-        companyId: true
+    // If no auth found, try finding a superadmin in the database as fallback for development only
+    if (process.env.NODE_ENV === 'development') {
+      console.warn("Using superadmin fallback for development environment");
+      const superAdmin = await prisma.profile.findFirst({
+        where: { role: UserRole.SUPERADMIN },
+        select: { 
+          id: true,
+          userId: true, 
+          firstName: true, 
+          lastName: true, 
+          role: true,
+          companyId: true
+        }
+      });
+      
+      if (superAdmin) {
+        return {
+          user: {
+            id: superAdmin.userId,
+            name: superAdmin.firstName ? `${superAdmin.firstName} ${superAdmin.lastName || ''}` : undefined,
+            role: superAdmin.role,
+            companyId: superAdmin.companyId || undefined
+          },
+          expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        };
       }
-    });
-    
-    if (superAdmin) {
-      return {
-        user: {
-          id: superAdmin.userId,
-          name: superAdmin.firstName ? `${superAdmin.firstName} ${superAdmin.lastName || ''}` : undefined,
-          role: superAdmin.role,
-          companyId: superAdmin.companyId || undefined
-        },
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      };
     }
     
-    // Last resort - use fallback ID
-    const fallbackId = process.env.NEXT_PUBLIC_DEFAULT_USER_ID || "123e4567-e89b-12d3-a456-426614174000";
-    
-    return {
-      user: {
-        id: fallbackId,
-        email: "user@example.com",
-        name: "Demo User",
-        role: UserRole.USER,
-        companyId: undefined
-      },
-      expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    };
+    // No valid session found
+    return null;
   } catch (error) {
     console.error("Error in auth function:", error);
-    // If anything fails, return fallback user
-    const fallbackId = process.env.NEXT_PUBLIC_DEFAULT_USER_ID || "123e4567-e89b-12d3-a456-426614174000";
-    
-    return {
-      user: {
-        id: fallbackId,
-        email: "user@example.com",
-        name: "Demo User",
-        role: UserRole.USER,
-        companyId: undefined
-      },
-      expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    };
+    return null;
   }
 }
 
