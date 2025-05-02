@@ -1,65 +1,54 @@
 -- Implement Row Level Security (RLS) policies for all tables
 -- This migration enables RLS and creates appropriate policies for each table
 
--- PART 1: Create helper functions in a separate transaction to ensure they exist
-BEGIN;
-
--- Create helper function for superadmin check
-DROP FUNCTION IF EXISTS public.is_superadmin();
-CREATE FUNCTION public.is_superadmin()
-RETURNS BOOLEAN AS $$
-  SELECT role = 'SUPERADMIN'
-  FROM profiles
-  WHERE "userId" = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
-
--- Create helper function for admin/superadmin check
-DROP FUNCTION IF EXISTS public.is_admin_or_superadmin();
-CREATE FUNCTION public.is_admin_or_superadmin()
-RETURNS BOOLEAN AS $$
-  SELECT role IN ('ADMIN', 'SUPERADMIN')
-  FROM profiles
-  WHERE "userId" = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
-
--- Create helper function for user company ID
-DROP FUNCTION IF EXISTS public.get_user_company_id();
-CREATE FUNCTION public.get_user_company_id()
-RETURNS UUID AS $$
-  SELECT company_id::UUID
-  FROM profiles
-  WHERE "userId" = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
-
-COMMIT;
-
--- PART 2: Verify functions exist before proceeding
+-- PART 1: Create or update helper functions if needed
 DO $$
 BEGIN
-  -- Check if all required functions exist
+  -- Check if is_superadmin function exists
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_superadmin') THEN
-    RAISE EXCEPTION 'is_superadmin() function does not exist';
+    EXECUTE 'CREATE FUNCTION public.is_superadmin()
+    RETURNS BOOLEAN AS $$
+      SELECT role = ''SUPERADMIN''
+      FROM profiles
+      WHERE "userId" = auth.uid();
+    $$ LANGUAGE sql SECURITY DEFINER;';
+    RAISE NOTICE 'Created is_superadmin() function';
   END IF;
   
+  -- Check if is_admin_or_superadmin function exists
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_admin_or_superadmin') THEN
-    RAISE EXCEPTION 'is_admin_or_superadmin() function does not exist';
+    EXECUTE 'CREATE FUNCTION public.is_admin_or_superadmin()
+    RETURNS BOOLEAN AS $$
+      SELECT role IN (''ADMIN'', ''SUPERADMIN'')
+      FROM profiles
+      WHERE "userId" = auth.uid();
+    $$ LANGUAGE sql SECURITY DEFINER;';
+    RAISE NOTICE 'Created is_admin_or_superadmin() function';
   END IF;
   
+  -- Check if get_user_company_id function exists
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_company_id') THEN
-    RAISE EXCEPTION 'get_user_company_id() function does not exist';
+    EXECUTE 'CREATE FUNCTION public.get_user_company_id()
+    RETURNS UUID AS $$
+      SELECT company_id::UUID
+      FROM profiles
+      WHERE "userId" = auth.uid();
+    $$ LANGUAGE sql SECURITY DEFINER;';
+    RAISE NOTICE 'Created get_user_company_id() function';
   END IF;
   
-  -- If we get here, all functions exist
+  -- All functions exist
   RAISE NOTICE 'All required helper functions exist. Proceeding with RLS policy creation.';
 END $$;
 
--- PART 3: Apply RLS policies
+-- PART 2: Enable RLS and create policies for tables
 
 -- 1. COMPANY-SCOPED TABLES
 -- These tables contain company_id and should be scoped to the user's company
 
 -- Tables
 ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tables_company_access_policy" ON public.tables;
 CREATE POLICY "tables_company_access_policy" 
 ON public.tables
 FOR ALL
@@ -71,6 +60,7 @@ USING (
 
 -- Table Sessions
 ALTER TABLE public.table_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "table_sessions_company_access_policy" ON public.table_sessions;
 CREATE POLICY "table_sessions_company_access_policy" 
 ON public.table_sessions
 FOR ALL
@@ -82,6 +72,7 @@ USING (
 
 -- Table Maintenance
 ALTER TABLE public.table_maintenance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "table_maintenance_company_access_policy" ON public.table_maintenance;
 CREATE POLICY "table_maintenance_company_access_policy" 
 ON public.table_maintenance
 FOR ALL
@@ -93,6 +84,7 @@ USING (
 
 -- Table Reservations
 ALTER TABLE public.table_reservations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "table_reservations_company_access_policy" ON public.table_reservations;
 CREATE POLICY "table_reservations_company_access_policy" 
 ON public.table_reservations
 FOR ALL
@@ -104,6 +96,7 @@ USING (
 
 -- Table Activity Log
 ALTER TABLE public.table_activity_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "table_activity_log_company_access_policy" ON public.table_activity_log;
 CREATE POLICY "table_activity_log_company_access_policy" 
 ON public.table_activity_log
 FOR ALL
@@ -115,6 +108,7 @@ USING (
 
 -- Inventory Categories
 ALTER TABLE public.inventory_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "inventory_categories_company_access_policy" ON public.inventory_categories;
 CREATE POLICY "inventory_categories_company_access_policy" 
 ON public.inventory_categories
 FOR ALL
@@ -126,6 +120,7 @@ USING (
 
 -- Inventory Items
 ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "inventory_items_company_access_policy" ON public.inventory_items;
 CREATE POLICY "inventory_items_company_access_policy" 
 ON public.inventory_items
 FOR ALL
@@ -137,6 +132,7 @@ USING (
 
 -- Inventory Transactions
 ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "inventory_transactions_company_access_policy" ON public.inventory_transactions;
 CREATE POLICY "inventory_transactions_company_access_policy" 
 ON public.inventory_transactions
 FOR ALL
@@ -148,6 +144,7 @@ USING (
 
 -- POS Orders
 ALTER TABLE public.pos_orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "pos_orders_company_access_policy" ON public.pos_orders;
 CREATE POLICY "pos_orders_company_access_policy" 
 ON public.pos_orders
 FOR ALL
@@ -159,6 +156,7 @@ USING (
 
 -- Finance Categories
 ALTER TABLE public.finance_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "finance_categories_company_access_policy" ON public.finance_categories;
 CREATE POLICY "finance_categories_company_access_policy" 
 ON public.finance_categories
 FOR ALL
@@ -170,6 +168,7 @@ USING (
 
 -- Finance Transactions
 ALTER TABLE public.finance_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "finance_transactions_company_access_policy" ON public.finance_transactions;
 CREATE POLICY "finance_transactions_company_access_policy" 
 ON public.finance_transactions
 FOR ALL
@@ -185,6 +184,7 @@ USING (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Policy for viewing profiles
+DROP POLICY IF EXISTS "profiles_view_policy" ON public.profiles;
 CREATE POLICY "profiles_view_policy"
 ON public.profiles
 FOR SELECT
@@ -197,6 +197,7 @@ USING (
 );
 
 -- Policy for updating own profile
+DROP POLICY IF EXISTS "profiles_update_own_policy" ON public.profiles;
 CREATE POLICY "profiles_update_own_policy"
 ON public.profiles
 FOR UPDATE
@@ -207,6 +208,7 @@ USING (
 );
 
 -- Policy for admins to manage profiles in their company
+DROP POLICY IF EXISTS "profiles_admin_management_policy" ON public.profiles;
 CREATE POLICY "profiles_admin_management_policy"
 ON public.profiles
 FOR ALL
@@ -228,6 +230,12 @@ BEGIN
   ) THEN
     -- CompanyJoinRequest table
     EXECUTE 'ALTER TABLE public.company_join_requests ENABLE ROW LEVEL SECURITY;';
+
+    -- Drop existing policies
+    EXECUTE 'DROP POLICY IF EXISTS "join_requests_view_own_policy" ON public.company_join_requests;';
+    EXECUTE 'DROP POLICY IF EXISTS "join_requests_insert_policy" ON public.company_join_requests;';
+    EXECUTE 'DROP POLICY IF EXISTS "join_requests_admin_view_policy" ON public.company_join_requests;';
+    EXECUTE 'DROP POLICY IF EXISTS "join_requests_admin_update_policy" ON public.company_join_requests;';
 
     -- Users can see their own join requests
     EXECUTE 'CREATE POLICY "join_requests_view_own_policy"
@@ -273,6 +281,7 @@ END $$;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own company 
+DROP POLICY IF EXISTS "companies_view_own_policy" ON public.companies;
 CREATE POLICY "companies_view_own_policy"
 ON public.companies
 FOR SELECT
@@ -283,6 +292,7 @@ USING (
 );
 
 -- Admin users can update their own company
+DROP POLICY IF EXISTS "companies_update_own_policy" ON public.companies;
 CREATE POLICY "companies_update_own_policy"
 ON public.companies
 FOR UPDATE
@@ -293,6 +303,7 @@ USING (
 );
 
 -- Superadmins can manage all companies
+DROP POLICY IF EXISTS "companies_superadmin_policy" ON public.companies;
 CREATE POLICY "companies_superadmin_policy"
 ON public.companies
 FOR ALL
@@ -306,6 +317,7 @@ USING (
 ALTER TABLE public.pos_order_items ENABLE ROW LEVEL SECURITY;
 
 -- Users can access POS order items related to their company orders
+DROP POLICY IF EXISTS "pos_order_items_policy" ON public.pos_order_items;
 CREATE POLICY "pos_order_items_policy"
 ON public.pos_order_items
 FOR ALL
@@ -342,6 +354,9 @@ BEGIN
     
     -- Enable RLS on the table
     EXECUTE 'ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;';
+    
+    -- Drop existing policies
+    EXECUTE 'DROP POLICY IF EXISTS "finance_reports_policy" ON public.finance_reports;';
     
     -- Create appropriate policy based on column name
     IF column_exists THEN
@@ -408,7 +423,7 @@ END $$;
 
 -- Add RLS validation queries to verify policies are working
 
--- Create a test function to check RLS policies
+-- Create or replace function to check RLS policies
 CREATE OR REPLACE FUNCTION check_rls_policies()
 RETURNS TABLE (
   table_name TEXT,
