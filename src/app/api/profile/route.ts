@@ -35,18 +35,16 @@ export async function GET(request: NextRequest) {
     console.log('[Profile API] Auth header present:', !!authHeader);
     console.log('[Profile API] Cookie header present:', !!request.headers.get('cookie'));
     
-    // Try to extract bearer token from Authorization header
+    // Get the authenticated user - prefer using getUser() over getSession() for more reliable auth
     let userId = null;
-    let sessionData = null;
     
-    // If we have an auth header, use it to get the session
+    // First try Authorization header if present (Bearer token)
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
         console.log('[Profile API] Using Authorization header token');
         const { data, error } = await supabase.auth.getUser(token);
         if (!error && data.user) {
-          sessionData = data;
           userId = data.user.id;
           console.log('[Profile API] User found from token:', userId);
         } else {
@@ -58,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Fallback to cookies if header auth failed
-    if (!sessionData) {
+    if (!userId) {
       try {
         console.log('[Profile API] Trying cookies for authentication');
         const { data, error } = await supabase.auth.getUser();
@@ -78,7 +76,6 @@ export async function GET(request: NextRequest) {
           );
         }
         
-        sessionData = data;
         userId = data.user.id;
         console.log('[Profile API] User found from cookies:', userId);
       } catch (error) {
@@ -107,10 +104,15 @@ export async function GET(request: NextRequest) {
     if (!profile) {
       // Use the centralized function to create a profile
       try {
+        // Get user data directly from Supabase
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) {
+          throw new Error("Failed to get user data");
+        }
+        
         // Extract user metadata and handle it as a generic object to avoid typing issues
-        const userData = sessionData?.user || {};
-        const metadata = userData.user_metadata as Record<string, any> || {};
-        metadata.email = userData.email;
+        const metadata = userData.user.user_metadata as Record<string, any> || {};
+        metadata.email = userData.user.email;
         
         // Check for superadmin indicators in metadata
         const isSuperAdmin = 
@@ -143,7 +145,11 @@ export async function GET(request: NextRequest) {
       console.log('[Profile API] Existing profile found for user');
     }
 
-    return NextResponse.json(profile);
+    // Add auth information to the response headers to help debugging
+    const headers = new Headers();
+    headers.set('X-Auth-Method', userId ? 'success' : 'none');
+    
+    return NextResponse.json(profile, { headers });
   } catch (error) {
     console.error("[Profile API] Error in profile endpoint:", error);
     return NextResponse.json(
@@ -161,15 +167,15 @@ export async function PUT(request: NextRequest) {
 
     // Try to extract bearer token from Authorization header
     const authHeader = request.headers.get('authorization');
-    let sessionData;
+    let userId = null;
     
-    // If we have an auth header, use it to get the session
+    // First try Authorization header if present
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
         const { data, error } = await supabase.auth.getUser(token);
         if (!error && data.user) {
-          sessionData = data;
+          userId = data.user.id;
         }
       } catch (error) {
         console.error('Error verifying token:', error);
@@ -177,15 +183,14 @@ export async function PUT(request: NextRequest) {
     }
     
     // Fallback to cookies if header auth failed
-    if (!sessionData) {
+    if (!userId) {
       const { data, error } = await supabase.auth.getUser();
       if (error || !data.user) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
       }
-      sessionData = data;
+      userId = data.user.id;
     }
 
-    const userId = sessionData.user.id;
     const requestData = await request.json();
     const { firstName, lastName, avatarUrl, active } = requestData;
 

@@ -25,7 +25,7 @@ export async function updateSession(request: NextRequest) {
     console.log(`[Middleware] Cookies: ${cookieNames.join(', ')}`);
     console.log(`[Middleware] Has auth token cookie: ${hasCookie}, Has Bearer token: ${hasBearerToken}`);
     
-    // IMPORTANT FIX: Check for API routes with Authorization header FIRST
+    // IMPORTANT FIX 1: Check for API routes with Authorization header FIRST
     // This allows API routes to bypass the cookie check and use Bearer token auth
     if (requestPath.startsWith('/api/') && hasBearerToken) {
       console.log('[Middleware] API route with Authorization header - allowing through');
@@ -35,41 +35,28 @@ export async function updateSession(request: NextRequest) {
     // Create a Supabase client specifically for this middleware request
     const supabase = createMiddlewareClient({ req: request, res: response })
     
-    // First refresh the session - this will update cookies if token is expired
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    // IMPORTANT FIX 2: Use getUser() instead of getSession() as recommended by Supabase
+    // This ensures the token is properly validated with the Supabase Auth server
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     
-    if (sessionError) {
-      console.error('[Middleware] Session error:', sessionError.message);
+    if (userError) {
+      console.error('[Middleware] User validation error:', userError.message);
     }
     
-    // If we have a session, ensure it's valid and refresh if needed
-    if (sessionData?.session) {
-      console.log('[Middleware] Active session found');
+    // If we have a valid user, proceed with the request
+    if (userData?.user) {
+      console.log('[Middleware] Valid user found:', userData.user.id);
       
-      // Verify the user is still valid
-      const { data: userData, error: userError } = await supabase.auth.getUser()
+      // Refresh the session to ensure token is updated if needed
+      // This will update the cookies in the response
+      await supabase.auth.getSession();
       
-      if (userError || !userData?.user) {
-        console.error('[Middleware] Error in middleware user verification:', userError?.message)
-        // Clear invalid session
-        await supabase.auth.signOut()
-        
-        // If trying to access protected route, redirect to login
-        if (isProtectedRoute(request.nextUrl.pathname)) {
-          console.log('[Middleware] Redirecting to login due to invalid user');
-          const redirectUrl = new URL('/sign-in', request.url)
-          return NextResponse.redirect(redirectUrl)
-        }
-      } else {
-        console.log('[Middleware] Valid user found:', userData.user.id);
-        
-        // We have a valid user, proceed with request
-        return response;
-      }
+      // We have a valid user, proceed with request
+      return response;
     } 
-    // No session but trying to access protected route
+    // No valid user but trying to access protected route
     else if (isProtectedRoute(request.nextUrl.pathname)) {
-      console.log('[Middleware] No active session for protected route');
+      console.log('[Middleware] No valid user for protected route');
       
       // Check if this is an API route
       if (requestPath.startsWith('/api/')) {
@@ -95,7 +82,7 @@ export async function updateSession(request: NextRequest) {
       redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
       return NextResponse.redirect(redirectUrl)
     } else {
-      console.log('[Middleware] No session, but not a protected route');
+      console.log('[Middleware] No valid user, but not a protected route');
     }
     
     console.log('[Middleware] Proceeding with request');

@@ -18,11 +18,21 @@ export interface Session {
   expires: Date;
 }
 
+// Authentication state tracking
+let authInitialized = false;
+let isAuthenticating = false;
+
 /**
  * Get the current session with additional error handling
  */
 export async function getAuthSession() {
   try {
+    // If we're already in the process of authenticating, wait a bit to avoid race conditions
+    if (isAuthenticating) {
+      console.log('Authentication in progress, waiting...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
     const { data, error } = await supabase.auth.getSession();
     if (error) {
       console.error('Session error in getAuthSession:', error.message);
@@ -40,6 +50,18 @@ export async function getAuthSession() {
  */
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   try {
+    // Wait for authentication to complete if it's in progress
+    if (isAuthenticating) {
+      console.log('Authentication in progress, waiting before fetching...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // If auth isn't initialized yet, try to get the session first
+    if (!authInitialized) {
+      await getAuthSession();
+      authInitialized = true;
+    }
+    
     // Get the current session for the auth token
     const session = await getAuthSession();
     
@@ -49,6 +71,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     if (session?.access_token) {
       // Add the access token as a bearer token
       headers.set('Authorization', `Bearer ${session.access_token}`);
+      console.log('Added auth token to request');
+    } else {
+      console.warn('No access token available for API request');
     }
     
     // Add client info
@@ -66,11 +91,66 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
 }
 
 /**
+ * Sign in with email and password
+ * This wraps the Supabase auth to ensure proper session handling
+ */
+export async function signInWithPassword(email: string, password: string) {
+  try {
+    isAuthenticating = true;
+    console.log('Starting authentication process...');
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    
+    if (error) {
+      console.error('Sign in error:', error.message);
+      isAuthenticating = false;
+      throw error;
+    }
+    
+    // Ensure session is fully established before continuing
+    if (data.session) {
+      // Store the session token in cookie for future requests
+      cookieUtils.set('sb-auth-token', data.session.access_token, {
+        expires: 7, // 7 days
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      console.log('Authentication successful, session established');
+      
+      // Wait a moment to ensure cookies are properly set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Force a session refresh to ensure tokens are properly synchronized
+      await supabase.auth.getUser();
+      
+      authInitialized = true;
+    }
+    
+    isAuthenticating = false;
+    return data;
+  } catch (e) {
+    isAuthenticating = false;
+    throw e;
+  }
+}
+
+/**
  * Client-side version of getCurrentUser that doesn't use Prisma
  * This fetches the profile from the profile API instead
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
+    // If authentication is in progress, wait for it to complete
+    if (isAuthenticating) {
+      console.log('Authentication in progress, waiting before getting user...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
     // Get current session from Supabase
     const { data, error } = await supabase.auth.getSession();
     
