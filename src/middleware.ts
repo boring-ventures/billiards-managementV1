@@ -20,6 +20,15 @@ function isPublicPath(path: string): boolean {
   return PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath))
 }
 
+// Helper to check if path is a static asset
+function isStaticAsset(path: string): boolean {
+  return (
+    path.startsWith('/_next/') || 
+    path.startsWith('/favicon.ico') || 
+    /\.(svg|png|jpg|jpeg|gif|webp)$/.test(path)
+  )
+}
+
 /**
  * Middleware runs on every request to verify authentication
  */
@@ -28,8 +37,8 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
     
     // Skip middleware for public paths and static files
-    if (isPublicPath(pathname) || pathname.match(/\.(.*)$/)) {
-      console.log(`[Middleware] Skipping auth check for auth route: ${pathname}`)
+    if (isPublicPath(pathname) || isStaticAsset(pathname)) {
+      console.log(`[Middleware] Skipping auth check for public path or static asset: ${pathname}`)
       return NextResponse.next()
     }
     
@@ -98,15 +107,9 @@ export async function middleware(request: NextRequest) {
   }
 }
 
+// Use a simple matcher that doesn't rely on complex patterns with capturing groups
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder (public files)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/:path*', 
   ],
 }
