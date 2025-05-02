@@ -11,9 +11,6 @@ export async function updateSession(request: NextRequest) {
     // Create a response object that we'll modify and return
     const response = NextResponse.next()
     
-    // Create a Supabase client specifically for this middleware request
-    const supabase = createMiddlewareClient({ req: request, res: response })
-    
     // Log the request path to help debug routing issues
     const requestPath = request.nextUrl.pathname;
     console.log(`[Middleware] Processing request for: ${requestPath}`);
@@ -27,6 +24,16 @@ export async function updateSession(request: NextRequest) {
     const hasCookie = request.cookies.has('sb-auth-token') || request.cookies.has('sb-refresh-token');
     console.log(`[Middleware] Cookies: ${cookieNames.join(', ')}`);
     console.log(`[Middleware] Has auth token cookie: ${hasCookie}, Has Bearer token: ${hasBearerToken}`);
+    
+    // IMPORTANT FIX: Check for API routes with Authorization header FIRST
+    // This allows API routes to bypass the cookie check and use Bearer token auth
+    if (requestPath.startsWith('/api/') && hasBearerToken) {
+      console.log('[Middleware] API route with Authorization header - allowing through');
+      return response; // Let the API route handle the auth itself
+    }
+    
+    // Create a Supabase client specifically for this middleware request
+    const supabase = createMiddlewareClient({ req: request, res: response })
     
     // First refresh the session - this will update cookies if token is expired
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
@@ -60,11 +67,6 @@ export async function updateSession(request: NextRequest) {
         return response;
       }
     } 
-    // Special case for API routes with Authorization header
-    else if (requestPath.startsWith('/api/') && hasBearerToken) {
-      console.log('[Middleware] API route with Authorization header - allowing through');
-      return response; // Let the API route handle the auth itself
-    }
     // No session but trying to access protected route
     else if (isProtectedRoute(request.nextUrl.pathname)) {
       console.log('[Middleware] No active session for protected route');

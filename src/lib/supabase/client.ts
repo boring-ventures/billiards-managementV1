@@ -25,16 +25,40 @@ const createCookieStorage = () => {
     },
     setItem: (key: string, value: string) => {
       if (typeof document === 'undefined') return;
+      
+      // Important: Determine if we're in production for cookie settings
+      const isProduction = process.env.NODE_ENV === 'production';
+      
+      // Get domain settings for proper cookie storage in production
+      let domain;
+      if (isProduction && typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
+          domain = hostname.includes('.') ? hostname : undefined;
+        }
+      }
+      
       cookieUtils.set(key, value, { 
         expires: 7, // 7 days
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProduction,
         sameSite: 'lax',
         path: '/', // Ensure cookies are available for entire domain
+        domain, // Use determined domain in production
       });
     },
     removeItem: (key: string) => {
       if (typeof document === 'undefined') return;
-      cookieUtils.remove(key, { path: '/' }); // Ensure the same path is used for removal
+      
+      // Use same domain settings for removal
+      let domain;
+      if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
+          domain = hostname.includes('.') ? hostname : undefined;
+        }
+      }
+      
+      cookieUtils.remove(key, { path: '/', domain });
     }
   };
 };
@@ -74,6 +98,7 @@ export function createSupabaseClient() {
       flowType: 'pkce',
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // Note: Cookie settings are managed by the cookieStorage implementation above
     },
     global: {
       headers: {
@@ -93,5 +118,5 @@ export function createSupabaseClient() {
   return newInstance;
 }
 
-// Only create the singleton client instance once
+// Get the singleton instance
 export const supabase = createSupabaseClient();

@@ -3,10 +3,10 @@ import Cookies from 'js-cookie';
 // Constants for cookie names
 export const AUTH_TOKEN_COOKIE = 'sb-auth-token';
 export const REFRESH_TOKEN_COOKIE = 'sb-refresh-token';
-export const COMPANY_SELECTION_COOKIE = 'selected-company-id';
+export const COMPANY_SELECTION_COOKIE = 'company-selection';
 export const VIEW_MODE_COOKIE = 'view-mode';
-export const USER_ID_COOKIE = 'current-user-id';
-export const FALLBACK_PROFILE_COOKIE = 'fallback-profile';
+export const USER_ID_COOKIE = 'user-id';
+export const FALLBACK_PROFILE_COOKIE = 'profile-fallback';
 
 // Client-side cookie utilities
 export const cookieUtils = {
@@ -42,16 +42,32 @@ export const cookieUtils = {
       // Always set path to '/' by default for consistency
       const path = options?.path || '/';
       
+      // In production, dynamically determine domain based on window.location.hostname
+      // This helps with Vercel deployments that might use custom domains
+      let domain = options?.domain;
+      if (isProduction && !domain && typeof window !== 'undefined') {
+        // Get the root domain (example.com from subdomain.example.com)
+        // This allows cookies to work across subdomains if needed
+        const hostname = window.location.hostname;
+        // Don't set domain for localhost or IP addresses
+        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
+          // For vercel.app domains or custom domains
+          domain = hostname.includes('.') ? hostname : undefined;
+        }
+      }
+      
       Cookies.set(key, value, {
         ...options,
         secure: secureByDefault || options?.secure,
         sameSite: options?.sameSite || 'lax',
         path,
+        domain
       });
       
       // Verify cookie was set
       if (!Cookies.get(key) && key.startsWith('sb-')) {
         console.warn(`Warning: Cookie ${key} may not have been set properly`);
+        console.log(`Attempted to set cookie with domain: ${domain}, path: ${path}`);
       }
     } catch (error) {
       console.error(`Error setting cookie ${key}:`, error);
@@ -70,7 +86,19 @@ export const cookieUtils = {
       // Always set path to '/' by default for consistency with set method
       const path = options?.path || '/';
       
-      Cookies.remove(key, { ...options, path });
+      // In production, dynamically determine domain based on window.location.hostname
+      // This helps with Vercel deployments that might use custom domains
+      let domain = options?.domain;
+      if (process.env.NODE_ENV === 'production' && !domain && typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        // Don't set domain for localhost or IP addresses
+        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
+          // For vercel.app domains or custom domains
+          domain = hostname.includes('.') ? hostname : undefined;
+        }
+      }
+      
+      Cookies.remove(key, { ...options, path, domain });
     } catch (error) {
       console.error(`Error removing cookie ${key}:`, error);
     }
@@ -94,7 +122,16 @@ export const cookieUtils = {
       
       // Remove each cookie with consistent path
       cookies.forEach(cookie => {
-        Cookies.remove(cookie, { path: '/' });
+        // Get the same domain settings used when setting cookies
+        let domain;
+        if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+          const hostname = window.location.hostname;
+          if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
+            domain = hostname.includes('.') ? hostname : undefined;
+          }
+        }
+        
+        Cookies.remove(cookie, { path: '/', domain });
       });
     } catch (error) {
       console.error('Error clearing auth cookies:', error);
