@@ -1,27 +1,59 @@
 -- Implement Row Level Security (RLS) policies for all tables
 -- This migration enables RLS and creates appropriate policies for each table
 
--- Create helper functions
-CREATE OR REPLACE FUNCTION public.is_superadmin()
+-- PART 1: Create helper functions in a separate transaction to ensure they exist
+BEGIN;
+
+-- Create helper function for superadmin check
+DROP FUNCTION IF EXISTS public.is_superadmin();
+CREATE FUNCTION public.is_superadmin()
 RETURNS BOOLEAN AS $$
   SELECT role = 'SUPERADMIN'
   FROM profiles
   WHERE "userId" = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
 
-CREATE OR REPLACE FUNCTION public.is_admin_or_superadmin()
+-- Create helper function for admin/superadmin check
+DROP FUNCTION IF EXISTS public.is_admin_or_superadmin();
+CREATE FUNCTION public.is_admin_or_superadmin()
 RETURNS BOOLEAN AS $$
   SELECT role IN ('ADMIN', 'SUPERADMIN')
   FROM profiles
   WHERE "userId" = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
 
-CREATE OR REPLACE FUNCTION public.get_user_company_id()
+-- Create helper function for user company ID
+DROP FUNCTION IF EXISTS public.get_user_company_id();
+CREATE FUNCTION public.get_user_company_id()
 RETURNS UUID AS $$
   SELECT company_id::UUID
   FROM profiles
   WHERE "userId" = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
+
+COMMIT;
+
+-- PART 2: Verify functions exist before proceeding
+DO $$
+BEGIN
+  -- Check if all required functions exist
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_superadmin') THEN
+    RAISE EXCEPTION 'is_superadmin() function does not exist';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_admin_or_superadmin') THEN
+    RAISE EXCEPTION 'is_admin_or_superadmin() function does not exist';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_company_id') THEN
+    RAISE EXCEPTION 'get_user_company_id() function does not exist';
+  END IF;
+  
+  -- If we get here, all functions exist
+  RAISE NOTICE 'All required helper functions exist. Proceeding with RLS policy creation.';
+END $$;
+
+-- PART 3: Apply RLS policies
 
 -- 1. COMPANY-SCOPED TABLES
 -- These tables contain company_id and should be scoped to the user's company
@@ -32,9 +64,9 @@ CREATE POLICY "tables_company_access_policy"
 ON public.tables
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Table Sessions
@@ -43,9 +75,9 @@ CREATE POLICY "table_sessions_company_access_policy"
 ON public.table_sessions
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Table Maintenance
@@ -54,9 +86,9 @@ CREATE POLICY "table_maintenance_company_access_policy"
 ON public.table_maintenance
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Table Reservations
@@ -65,9 +97,9 @@ CREATE POLICY "table_reservations_company_access_policy"
 ON public.table_reservations
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Table Activity Log
@@ -76,9 +108,9 @@ CREATE POLICY "table_activity_log_company_access_policy"
 ON public.table_activity_log
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Inventory Categories
@@ -87,9 +119,9 @@ CREATE POLICY "inventory_categories_company_access_policy"
 ON public.inventory_categories
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Inventory Items
@@ -98,9 +130,9 @@ CREATE POLICY "inventory_items_company_access_policy"
 ON public.inventory_items
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Inventory Transactions
@@ -109,9 +141,9 @@ CREATE POLICY "inventory_transactions_company_access_policy"
 ON public.inventory_transactions
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- POS Orders
@@ -120,9 +152,9 @@ CREATE POLICY "pos_orders_company_access_policy"
 ON public.pos_orders
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Finance Categories
@@ -131,9 +163,9 @@ CREATE POLICY "finance_categories_company_access_policy"
 ON public.finance_categories
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Finance Transactions
@@ -142,9 +174,9 @@ CREATE POLICY "finance_transactions_company_access_policy"
 ON public.finance_transactions
 FOR ALL
 USING (
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR 
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- 2. USER-SPECIFIC RLS POLICIES
@@ -159,9 +191,9 @@ FOR SELECT
 USING (
   ("userId" = auth.uid())
   OR
-  (company_id = get_user_company_id())
+  (company_id = public.get_user_company_id())
   OR
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Policy for updating own profile
@@ -171,7 +203,7 @@ FOR UPDATE
 USING (
   "userId" = auth.uid()
   OR
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Policy for admins to manage profiles in their company
@@ -179,9 +211,9 @@ CREATE POLICY "profiles_admin_management_policy"
 ON public.profiles
 FOR ALL
 USING (
-  (company_id = get_user_company_id() AND is_admin_or_superadmin())
+  (company_id = public.get_user_company_id() AND public.is_admin_or_superadmin())
   OR
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- 3. COMPANY JOIN REQUESTS
@@ -218,9 +250,9 @@ BEGIN
     ON public.company_join_requests
     FOR SELECT
     USING (
-      (company_id = get_user_company_id() AND is_admin_or_superadmin())
+      (company_id = public.get_user_company_id() AND public.is_admin_or_superadmin())
       OR
-      is_superadmin()
+      public.is_superadmin()
     );';
 
     -- Admins can update join requests for their company
@@ -228,9 +260,9 @@ BEGIN
     ON public.company_join_requests
     FOR UPDATE
     USING (
-      (company_id = get_user_company_id() AND is_admin_or_superadmin())
+      (company_id = public.get_user_company_id() AND public.is_admin_or_superadmin())
       OR
-      is_superadmin()
+      public.is_superadmin()
     );';
   END IF;
 END $$;
@@ -245,9 +277,9 @@ CREATE POLICY "companies_view_own_policy"
 ON public.companies
 FOR SELECT
 USING (
-  (id = get_user_company_id())
+  (id = public.get_user_company_id())
   OR
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Admin users can update their own company
@@ -255,9 +287,9 @@ CREATE POLICY "companies_update_own_policy"
 ON public.companies
 FOR UPDATE
 USING (
-  (id = get_user_company_id() AND is_admin_or_superadmin())
+  (id = public.get_user_company_id() AND public.is_admin_or_superadmin())
   OR
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- Superadmins can manage all companies
@@ -265,7 +297,7 @@ CREATE POLICY "companies_superadmin_policy"
 ON public.companies
 FOR ALL
 USING (
-  is_superadmin()
+  public.is_superadmin()
 );
 
 -- 5. SPECIAL CASES FOR RELATED TABLES
@@ -282,9 +314,9 @@ USING (
     SELECT 1 FROM pos_orders
     WHERE pos_orders.id = pos_order_items.order_id
     AND (
-      pos_orders.company_id = get_user_company_id()
+      pos_orders.company_id = public.get_user_company_id()
       OR
-      is_superadmin()
+      public.is_superadmin()
     )
   )
 );
@@ -324,12 +356,12 @@ BEGIN
           EXISTS (
             SELECT 1 FROM profiles 
             WHERE finance_reports.profile_id = profiles.id
-            AND profiles.company_id = get_user_company_id()
+            AND profiles.company_id = public.get_user_company_id()
           )
-          AND is_admin_or_superadmin()
+          AND public.is_admin_or_superadmin()
         )
         OR
-        is_superadmin()
+        public.is_superadmin()
       );';
     ELSE
       -- Check if user_id exists
@@ -352,12 +384,12 @@ BEGIN
             EXISTS (
               SELECT 1 FROM profiles 
               WHERE finance_reports.user_id = profiles."userId"
-              AND profiles.company_id = get_user_company_id()
+              AND profiles.company_id = public.get_user_company_id()
             )
-            AND is_admin_or_superadmin()
+            AND public.is_admin_or_superadmin()
           )
           OR
-          is_superadmin()
+          public.is_superadmin()
         );';
       ELSE
         -- Fall back to company_id only
@@ -365,9 +397,9 @@ BEGIN
         ON public.finance_reports
         FOR ALL
         USING (
-          (company_id = get_user_company_id())
+          (company_id = public.get_user_company_id())
           OR
-          is_superadmin()
+          public.is_superadmin()
         );';
       END IF;
     END IF;
