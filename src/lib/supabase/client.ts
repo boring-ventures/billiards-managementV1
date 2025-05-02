@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import Cookies from 'js-cookie';
+import { cookieUtils, AUTH_TOKEN_COOKIE } from '@/lib/cookie-utils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -7,9 +8,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables");
 }
-
-// Storage key constants
-const STORAGE_KEY = 'sb-auth-token';
 
 // Global instance that is shared between calls in the same browser session
 let globalInstance: ReturnType<typeof createClient> | null = null;
@@ -22,21 +20,19 @@ const createCookieStorage = () => {
   return {
     getItem: (key: string) => {
       if (typeof document === 'undefined') return null;
-      const value = Cookies.get(key);
-      return value || null;
+      return cookieUtils.get(key) || null;
     },
     setItem: (key: string, value: string) => {
       if (typeof document === 'undefined') return;
-      // Store in cookie with Secure and SameSite flags for better security
-      Cookies.set(key, value, { 
+      cookieUtils.set(key, value, { 
         expires: 7, // 7 days
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax'
+        sameSite: 'lax'
       });
     },
     removeItem: (key: string) => {
       if (typeof document === 'undefined') return;
-      Cookies.remove(key);
+      cookieUtils.remove(key);
     }
   };
 };
@@ -47,7 +43,12 @@ const createCookieStorage = () => {
  * Uses cookies instead of localStorage for better SSR compatibility
  */
 export function createSupabaseClient() {
-  // For SSR, always create a fresh client
+  // In a browser environment, return the singleton instance if it exists
+  if (typeof window !== 'undefined' && globalInstance) {
+    return globalInstance;
+  }
+  
+  // For SSR, create a non-persistent client
   if (typeof window === 'undefined') {
     return createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -59,16 +60,14 @@ export function createSupabaseClient() {
     });
   }
   
-  // In browser, use global singleton
-  if (globalInstance) return globalInstance;
-  
   // Create a cookie-based storage system
   const cookieStorage = createCookieStorage();
   
-  globalInstance = createClient(supabaseUrl, supabaseAnonKey, {
+  // Create a new client instance for browser
+  const newInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
-      storageKey: STORAGE_KEY,
+      storageKey: AUTH_TOKEN_COOKIE,
       storage: cookieStorage,
       flowType: 'pkce',
       autoRefreshToken: true,
@@ -76,8 +75,11 @@ export function createSupabaseClient() {
     },
   });
   
-  return globalInstance;
+  // Store the instance globally
+  globalInstance = newInstance;
+  
+  return newInstance;
 }
 
-// Export a singleton instance for direct imports
+// Only create the singleton client instance once
 export const supabase = createSupabaseClient();
