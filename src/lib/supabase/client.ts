@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from "@/types/database.types";
 import { cookieUtils, AUTH_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE } from '@/lib/cookie-utils';
 
@@ -13,139 +13,75 @@ if (!supabaseUrl || !supabaseAnonKey) {
 let globalInstance: any = null;
 
 /**
- * Creates a custom storage interface that uses cookies instead of localStorage
- * This provides better SSR compatibility and security
+ * Create a Supabase client configured for browser usage with the SSR package
  */
-const createCookieStorage = () => {
-  return {
-    getItem: (key: string) => {
-      if (typeof document === 'undefined') {
-        return null;
-      }
-      
-      try {
-        // Map supabase keys to our cookie names
-        let cookieKey = key;
-        if (key === 'supabase.auth.token') {
-          cookieKey = AUTH_TOKEN_COOKIE;
-        } else if (key === 'supabase.auth.refreshToken') {
-          cookieKey = REFRESH_TOKEN_COOKIE;
-        } else if (key === 'supabase.auth.accessToken') {
-          cookieKey = ACCESS_TOKEN_COOKIE;
+export const supabase = createBrowserClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    cookies: {
+      get(name: string) {
+        if (typeof document === 'undefined') return null;
+        
+        try {
+          const value = cookieUtils.get(name);
+          console.log(`[Cookie Storage] Reading ${name}: ${value ? 'present' : 'not found'}`);
+          return value || null;
+        } catch (error) {
+          console.error(`[Cookie Storage] Error getting ${name}:`, error);
+          return null;
         }
+      },
+      set(name: string, value: string, options: any) {
+        if (typeof document === 'undefined') return;
         
-        const value = cookieUtils.get(cookieKey);
-        console.log(`[Cookie Storage] Reading ${cookieKey}: ${value ? 'present' : 'not found'}`);
-        return value || null;
-      } catch (error) {
-        console.error(`[Cookie Storage] Error getting ${key}:`, error);
-        return null;
-      }
-    },
-    setItem: (key: string, value: string) => {
-      if (typeof document === 'undefined') {
-        return;
-      }
-      
-      try {
-        console.log(`[Cookie Storage] Setting ${key}`);
-        
-        // Map Supabase keys to our cookie names
-        if (key === 'supabase.auth.token') {
-          const tokenData = JSON.parse(value);
+        try {
+          console.log(`[Cookie Storage] Setting ${name}`);
           
-          // Store the actual token in a separate cookie for API auth
-          if (tokenData?.access_token) {
-            cookieUtils.set(ACCESS_TOKEN_COOKIE, tokenData.access_token, {
+          // For auth tokens, set with specific options
+          if (name.includes('access-token')) {
+            cookieUtils.set(ACCESS_TOKEN_COOKIE, value, {
+              ...options,
               expires: 1, // 1 day (shorter expiry for security)
               secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax', 
+              sameSite: 'lax',
               path: '/'
             });
-          }
-          
-          // Store refresh token separately too
-          if (tokenData?.refresh_token) {
-            cookieUtils.set(REFRESH_TOKEN_COOKIE, tokenData.refresh_token, {
-              expires: 30, // 30 days (longer expiry for refresh)
+          } else if (name.includes('refresh-token')) {
+            cookieUtils.set(REFRESH_TOKEN_COOKIE, value, {
+              ...options,
+              expires: 30, // 30 days
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/'
+            });
+          } else {
+            // For other cookies, use default options
+            cookieUtils.set(name, value, {
+              ...options,
               secure: process.env.NODE_ENV === 'production',
               sameSite: 'lax',
               path: '/'
             });
           }
-          
-          // Store the full auth token data as well
-          cookieUtils.set(AUTH_TOKEN_COOKIE, value, {
-            expires: 7, // 7 days
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/'
-          });
-        } else {
-          // For other keys, just store directly
-          cookieUtils.set(key, value, {
-            expires: 7, // 7 days
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/'
-          });
+        } catch (error) {
+          console.error(`[Cookie Storage] Error setting ${name}:`, error);
         }
-      } catch (error) {
-        console.error(`[Cookie Storage] Error setting ${key}:`, error);
+      },
+      remove(name: string, options: any) {
+        if (typeof document === 'undefined') return;
+        
+        try {
+          console.log(`[Cookie Storage] Removing ${name}`);
+          cookieUtils.remove(name, { path: '/' });
+        } catch (error) {
+          console.error(`[Cookie Storage] Error removing ${name}:`, error);
+        }
       }
     },
-    removeItem: (key: string) => {
-      if (typeof document === 'undefined') {
-        return;
-      }
-      
-      try {
-        console.log(`[Cookie Storage] Removing ${key}`);
-        // Remove both mapped and original keys
-        if (key === 'supabase.auth.token') {
-          cookieUtils.remove(AUTH_TOKEN_COOKIE, { path: '/' });
-          cookieUtils.remove(ACCESS_TOKEN_COOKIE, { path: '/' });
-        } else if (key === 'supabase.auth.refreshToken') {
-          cookieUtils.remove(REFRESH_TOKEN_COOKIE, { path: '/' });
-        } else {
-          cookieUtils.remove(key, { path: '/' });
-        }
-      } catch (error) {
-        console.error(`[Cookie Storage] Error removing ${key}:`, error);
-      }
-    }
-  };
-};
-
-/**
- * Create a Supabase client configured for browser usage
- */
-export const supabase = createClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
     auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-      storage: createCookieStorage(),
       flowType: 'pkce',
       debug: process.env.NODE_ENV !== 'production'
-    },
-    global: {
-      fetch: (...args) => {
-        // Add custom headers to all Supabase requests
-        // For troubleshooting authentication issues
-        const [url, config] = args;
-        const headers = (config?.headers || {}) as Record<string, string>;
-        return fetch(url, {
-          ...config,
-          headers: {
-            ...headers,
-            'X-Client-Info': 'supabase-js-client/2.0'
-          }
-        });
-      }
     }
   }
 );

@@ -1,75 +1,74 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
-import { createOrUpdateUserProfile } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
+/**
+ * Auth callback handler for Supabase authentication
+ * This endpoint receives the authentication code from Supabase
+ * and exchanges it for tokens, storing them in cookies
+ */
 export async function GET(request: NextRequest) {
-  try {
-    const requestUrl = new URL(request.url);
-    const code = requestUrl.searchParams.get("code");
-    
-    // If code is missing, redirect to sign-in
-    if (!code) {
-      console.error("[Auth:Callback] No code parameter found");
-      return NextResponse.redirect(new URL("/sign-in", request.url));
-    }
-    
-    // Get the cookies and create a route handler client
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    
-    // Exchange the code for a session with proper error handling
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    
-    if (error || !data?.session) {
-      console.error("[Auth:Callback] Error exchanging code for session:", error);
-      return NextResponse.redirect(new URL("/sign-in", request.url));
-    }
-    
-    // We now have a valid session
-    const userId = data.session.user.id;
-    const user = data.session.user;
-    console.log("[Auth:Callback] Successfully authenticated user:", userId);
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get('code')
+  const next = requestUrl.searchParams.get('next') || '/dashboard'
 
+  if (code) {
     try {
-      // Check if profile already exists
-      const existingProfile = await prisma.profile.findUnique({
-        where: { userId },
-      });
-
-      if (!existingProfile) {
-        console.log("[Auth:Callback] Creating new profile");
-        
-        // Use the centralized function to create a profile
-        await createOrUpdateUserProfile(
-          userId,
-          {
-            ...user.user_metadata,
-            email: user.email
+      // Create a Supabase client for handling the auth exchange
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: {
+            flowType: 'pkce',
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            persistSession: false
           }
-        );
-        
-        console.log("[Auth:Callback] Profile created successfully");
+        }
+      )
+
+      // Exchange the code for a session
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (error || !data?.session) {
+        console.error('Error exchanging code for session:', error?.message)
+        return NextResponse.redirect(
+          new URL(`/auth-error?error=${encodeURIComponent(error?.message || 'Unknown error')}`, requestUrl.origin)
+        )
       }
+
+      // Create a response with the proper redirect
+      const response = NextResponse.redirect(new URL(next, requestUrl.origin))
+
+      // Set cookies manually for the session
+      const { access_token, refresh_token } = data.session
       
-      // Create a response with the appropriate redirect
-      const response = NextResponse.redirect(new URL("/dashboard", request.url));
+      response.cookies.set({
+        name: 'sb-access-token',
+        value: access_token,
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60, // 1 hour
+        secure: process.env.NODE_ENV === 'production'
+      })
       
-      // Set session cookie to maximum age (default 2 weeks) to ensure it persists
-      // All this is handled by supabase automatically, but we can explicitly
-      // ensure response headers are properly set
+      response.cookies.set({
+        name: 'sb-refresh-token',
+        value: refresh_token,
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        secure: process.env.NODE_ENV === 'production'
+      })
       
-      return response;
-    } catch (error) {
-      console.error("[Auth:Callback] Error processing authenticated user:", error);
-      // Even if there was an error creating the profile, redirect to dashboard
-      // The dashboard will handle creating the profile if needed
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return response
+    } catch (err) {
+      console.error('Unexpected error in auth callback:', err)
+      return NextResponse.redirect(new URL('/sign-in', requestUrl.origin))
     }
-  } catch (generalError) {
-    console.error("[Auth:Callback] Unexpected error:", generalError);
-    return NextResponse.redirect(new URL("/sign-in", request.url));
   }
+
+  // No code found, redirect to sign-in
+  console.error('No code found in callback URL')
+  return NextResponse.redirect(new URL('/sign-in', requestUrl.origin))
 }

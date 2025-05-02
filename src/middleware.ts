@@ -9,14 +9,22 @@ export const runtime = 'experimental-edge';
 export async function middleware(request: NextRequest) {
   console.log(`[Root Middleware] Processing ${request.method} request for: ${request.nextUrl.pathname}`);
   
-  // Skip static assets to improve performance
+  // Skip static assets and auth-related endpoints to improve performance and prevent loops
   if (
     request.nextUrl.pathname.startsWith('/_next') ||
-    request.nextUrl.pathname.startsWith('/api/auth') ||  // Skip auth endpoints to prevent loops
+    request.nextUrl.pathname.startsWith('/api/auth') ||
+    request.nextUrl.pathname.startsWith('/auth/callback') ||
+    request.nextUrl.pathname.startsWith('/auth/confirm') ||
     request.nextUrl.pathname.includes('.') ||
     request.nextUrl.pathname.startsWith('/favicon')
   ) {
     console.log(`[Root Middleware] Skipping middleware for: ${request.nextUrl.pathname}`);
+    return NextResponse.next();
+  }
+  
+  // If this is an API route with authorization header, let it pass through
+  if (request.nextUrl.pathname.startsWith('/api/') && request.headers.has('authorization')) {
+    console.log(`[Root Middleware] API route with auth header, skipping session update: ${request.nextUrl.pathname}`);
     return NextResponse.next();
   }
   
