@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
@@ -26,14 +26,30 @@ export async function GET(request: NextRequest) {
       return response;
     }
     
-    // Regular authentication flow for current user
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    
     // Log cookies and auth headers for debugging
     const authHeader = request.headers.get('authorization');
     console.log('[Profile API] Auth header present:', !!authHeader);
     console.log('[Profile API] Cookie header present:', !!request.headers.get('cookie'));
+    
+    // Create Supabase client with the new SSR package
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            const cookie = request.cookies.get(name);
+            return cookie?.value || null;
+          },
+          set() {
+            // Can't set cookies in API routes
+          },
+          remove() {
+            // Can't remove cookies in API routes
+          }
+        }
+      }
+    );
     
     // Get the authenticated user - prefer using getUser() over getSession() for more reliable auth
     let userId = null;
@@ -63,7 +79,7 @@ export async function GET(request: NextRequest) {
         if (error) {
           console.error('[Profile API] Cookie auth error:', error.message);
           return NextResponse.json(
-            { error: error?.message || "Not authenticated" },
+            { error: error?.message || "Not authenticated", detail: "No active session" },
             { status: 401 }
           );
         }
@@ -71,7 +87,7 @@ export async function GET(request: NextRequest) {
         if (!data?.user) {
           console.error('[Profile API] No user found in cookie auth');
           return NextResponse.json(
-            { error: "User not found" },
+            { error: "User not found", detail: "No active session" },
             { status: 401 }
           );
         }
@@ -81,7 +97,7 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error('[Profile API] Supabase getUser error:', error);
         return NextResponse.json(
-          { error: "Authentication error" },
+          { error: "Authentication error", detail: "No active session" },
           { status: 401 }
         );
       }
@@ -91,7 +107,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       console.error('[Profile API] Could not determine user ID');
       return NextResponse.json(
-        { error: "User not authenticated" },
+        { error: "User not authenticated", detail: "No active session" },
         { status: 401 }
       );
     }
@@ -162,8 +178,25 @@ export async function GET(request: NextRequest) {
 // PUT: Update profile for the current authenticated user
 export async function PUT(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    // Create Supabase client with the new SSR package
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            const cookie = request.cookies.get(name);
+            return cookie?.value || null;
+          },
+          set() {
+            // Can't set cookies in API routes
+          },
+          remove() {
+            // Can't remove cookies in API routes
+          }
+        }
+      }
+    );
 
     // Try to extract bearer token from Authorization header
     const authHeader = request.headers.get('authorization');
@@ -186,7 +219,7 @@ export async function PUT(request: NextRequest) {
     if (!userId) {
       const { data, error } = await supabase.auth.getUser();
       if (error || !data.user) {
-        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+        return NextResponse.json({ error: "Not authenticated", detail: "No active session" }, { status: 401 });
       }
       userId = data.user.id;
     }

@@ -14,39 +14,34 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Missing Supabase environment variables in middleware')
+    return response
+  }
+
   // Create a Supabase client specifically for handling auth in the middleware
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
           const cookie = request.cookies.get(name)?.value
-          return cookie
+          return cookie || null
         },
         set(name: string, value: string, options: any) {
-          // Only set cookies if we're in a Vercel environment or production
-          if (request.headers.get('host')?.includes('vercel.app') || process.env.NODE_ENV === 'production') {
-            // For Vercel deployments, we need to ensure the cookie domain is appropriate
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-              // Don't use domain-specific cookies for Vercel deployments
-              domain: undefined,
-              sameSite: 'lax',
-              path: '/'
-            })
-          } else {
-            // For local development
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-              sameSite: 'lax',
-              path: '/'
-            })
-          }
+          // Set the cookie on the response
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+            sameSite: 'lax',
+            path: '/',
+            secure: process.env.NODE_ENV === 'production'
+          })
         },
         remove(name: string, options: any) {
           response.cookies.set({
@@ -54,27 +49,32 @@ export async function updateSession(request: NextRequest) {
             value: '',
             ...options,
             maxAge: 0,
+            path: '/',
           })
         },
       },
     }
   )
 
-  // This gets the user and checks if there's a valid session
+  // This gets the user and refreshes the session if needed
   const { data } = await supabase.auth.getUser()
   const user = data?.user
   
   // Log status for debugging
   const pathname = request.nextUrl.pathname
+  
+  // Don't redirect API routes, but still refresh the session
+  if (pathname.startsWith('/api/')) {
+    return response
+  }
+  
   if (user) {
     console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
   } else {
     console.log(`[Middleware] No session found for path ${pathname}`)
     
     // If requesting a protected route, redirect to login
-    if (pathname.startsWith('/dashboard') || 
-        pathname.startsWith('/profile') ||
-        pathname.startsWith('/admin')) {
+    if (isProtectedRoute(pathname)) {
       return NextResponse.redirect(new URL('/sign-in', request.url))
     }
   }
@@ -88,8 +88,9 @@ export async function updateSession(request: NextRequest) {
 function isProtectedRoute(pathname: string): boolean {
   return (
     pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/profile') ||
     pathname.startsWith('/company-selection') ||
     pathname.startsWith('/waiting-approval') ||
-    pathname.startsWith('/api/') // API routes are also protected
+    pathname.startsWith('/admin')
   )
 } 

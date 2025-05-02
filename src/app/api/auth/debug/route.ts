@@ -1,74 +1,128 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 /**
- * API endpoint to check authentication status without exposing sensitive data
- * This is useful for debugging authentication issues in production
+ * Diagnostic endpoint to help debug authentication issues
+ * This will return details about cookies, headers, and auth state
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    // Examine cookies from the request
+    const cookieList = request.cookies.getAll();
+    const cookieNames = cookieList.map(c => c.name);
     
-    // Check for auth-related cookies
-    const cookiesList = request.cookies.getAll();
-    const hasAuthCookie = request.cookies.has('sb-auth-token');
+    // Check for important auth-related cookies
+    const hasAuthCookie = cookieNames.some(name => name.includes('auth'));
+    const hasRefreshToken = cookieNames.some(name => name.includes('refresh'));
+    const hasAccessToken = cookieNames.some(name => name.includes('access'));
     
-    // Check if we have a session
-    const { data, error } = await supabase.auth.getSession();
+    // Get the auth header
+    const authHeader = request.headers.get('authorization');
+    const hasBearerToken = authHeader?.startsWith('Bearer ') || false;
     
-    if (error) {
-      console.error('[Auth Debug] Session error:', error.message);
-      return NextResponse.json({
-        authenticated: false,
-        error: 'Session error',
-        cookiesPresent: cookiesList.length > 0,
+    // Get environment info
+    const requestDomain = request.headers.get('host') || 'unknown';
+    
+    // Create a response object with debug info
+    const debugInfo = {
+      cookies: {
+        count: cookieList.length,
+        names: cookieNames,
         hasAuthCookie,
-        timestamp: new Date().toISOString(),
+        hasRefreshToken,
+        hasAccessToken
+      },
+      headers: {
+        hasBearerToken,
+        host: requestDomain,
+        userAgent: request.headers.get('user-agent') || 'unknown',
+        referer: request.headers.get('referer') || 'none'
+      },
+      request: {
+        url: request.url,
+        method: request.method
+      },
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        isProduction: process.env.NODE_ENV === 'production'
+      }
+    };
+    
+    // Try to get cookies manually
+    const manualCookieCheck = Object.fromEntries(
+      cookieList.map(cookie => [cookie.name, cookie.value.substring(0, 10) + '...'])
+    );
+    
+    // Try to get the user session if possible
+    try {
+      // Create a Supabase client for the API route
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              const cookie = cookies().get(name);
+              return cookie?.value || null;
+            },
+            set() {}, // Not used in read-only API context
+            remove() {} // Not used in read-only API context
+          }
+        }
+      );
+      
+      const { data, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        return NextResponse.json({
+          ...debugInfo,
+          auth: {
+            status: 'error',
+            message: error.message,
+            cookies: manualCookieCheck
+          }
+        });
+      }
+      
+      if (!data?.user) {
+        return NextResponse.json({
+          ...debugInfo,
+          auth: {
+            status: 'unauthenticated',
+            message: 'No user session found',
+            cookies: manualCookieCheck
+          }
+        });
+      }
+      
+      // User is authenticated, return minimal user data
+      return NextResponse.json({
+        ...debugInfo,
+        auth: {
+          status: 'authenticated',
+          userId: data.user.id,
+          email: data.user.email,
+          cookies: manualCookieCheck
+        }
+      });
+      
+    } catch (error) {
+      return NextResponse.json({
+        ...debugInfo,
+        auth: {
+          status: 'error',
+          message: 'Error checking authentication',
+          error: (error as Error)?.message || String(error),
+          cookies: manualCookieCheck
+        }
       });
     }
-    
-    if (!data.session) {
-      return NextResponse.json({
-        authenticated: false,
-        reason: 'No session',
-        cookiesPresent: cookiesList.length > 0,
-        hasAuthCookie,
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // Get user info without exposing sensitive data
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !userData?.user) {
-      return NextResponse.json({
-        authenticated: false,
-        reason: 'Invalid user',
-        userError: userError?.message,
-        cookiesPresent: cookiesList.length > 0,
-        hasAuthCookie,
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // Return status with minimal user info
+  } catch (error) {
     return NextResponse.json({
-      authenticated: true,
-      userId: userData.user.id,
-      email: userData.user.email ? `${userData.user.email.charAt(0)}...${userData.user.email.split('@')[1]}` : null,
-      hasValidSession: !!data.session,
-      sessionExpires: data.session?.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error: any) {
-    console.error('[Auth Debug] Error:', error);
-    return NextResponse.json({
-      authenticated: false,
-      error: 'Server error',
-      message: error.message,
-      timestamp: new Date().toISOString(),
+      status: 'error',
+      message: 'Error processing debug request',
+      error: (error as Error)?.message || String(error)
     }, { status: 500 });
   }
 } 

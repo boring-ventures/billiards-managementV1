@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     try {
+      console.log('[Auth Callback] Processing auth code')
+      
       // Create a Supabase client for handling the auth exchange
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,25 +39,48 @@ export async function GET(request: NextRequest) {
         )
       }
 
+      console.log('[Auth Callback] Successfully exchanged code for session')
+      
       // Create a response with the proper redirect
       const response = NextResponse.redirect(new URL(next, requestUrl.origin))
 
       // Set cookies manually for the session
-      const { access_token, refresh_token } = data.session
+      const { access_token, refresh_token, expires_at, expires_in } = data.session
       
-      // Explicitly set cookies with correct names expected by the Supabase client
+      // Extract project reference from the Supabase URL for cookie naming
       const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
+      console.log(`[Auth Callback] Setting cookies for project: ${projectRef}`)
       
+      // Primary auth token cookie that Supabase looks for - must be carefully formatted
+      const authToken = {
+        access_token,
+        refresh_token,
+        expires_at: expires_at, // Use the expires_at from the session
+        expires_in: expires_in || 3600, // Default to 1 hour if not provided
+        token_type: 'bearer',
+        type: 'access',
+        provider: 'email'
+      }
+
+      // Sanitize the user object to include only necessary fields for the cookie
+      const sanitizedUser = {
+        id: data.session.user.id,
+        email: data.session.user.email,
+        role: data.session.user.role,
+        app_metadata: data.session.user.app_metadata,
+        user_metadata: data.session.user.user_metadata,
+        aud: data.session.user.aud
+      }
+      
+      const authCookieValue = JSON.stringify({
+        ...authToken,
+        user: sanitizedUser
+      })
+      
+      // Set the main auth cookie that Supabase uses for session management
       response.cookies.set({
         name: `sb-${projectRef}-auth-token`,
-        value: JSON.stringify({
-          access_token,
-          refresh_token,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          expires_in: 3600,
-          token_type: 'bearer',
-          user: data.session.user
-        }),
+        value: authCookieValue,
         path: '/',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -63,6 +88,8 @@ export async function GET(request: NextRequest) {
         httpOnly: true
       })
       
+      // Also set individual cookies for access and refresh tokens
+      // These can be helpful for client-side token management
       response.cookies.set({
         name: `sb-access-token`,
         value: access_token,
@@ -81,6 +108,7 @@ export async function GET(request: NextRequest) {
         secure: process.env.NODE_ENV === 'production'
       })
       
+      console.log('[Auth Callback] Auth cookies set successfully')
       return response
     } catch (err) {
       console.error('Unexpected error in auth callback:', err)
