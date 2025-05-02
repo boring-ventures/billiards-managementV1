@@ -36,6 +36,11 @@ const nextConfig = {
         'billiards-management-v1-7rneq5217.vercel.app',
         '*.vercel.app'
       ]
+    },
+    // Run middleware in the Edge Runtime for better performance
+    middleware: {
+      // Enable Edge runtime for faster middleware execution
+      writableDir: true,
     }
   },
   // Improve response to timeouts in serverless environments
@@ -48,6 +53,16 @@ const nextConfig = {
     return [
       {
         source: '/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Add explicit cache headers for JavaScript files
+      {
+        source: '/_next/static/(.*)',
         headers: [
           {
             key: 'Cache-Control',

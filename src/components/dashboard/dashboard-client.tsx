@@ -25,33 +25,61 @@ export default function DashboardClient() {
   const { user, profile, isLoading } = useCurrentUser();
   const [ready, setReady] = useState(false);
   const [initialChecked, setInitialChecked] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
+  // Get Supabase instance early on mount
   useEffect(() => {
-    // Create a client-specific instance with a shared key
-    // This ensures we don't have duplicate instances
     createSupabaseClient();
   }, []);
   
-  // Handle authentication check
+  // First, very quick check for authentication
   useEffect(() => {
-    // Skip if already checked or still loading
-    if (initialChecked || isLoading) return;
+    const checkSession = async () => {
+      try {
+        const supabase = createSupabaseClient();
+        const { data } = await supabase.auth.getSession();
+        
+        // No session, redirect immediately
+        if (!data.session) {
+          router.push("/sign-in");
+        }
+        
+        setIsLoadingAuth(false);
+      } catch (error) {
+        console.error("Auth check error:", error);
+        setIsLoadingAuth(false);
+      }
+    };
     
-    // Set initial check complete
+    checkSession();
+  }, [router]);
+  
+  // Once auth check completes, perform detailed permission check
+  useEffect(() => {
+    // Only run when initial loading is complete and not yet checked
+    if (isLoadingAuth || initialChecked || isLoading) return;
+    
     setInitialChecked(true);
     
     // If user is not authenticated, redirect to sign-in
-    if (!isLoading && !user) {
+    if (!user) {
       router.push("/sign-in");
       return;
     }
     
     // If user is authenticated but needs routing check
-    if (!isLoading && user && profile) {
+    if (user && profile) {
       // Check if user is a superadmin
       const isSuperAdmin = 
         profile.role === UserRole.SUPERADMIN || 
         String(profile.role).toUpperCase() === "SUPERADMIN";
+      
+      // ADMIN route protection
+      const isAdminRoute = window.location.pathname.startsWith("/dashboard/admin");
+      if (isAdminRoute && !isSuperAdmin) {
+        router.push("/dashboard");
+        return;
+      }
       
       // Check if user has a company assigned
       if (!isSuperAdmin && !profile.companyId) {
@@ -59,8 +87,7 @@ export default function DashboardClient() {
         return;
       }
       
-      // Check if user is inactive based on a property in the profile object
-      // We avoid direct property access to avoid TypeScript errors
+      // Check if user is inactive
       const isInactive = 
         (profile as any).active === false || 
         (profile as any).active === 'false';
@@ -70,28 +97,25 @@ export default function DashboardClient() {
         return;
       }
       
+      // SUPERADMIN without company should go to company selection
+      if (isSuperAdmin && !profile.companyId && window.location.pathname !== "/company-selection") {
+        router.push("/company-selection");
+        return;
+      }
+      
       // User is authenticated and has proper access
       setReady(true);
     }
-  }, [isLoading, user, profile, router, initialChecked]);
+  }, [isLoadingAuth, isLoading, user, profile, router, initialChecked]);
   
-  // Add a fallback detection in case the hook doesn't fire
-  useEffect(() => {
-    // Secondary check to ensure user loading completes
-    const timeout = setTimeout(() => {
-      if (!user && !isLoading) {
-        router.push("/sign-in");
-      }
-    }, 3000);
-    
-    return () => clearTimeout(timeout);
-  }, [user, isLoading, router]);
-
-  // Loading state
-  if (isLoading || !ready) {
+  // Show loading state
+  if (isLoadingAuth || isLoading || !ready) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -113,7 +137,7 @@ export default function DashboardClient() {
         </div>
       </div>
       
-      {/* Wrap content in error boundary and suspense for more resilient loading */}
+      {/* DashboardContent shows appropriate content based on role and company */}
       <DashboardContent />
     </div>
   );
