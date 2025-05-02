@@ -18,9 +18,15 @@ export async function updateSession(request: NextRequest) {
     const requestPath = request.nextUrl.pathname;
     console.log(`[Middleware] Processing request for: ${requestPath}`);
     
+    // Check for auth token in headers (API requests might use this instead of cookies)
+    const authHeader = request.headers.get('authorization');
+    const hasBearerToken = authHeader?.startsWith('Bearer ');
+    
     // Log available cookies for debugging (without sensitive values)
-    const hasCookie = request.cookies.has('sb-auth-token');
-    console.log(`[Middleware] Has auth token cookie: ${hasCookie}`);
+    const cookieNames = Array.from(request.cookies.getAll()).map(c => c.name);
+    const hasCookie = request.cookies.has('sb-auth-token') || request.cookies.has('sb-refresh-token');
+    console.log(`[Middleware] Cookies: ${cookieNames.join(', ')}`);
+    console.log(`[Middleware] Has auth token cookie: ${hasCookie}, Has Bearer token: ${hasBearerToken}`);
     
     // First refresh the session - this will update cookies if token is expired
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
@@ -49,15 +55,30 @@ export async function updateSession(request: NextRequest) {
         }
       } else {
         console.log('[Middleware] Valid user found:', userData.user.id);
+        
+        // We have a valid user, proceed with request
+        return response;
       }
     } 
+    // Special case for API routes with Authorization header
+    else if (requestPath.startsWith('/api/') && hasBearerToken) {
+      console.log('[Middleware] API route with Authorization header - allowing through');
+      return response; // Let the API route handle the auth itself
+    }
     // No session but trying to access protected route
     else if (isProtectedRoute(request.nextUrl.pathname)) {
       console.log('[Middleware] No active session for protected route');
       
       // Check if this is an API route
-      if (request.nextUrl.pathname.startsWith('/api/')) {
-        // For API routes, just return 401 instead of redirecting
+      if (requestPath.startsWith('/api/')) {
+        // For API routes, check if we're in deployment preview or local development
+        // In these environments, we'll be more lenient for testing
+        if (process.env.VERCEL_ENV === 'preview' || process.env.NODE_ENV === 'development') {
+          console.log('[Middleware] API route in dev/preview environment - proceeding');
+          return response;
+        }
+        
+        // For production API routes, just return 401 instead of redirecting
         console.log('[Middleware] API route - returning 401');
         return NextResponse.json(
           { error: 'Not authenticated', message: 'Authentication required' },

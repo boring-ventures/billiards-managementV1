@@ -30,38 +30,74 @@ export async function GET(request: NextRequest) {
     const cookieStore = cookies();
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     
-    // Try to extract bearer token from Authorization header
+    // Log cookies and auth headers for debugging
     const authHeader = request.headers.get('authorization');
-    let sessionData;
+    console.log('[Profile API] Auth header present:', !!authHeader);
+    console.log('[Profile API] Cookie header present:', !!request.headers.get('cookie'));
+    
+    // Try to extract bearer token from Authorization header
+    let userId = null;
+    let sessionData = null;
     
     // If we have an auth header, use it to get the session
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
+        console.log('[Profile API] Using Authorization header token');
         const { data, error } = await supabase.auth.getUser(token);
         if (!error && data.user) {
           sessionData = data;
+          userId = data.user.id;
+          console.log('[Profile API] User found from token:', userId);
         } else {
-          console.warn('Invalid token in Authorization header:', error?.message);
+          console.warn('[Profile API] Invalid token in Authorization header:', error?.message);
         }
       } catch (error) {
-        console.error('Error verifying token:', error);
+        console.error('[Profile API] Error verifying token:', error);
       }
     }
     
     // Fallback to cookies if header auth failed
     if (!sessionData) {
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data.user) {
+      try {
+        console.log('[Profile API] Trying cookies for authentication');
+        const { data, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('[Profile API] Cookie auth error:', error.message);
+          return NextResponse.json(
+            { error: error?.message || "Not authenticated" },
+            { status: 401 }
+          );
+        }
+        
+        if (!data?.user) {
+          console.error('[Profile API] No user found in cookie auth');
+          return NextResponse.json(
+            { error: "User not found" },
+            { status: 401 }
+          );
+        }
+        
+        sessionData = data;
+        userId = data.user.id;
+        console.log('[Profile API] User found from cookies:', userId);
+      } catch (error) {
+        console.error('[Profile API] Supabase getUser error:', error);
         return NextResponse.json(
-          { error: error?.message || "Not authenticated" },
+          { error: "Authentication error" },
           { status: 401 }
         );
       }
-      sessionData = data;
     }
-
-    const userId = sessionData.user.id;
+    
+    // If we still don't have a userId, we can't proceed
+    if (!userId) {
+      console.error('[Profile API] Could not determine user ID');
+      return NextResponse.json(
+        { error: "User not authenticated" },
+        { status: 401 }
+      );
+    }
     
     // Check if we already have a profile
     let profile = await prisma.profile.findUnique({
@@ -72,14 +108,17 @@ export async function GET(request: NextRequest) {
       // Use the centralized function to create a profile
       try {
         // Extract user metadata and handle it as a generic object to avoid typing issues
-        const metadata = sessionData.user.user_metadata as Record<string, any> || {};
-        metadata.email = sessionData.user.email;
+        const userData = sessionData?.user || {};
+        const metadata = userData.user_metadata as Record<string, any> || {};
+        metadata.email = userData.email;
         
         // Check for superadmin indicators in metadata
         const isSuperAdmin = 
           metadata.role === 'SUPERADMIN' || 
           metadata.isSuperAdmin === true || 
           metadata.is_superadmin === true;
+        
+        console.log('[Profile API] Creating profile for user, superadmin:', isSuperAdmin);
         
         profile = await prisma.profile.create({
           data: {
@@ -91,18 +130,22 @@ export async function GET(request: NextRequest) {
             active: true
           }
         });
+        
+        console.log('[Profile API] Profile created successfully');
       } catch (error) {
-        console.error("Error creating profile:", error);
+        console.error("[Profile API] Error creating profile:", error);
         return NextResponse.json(
           { error: "Failed to create profile" },
           { status: 500 }
         );
       }
+    } else {
+      console.log('[Profile API] Existing profile found for user');
     }
 
     return NextResponse.json(profile);
   } catch (error) {
-    console.error("Error in profile endpoint:", error);
+    console.error("[Profile API] Error in profile endpoint:", error);
     return NextResponse.json(
       { error: "Failed to fetch profile" },
       { status: 500 }

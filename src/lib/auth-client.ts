@@ -19,6 +19,53 @@ export interface Session {
 }
 
 /**
+ * Get the current session with additional error handling
+ */
+export async function getAuthSession() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Session error in getAuthSession:', error.message);
+      return null;
+    }
+    return data.session;
+  } catch (e) {
+    console.error('Error in getAuthSession:', e);
+    return null;
+  }
+}
+
+/**
+ * Helper function to ensure all API requests include auth token
+ */
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  try {
+    // Get the current session for the auth token
+    const session = await getAuthSession();
+    
+    // Prepare headers
+    const headers = new Headers(options.headers || {});
+    
+    if (session?.access_token) {
+      // Add the access token as a bearer token
+      headers.set('Authorization', `Bearer ${session.access_token}`);
+    }
+    
+    // Add client info
+    headers.set('X-Client-Info', 'auth-client/2.0');
+    
+    // Execute the fetch with the updated headers
+    return fetch(url, {
+      ...options,
+      headers
+    });
+  } catch (e) {
+    console.error('Error in fetchWithAuth:', e);
+    throw e;
+  }
+}
+
+/**
  * Client-side version of getCurrentUser that doesn't use Prisma
  * This fetches the profile from the profile API instead
  */
@@ -55,21 +102,12 @@ export async function getCurrentUser(): Promise<User | null> {
     // Log authentication state
     console.log(`Fetching profile for user: ${userId}`);
     
-    // Use the profile API to get role and company info
+    // Use our fetchWithAuth helper to ensure auth token is included
     try {
-      // Always include auth token in headers to help with server-side auth
-      const accessToken = data.session.access_token;
-      
-      // Add debug information to help diagnose issues
       console.log(`Calling profile API endpoint: /api/profile?userId=${userId}`);
       
-      const headers: HeadersInit = {
-        'Authorization': `Bearer ${accessToken}`,
-        'X-Client-Info': 'auth-client/2.0'
-      };
-      
-      // Use a more direct API path to avoid routing issues
-      const response = await fetch(`/api/profile?userId=${userId}`, { headers });
+      // Use fetchWithAuth to ensure auth headers are included
+      const response = await fetchWithAuth(`/api/profile?userId=${userId}`);
       
       // Log the response status to help diagnose issues
       console.log(`Profile API response status: ${response.status}`);
@@ -125,13 +163,8 @@ export async function getCurrentUser(): Promise<User | null> {
           if (refreshedData?.session) {
             console.log("Session refreshed successfully, retrying profile fetch");
             
-            // Retry the profile fetch with the new token
-            const retryResponse = await fetch(`/api/profile?userId=${userId}`, {
-              headers: {
-                'Authorization': `Bearer ${refreshedData.session.access_token}`,
-                'X-Client-Info': 'auth-client/2.0'
-              }
-            });
+            // Retry the fetch with the new token using fetchWithAuth
+            const retryResponse = await fetchWithAuth(`/api/profile?userId=${userId}`);
             
             console.log(`Retry profile fetch status: ${retryResponse.status}`);
             
