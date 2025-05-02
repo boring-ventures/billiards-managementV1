@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import { z } from "zod";
+import { getEffectiveCompanyId, isSuperAdmin } from "../../utils/superadminAccess";
 
 interface RouteParams {
   params: {
@@ -28,6 +29,10 @@ export async function GET(
 ) {
   try {
     const id = params.id;
+    const { searchParams } = new URL(request.url);
+    const companyIdParam = searchParams.get("companyId");
+    
+    console.log("[API] /inventory/[id] GET - id:", id, "companyIdParam:", companyIdParam);
     
     if (!id) {
       return NextResponse.json(
@@ -42,70 +47,46 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    // Get user profile to check role
+    // Get user profile information
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
     });
     
-    // Log the profile for debugging
-    console.log("Item API - Profile retrieved:", {
+    console.log("[API] /inventory/[id] GET - User profile:", {
       id: profile?.id,
       userId: profile?.userId,
       role: profile?.role,
-      // Check both potential column names
       companyId: profile?.companyId,
-      company_id: (profile as any)?.company_id
     });
     
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
     
-    // Check for superadmin
-    const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
+    // Check if user is a superadmin
+    const userIsSuperAdmin = await isSuperAdmin(session.user.id);
     
-    // Get the effective company ID, checking both potential column names
-    const profileCompanyId = profile.companyId || (profile as any).company_id;
-    
-    // Fetch the item
+    // Get the inventory item
     const item = await prisma.inventoryItem.findUnique({
       where: { id },
       include: {
         category: true,
-        transactions: {
-          orderBy: {
-            createdAt: "desc",
-          },
-          include: {
-            staff: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        },
       },
     });
     
     if (!item) {
-      return NextResponse.json(
-        { error: "Item not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
     
-    // For non-superadmins, verify the item belongs to their company
-    if (!isSuperAdmin && item.companyId !== profileCompanyId) {
-      return NextResponse.json(
-        { error: "Unauthorized to access this item" },
-        { status: 403 }
-      );
+    // Check if user has access to this item
+    if (!userIsSuperAdmin && item.companyId !== profile.companyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
     
     return NextResponse.json(item);
+    
   } catch (error) {
-    console.error("Error fetching inventory item:", error);
+    console.error("[API] /inventory/[id] GET - Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch inventory item" },
       { status: 500 }
@@ -221,64 +202,45 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
     const id = params.id;
     
+    console.log("[API] /inventory/[id] DELETE - id:", id);
+    
+    // Get the session for authentication
+    const session = await auth();
     if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    if (!id) {
-      return NextResponse.json(
-        { error: "Item ID is required" },
-        { status: 400 }
-      );
-    }
-    
-    // Get the user's profile for role check
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
-    
-    // Only admins can delete inventory items
-    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
-      return NextResponse.json(
-        { error: "Unauthorized. Admin privileges required." },
-        { status: 403 }
-      );
-    }
-    
-    // Check if item exists
+    // Check if the item exists first
     const existingItem = await prisma.inventoryItem.findUnique({
       where: { id },
     });
     
     if (!existingItem) {
-      return NextResponse.json(
-        { error: "Item not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
     
-    // Delete related transactions first
-    await prisma.inventoryTransaction.deleteMany({
-      where: { itemId: id },
+    // Check if the user has permission to delete this item
+    const userIsSuperAdmin = await isSuperAdmin(session.user.id);
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
+      select: { companyId: true }
     });
+    
+    if (!userIsSuperAdmin && existingItem.companyId !== profile?.companyId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
     
     // Delete the item
     await prisma.inventoryItem.delete({
       where: { id },
     });
     
-    return NextResponse.json(
-      { message: "Item deleted successfully" },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true });
+    
   } catch (error) {
-    console.error("Error deleting inventory item:", error);
+    console.error("[API] /inventory/[id] DELETE - Error:", error);
     return NextResponse.json(
       { error: "Failed to delete inventory item" },
       { status: 500 }

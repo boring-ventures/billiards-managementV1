@@ -3,93 +3,65 @@ import { auth } from "@/lib/auth";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { getEffectiveCompanyId } from "../utils/superadminAccess";
 
 // GET: Fetch all inventory items for a company
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const companyId = searchParams.get("companyId");
+    const companyIdParam = searchParams.get("companyId");
+    
+    // Log debugging information
+    console.log("[API] /inventory GET - companyIdParam:", companyIdParam);
     
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
-    // Get user profile to check role
+
+    // Get user profile information
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
     });
     
-    // Log the profile for debugging
-    console.log("Profile retrieved:", {
+    // Log debugging information
+    console.log("[API] /inventory GET - User profile:", {
       id: profile?.id,
       userId: profile?.userId,
       role: profile?.role,
-      // Check both potential column names
       companyId: profile?.companyId,
-      company_id: (profile as any)?.company_id
     });
     
     if (!profile) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
     
-    // Check for superadmin
-    const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
-
-    // Get the effective company ID, checking both potential column names
-    const profileCompanyId = profile.companyId || (profile as any).company_id;
-
-    // For non-superadmins, companyId is required
-    if (!isSuperAdmin && !companyId && !profileCompanyId) {
-      return NextResponse.json(
-        { error: "Company ID is required" },
-        { status: 400 }
-      );
+    // Get the effective company ID based on user role
+    const effectiveCompanyId = await getEffectiveCompanyId(session.user.id, companyIdParam);
+    
+    if (!effectiveCompanyId) {
+      return NextResponse.json({ error: "Company ID is required" }, { status: 400 });
     }
     
-    // For superadmins without companyId, get all items across companies
-    let where: any = {};
-    
-    if (companyId) {
-      where = { companyId };
-    } else if (!isSuperAdmin && profileCompanyId) {
-      where = { companyId: profileCompanyId };
-    }
-    
-    // Log the query we're about to execute
-    console.log("Inventory query:", { 
-      isSuperAdmin, 
-      requestCompanyId: companyId,
-      profileCompanyId,
-      whereClause: where 
-    });
+    console.log("[API] /inventory GET - Using effectiveCompanyId:", effectiveCompanyId);
 
-    // Get inventory items with their categories
-    const items = await prisma.inventoryItem.findMany({
-      where,
+    // Get inventory items for the company
+    const inventoryItems = await prisma.inventoryItem.findMany({
+      where: {
+        companyId: effectiveCompanyId,
+      },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        company: {
-          select: {
-            id: true,
-            name: true,
-          }
-        }
+        category: true,
       },
       orderBy: {
         name: "asc",
       },
     });
 
-    return NextResponse.json(items);
+    return NextResponse.json(inventoryItems);
+    
   } catch (error) {
-    console.error("Error fetching inventory items:", error);
+    console.error("[API] /inventory GET - Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch inventory items" },
       { status: 500 }
@@ -112,117 +84,32 @@ const inventoryItemSchema = z.object({
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    
-    // Check authentication
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
-    // Get user profile to check role
-    const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id },
-    });
-    
-    // Verify admin permissions
-    if (!profile || (profile.role.toString() !== "ADMIN" && profile.role.toString() !== "SUPERADMIN")) {
-      return NextResponse.json(
-        { error: "Unauthorized. Admin privileges required." },
-        { status: 403 }
-      );
-    }
-    
-    // Parse input
+
     const body = await request.json();
+    const { companyId: companyIdParam, ...itemData } = body;
     
-    // For superadmins, companyId is required in the request
-    // For regular admins, use their own companyId and ignore the request
-    let companyId = body.companyId;
-    const isSuperAdmin = profile.role.toString() === "SUPERADMIN";
+    // Get the effective company ID based on user role
+    const effectiveCompanyId = await getEffectiveCompanyId(session.user.id, companyIdParam);
     
-    if (isSuperAdmin) {
-      if (!companyId) {
-        return NextResponse.json(
-          { error: "Company ID is required for superadmins", isSuperAdmin: true },
-          { status: 400 }
-        );
-      }
-      
-      // Verify the company exists
-      const companyExists = await prisma.company.findUnique({
-        where: { id: companyId },
-      });
-      
-      if (!companyExists) {
-        return NextResponse.json(
-          { error: "Company not found", isSuperAdmin: true },
-          { status: 404 }
-        );
-      }
-    } else {
-      // For regular admins, always use their assigned company
-      if (!profile.companyId) {
-        return NextResponse.json(
-          { error: "No company associated with admin" },
-          { status: 400 }
-        );
-      }
-      
-      companyId = profile.companyId;
+    if (!effectiveCompanyId) {
+      return NextResponse.json({ error: "Company ID is required" }, { status: 400 });
     }
-    
-    // Update body with correct companyId
-    const updatedBody = { ...body, companyId };
-    
-    // Validate input
-    const result = inventoryItemSchema.safeParse(updatedBody);
-    
-    if (!result.success) {
-      return NextResponse.json(
-        { error: "Invalid input", details: result.error.format(), isSuperAdmin },
-        { status: 400 }
-      );
-    }
-    
-    const data = result.data;
-    
-    // Make sure we have a companyId when creating the record
-    if (!data.companyId) {
-      return NextResponse.json(
-        { error: "Company ID is required" },
-        { status: 400 }
-      );
-    }
-    
+
     // Create the inventory item
-    const newItem = await prisma.inventoryItem.create({
+    const inventoryItem = await prisma.inventoryItem.create({
       data: {
-        companyId: data.companyId,
-        name: data.name,
-        categoryId: data.categoryId || null,
-        sku: data.sku || null,
-        quantity: data.quantity,
-        criticalThreshold: data.criticalThreshold,
-        price: data.price !== undefined ? data.price : null,
+        ...itemData,
+        companyId: effectiveCompanyId,
       },
     });
+
+    return NextResponse.json(inventoryItem);
     
-    // Create an inventory transaction for the initial stock
-    if (data.quantity > 0) {
-      await prisma.inventoryTransaction.create({
-        data: {
-          companyId: data.companyId,
-          itemId: newItem.id,
-          transactionType: "INCOMING",
-          quantityDelta: data.quantity,
-          note: "Initial inventory setup",
-          staffId: profile.id,
-        },
-      });
-    }
-    
-    return NextResponse.json(newItem, { status: 201 });
   } catch (error) {
-    console.error("Error creating inventory item:", error);
+    console.error("[API] /inventory POST - Error:", error);
     return NextResponse.json(
       { error: "Failed to create inventory item" },
       { status: 500 }

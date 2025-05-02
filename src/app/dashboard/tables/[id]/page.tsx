@@ -36,69 +36,76 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const isAdmin = hasAdminPermission(profile);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchTable() {
+    const fetchTableDetails = async () => {
+      if (isLoading) return;
+      
+      // Get companyId from local storage for superadmins
+      const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+      
       try {
-        // Get companyId from localStorage for superadmins
-        let apiUrl = `/api/tables/${id}`;
-        if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
-          const selectedCompanyId = localStorage.getItem('selectedCompanyId');
-          if (selectedCompanyId) {
-            apiUrl += `?companyId=${selectedCompanyId}`;
-          }
+        setLoading(true);
+        // Pass the company ID in the URL for superadmins
+        let url = `/api/tables/${params.id}`;
+        if (selectedCompanyId) {
+          url += `?companyId=${selectedCompanyId}`;
         }
         
-        console.log(`Fetching table with URL: ${apiUrl}`);
-        const response = await fetch(apiUrl);
+        console.log("Fetching table details with URL:", url);
+        
+        const response = await fetch(url);
         
         if (!response.ok) {
-          throw new Error("Failed to fetch table");
+          if (response.status === 404) {
+            setError("Table not found");
+          } else {
+            setError(`Error: ${response.statusText}`);
+          }
+          return;
         }
+
         const data = await response.json();
         setTable(data.table);
       } catch (error) {
-        console.error("Error fetching table:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load table details",
-          variant: "destructive",
-        });
+        console.error("Error fetching table details:", error);
+        setError("Failed to load table details");
       } finally {
         setLoading(false);
       }
-    }
+    };
 
-    if (id && profile) {
-      fetchTable();
-    }
-  }, [id, toast, profile]);
+    fetchTableDetails();
+  }, [params.id, isLoading]);
 
   const handleDelete = async () => {
+    if (!table) return;
+    
+    const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+    
     try {
-      // Get companyId from localStorage for superadmins
-      let apiUrl = `/api/tables/${id}`;
-      if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
-        const selectedCompanyId = localStorage.getItem('selectedCompanyId');
-        if (selectedCompanyId) {
-          apiUrl += `?companyId=${selectedCompanyId}`;
-        }
+      setLoading(true);
+      
+      // Pass the company ID in the URL for superadmins
+      let url = `/api/tables/${params.id}`;
+      if (selectedCompanyId) {
+        url += `?companyId=${selectedCompanyId}`;
       }
       
-      const response = await fetch(apiUrl, {
+      const response = await fetch(url, {
         method: "DELETE",
       });
 
       if (!response.ok) {
-        throw new Error("Failed to delete table");
+        throw new Error(`Error: ${response.statusText}`);
       }
 
+      router.push("/dashboard/tables");
       toast({
         title: "Success",
         description: "Table deleted successfully",
       });
-
-      router.push("/dashboard/tables");
     } catch (error) {
       console.error("Error deleting table:", error);
       toast({
@@ -106,6 +113,9 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
         description: "Failed to delete table",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
     }
   };
 
