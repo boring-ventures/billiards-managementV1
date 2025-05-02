@@ -3,6 +3,16 @@
   "installCommand": "pnpm install",
   "framework": "nextjs",
   "devCommand": "pnpm run dev",
+  "routes": [
+    {
+      "src": "/api/profile/by-id(.*)",
+      "dest": "/api/profile/by-id"
+    },
+    {
+      "src": "/api/admin/superadmins(.*)",
+      "dest": "/api/admin/superadmins"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

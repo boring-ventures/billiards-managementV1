@@ -19,7 +19,13 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
-      allowedOrigins: ['localhost:3000', 'billiards-management-v1.vercel.app']
+      allowedOrigins: [
+        'localhost:3000', 
+        'billiards-management-v1.vercel.app', 
+        'billiards-management-v1-7q7ypbvoo.vercel.app',
+        'billiards-management-v1-7rneq5217.vercel.app',
+        '*.vercel.app'
+      ]
     }
   },
   // External packages that should be treated as server components
@@ -30,6 +36,19 @@ const nextConfig = {
     maxInactiveAge: 60 * 1000,
     // number of pages that should be kept simultaneously without being disposed
     pagesBufferLength: 5,
+  },
+  // Ensure API routes are properly handled
+  async rewrites() {
+    return [
+      {
+        source: '/api/profile/by-id',
+        destination: '/api/profile/by-id',
+      },
+      {
+        source: '/api/admin/superadmins',
+        destination: '/api/admin/superadmins',
+      }
+    ];
   }
 };
 
