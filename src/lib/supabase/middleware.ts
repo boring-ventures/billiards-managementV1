@@ -7,79 +7,121 @@ import { NextResponse, type NextRequest } from 'next/server'
  * following Supabase's recommended pattern
  */
 export async function updateSession(request: NextRequest) {
-  // Create a response object that we'll modify and return
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase environment variables in middleware')
-    return response
-  }
-
-  // Create a Supabase client specifically for handling auth in the middleware
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        get(name: string) {
-          const cookie = request.cookies.get(name)?.value
-          return cookie || null
-        },
-        set(name: string, value: string, options: any) {
-          // Set the cookie on the response
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-            sameSite: 'lax',
-            path: '/',
-            secure: process.env.NODE_ENV === 'production'
-          })
-        },
-        remove(name: string, options: any) {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-            maxAge: 0,
-            path: '/',
-          })
-        },
+  try {
+    // Create a response object that we'll modify and return
+    let response = NextResponse.next({
+      request: {
+        headers: request.headers,
       },
-    }
-  )
+    })
 
-  // This gets the user and refreshes the session if needed
-  const { data } = await supabase.auth.getUser()
-  const user = data?.user
-  
-  // Log status for debugging
-  const pathname = request.nextUrl.pathname
-  
-  // Don't redirect API routes, but still refresh the session
-  if (pathname.startsWith('/api/')) {
-    return response
-  }
-  
-  if (user) {
-    console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
-  } else {
-    console.log(`[Middleware] No session found for path ${pathname}`)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     
-    // If requesting a protected route, redirect to login
-    if (isProtectedRoute(pathname)) {
-      return NextResponse.redirect(new URL('/sign-in', request.url))
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase environment variables in middleware')
+      return response
     }
-  }
 
-  return response
+    const requestUrl = new URL(request.url)
+    const pathname = requestUrl.pathname
+
+    // Special case: Skip auth for auth-related routes
+    if (
+      pathname.startsWith('/auth/') ||
+      pathname.startsWith('/sign-in') ||
+      pathname.startsWith('/sign-up') ||
+      pathname.startsWith('/magic-link') ||
+      pathname.startsWith('/forgot-password')
+    ) {
+      console.log(`[Middleware] Skipping auth check for auth route: ${pathname}`)
+      return response
+    }
+
+    // Debug cookies
+    const allCookies = request.cookies.getAll()
+    const cookieNames = allCookies.map(c => c.name)
+    const hasSbAuthCookie = cookieNames.some(name => name.includes('auth-token'))
+    console.log(`[Middleware] Cookies for ${pathname}: count=${allCookies.length}, hasAuthCookie=${hasSbAuthCookie}`)
+
+    // Create a Supabase client specifically for handling auth in the middleware
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          get(name: string) {
+            const cookie = request.cookies.get(name)?.value
+            console.log(`[Middleware] Reading cookie: ${name} = ${cookie ? 'present' : 'not found'}`)
+            return cookie || null
+          },
+          set(name: string, value: string, options: any) {
+            // Set the cookie on the response
+            console.log(`[Middleware] Setting cookie: ${name}`)
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+              sameSite: 'lax',
+              path: '/',
+              secure: process.env.NODE_ENV === 'production'
+            })
+          },
+          remove(name: string, options: any) {
+            console.log(`[Middleware] Removing cookie: ${name}`)
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+              maxAge: 0,
+              path: '/',
+            })
+          },
+        },
+      }
+    )
+
+    // This gets the user and refreshes the session if needed
+    try {
+      const { data } = await supabase.auth.getUser()
+      const user = data?.user
+      
+      if (user) {
+        console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
+        
+        // Force refresh the session to ensure we have the latest tokens
+        const { error: refreshError } = await supabase.auth.refreshSession()
+        if (refreshError) {
+          console.error(`[Middleware] Error refreshing session: ${refreshError.message}`)
+        }
+      } else {
+        console.log(`[Middleware] No session found for path ${pathname}`)
+        
+        // If requesting a protected route, redirect to login
+        if (isProtectedRoute(pathname)) {
+          console.log(`[Middleware] Redirecting to sign-in from protected route: ${pathname}`)
+          return NextResponse.redirect(new URL('/sign-in', request.url))
+        }
+      }
+    } catch (error) {
+      console.error(`[Middleware] Error checking auth: ${error instanceof Error ? error.message : String(error)}`)
+      
+      // Don't redirect API routes on error, just continue the request
+      if (pathname.startsWith('/api/')) {
+        return response
+      }
+      
+      // For protected routes, redirect to login on error
+      if (isProtectedRoute(pathname)) {
+        return NextResponse.redirect(new URL('/sign-in', request.url))
+      }
+    }
+
+    return response
+  } catch (error) {
+    console.error(`[Middleware] Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
+    return NextResponse.next()
+  }
 }
 
 /**
