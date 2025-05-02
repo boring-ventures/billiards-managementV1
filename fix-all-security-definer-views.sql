@@ -88,7 +88,7 @@ BEGIN
                     FOR ALL
                     TO authenticated
                     USING (
-                        (SELECT p.role FROM public.profiles p WHERE p.userId = auth.uid()) = ''SUPERADMIN''
+                        (SELECT p.role FROM public.profiles p WHERE p."userId" = auth.uid()) = ''SUPERADMIN''
                     );
                 ', r.table_name);
                 
