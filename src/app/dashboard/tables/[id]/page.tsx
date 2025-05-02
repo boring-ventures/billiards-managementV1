@@ -40,12 +40,23 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
   useEffect(() => {
     async function fetchTable() {
       try {
-        const response = await fetch(`/api/tables/${id}`);
+        // Get companyId from localStorage for superadmins
+        let apiUrl = `/api/tables/${id}`;
+        if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
+          const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+          if (selectedCompanyId) {
+            apiUrl += `?companyId=${selectedCompanyId}`;
+          }
+        }
+        
+        console.log(`Fetching table with URL: ${apiUrl}`);
+        const response = await fetch(apiUrl);
+        
         if (!response.ok) {
           throw new Error("Failed to fetch table");
         }
         const data = await response.json();
-        setTable(data);
+        setTable(data.table);
       } catch (error) {
         console.error("Error fetching table:", error);
         toast({
@@ -58,14 +69,23 @@ export default function TableDetailPage({ params }: TableDetailPageProps) {
       }
     }
 
-    if (id) {
+    if (id && profile) {
       fetchTable();
     }
-  }, [id, toast]);
+  }, [id, toast, profile]);
 
   const handleDelete = async () => {
     try {
-      const response = await fetch(`/api/tables/${id}`, {
+      // Get companyId from localStorage for superadmins
+      let apiUrl = `/api/tables/${id}`;
+      if (profile?.role === "SUPERADMIN" && typeof window !== 'undefined') {
+        const selectedCompanyId = localStorage.getItem('selectedCompanyId');
+        if (selectedCompanyId) {
+          apiUrl += `?companyId=${selectedCompanyId}`;
+        }
+      }
+      
+      const response = await fetch(apiUrl, {
         method: "DELETE",
       });
 

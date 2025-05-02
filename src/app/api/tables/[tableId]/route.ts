@@ -32,6 +32,30 @@ export async function GET(
       );
     }
 
+    // Get companyId from query params for superadmins, otherwise use profile companyId
+    const searchParams = req.nextUrl.searchParams;
+    const requestCompanyId = searchParams.get("companyId");
+    
+    // For superadmins, use the companyId from the request if provided
+    // For regular users, always use their assigned company
+    let effectiveCompanyId: string | null = null;
+    
+    if (profile.role === UserRole.SUPERADMIN) {
+      // Superadmin can specify a company ID or use their assigned one
+      effectiveCompanyId = requestCompanyId || profile.companyId;
+    } else {
+      // Regular users must use their assigned company
+      effectiveCompanyId = profile.companyId;
+      
+      // Reject if they're trying to access another company's data
+      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
+        return NextResponse.json(
+          { error: "Unauthorized access to company data" },
+          { status: 403 }
+        );
+      }
+    }
+
     // Get the table with its current sessions
     const table = await db.table.findUnique({
       where: { id: tableId },
@@ -49,10 +73,18 @@ export async function GET(
       );
     }
 
-    // Verify the table belongs to the user's company
-    if (table.companyId !== profile.companyId) {
+    // For non-superadmins, verify the table belongs to the user's company
+    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
       return NextResponse.json(
         { error: "Table does not belong to your company" },
+        { status: 403 }
+      );
+    }
+    
+    // For superadmins with a specified company, also verify the table belongs to that company
+    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "Table does not belong to the specified company" },
         { status: 403 }
       );
     }
@@ -109,6 +141,30 @@ export async function PATCH(
       );
     }
 
+    // Get companyId from query params for superadmins, otherwise use profile companyId
+    const searchParams = req.nextUrl.searchParams;
+    const requestCompanyId = searchParams.get("companyId");
+    
+    // For superadmins, use the companyId from the request if provided
+    // For regular users, always use their assigned company
+    let effectiveCompanyId: string | null = null;
+    
+    if (profile.role === UserRole.SUPERADMIN) {
+      // Superadmin can specify a company ID or use their assigned one
+      effectiveCompanyId = requestCompanyId || profile.companyId;
+    } else {
+      // Regular users must use their assigned company
+      effectiveCompanyId = profile.companyId;
+      
+      // Reject if they're trying to access another company's data
+      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
+        return NextResponse.json(
+          { error: "Unauthorized access to company data" },
+          { status: 403 }
+        );
+      }
+    }
+
     // Get the table to verify it exists and belongs to the user's company
     const table = await db.table.findUnique({
       where: { id: tableId },
@@ -126,10 +182,18 @@ export async function PATCH(
       );
     }
 
-    // Verify the table belongs to the user's company
-    if (table.companyId !== profile.companyId) {
+    // For non-superadmins, verify the table belongs to the user's company
+    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
       return NextResponse.json(
         { error: "Table does not belong to your company" },
+        { status: 403 }
+      );
+    }
+    
+    // For superadmins with a specified company, also verify the table belongs to that company
+    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "Table does not belong to the specified company" },
         { status: 403 }
       );
     }
@@ -221,6 +285,30 @@ export async function DELETE(
       );
     }
 
+    // Get companyId from query params for superadmins, otherwise use profile companyId
+    const searchParams = req.nextUrl.searchParams;
+    const requestCompanyId = searchParams.get("companyId");
+    
+    // For superadmins, use the companyId from the request if provided
+    // For regular users, always use their assigned company
+    let effectiveCompanyId: string | null = null;
+    
+    if (profile.role === UserRole.SUPERADMIN) {
+      // Superadmin can specify a company ID or use their assigned one
+      effectiveCompanyId = requestCompanyId || profile.companyId;
+    } else {
+      // Regular users must use their assigned company
+      effectiveCompanyId = profile.companyId;
+      
+      // Reject if they're trying to access another company's data
+      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
+        return NextResponse.json(
+          { error: "Unauthorized access to company data" },
+          { status: 403 }
+        );
+      }
+    }
+
     // Get the table to verify it exists and belongs to the user's company
     const table = await db.table.findUnique({
       where: { id: tableId },
@@ -233,10 +321,18 @@ export async function DELETE(
       );
     }
 
-    // Verify the table belongs to the user's company
-    if (table.companyId !== profile.companyId) {
+    // For non-superadmins, verify the table belongs to the user's company
+    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
       return NextResponse.json(
         { error: "Table does not belong to your company" },
+        { status: 403 }
+      );
+    }
+    
+    // For superadmins with a specified company, also verify the table belongs to that company
+    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "Table does not belong to the specified company" },
         { status: 403 }
       );
     }
