@@ -26,41 +26,126 @@ $$ LANGUAGE sql SECURITY DEFINER;
 -- 1. COMPANY-SCOPED TABLES
 -- These tables contain company_id and should be scoped to the user's company
 
--- Base tables with company_id
-DO $$ 
-DECLARE
-  company_tables TEXT[] := ARRAY[
-    'tables',
-    'table_sessions',
-    'table_maintenance',
-    'table_reservations',
-    'table_activity_log',
-    'inventory_categories',
-    'inventory_items',
-    'inventory_transactions',
-    'pos_orders',
-    'finance_categories',
-    'finance_transactions'
-  ];
-  t TEXT;
-BEGIN
-  FOREACH t IN ARRAY company_tables
-  LOOP
-    EXECUTE format('
-      ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;
-      
-      CREATE POLICY "%I_company_access_policy" 
-      ON public.%I
-      FOR ALL
-      USING (
-        (company_id = get_user_company_id())
-        OR 
-        is_superadmin()
-      );
-    ', t, t, t);
-  END LOOP;
-END;
-$$ LANGUAGE plpgsql;
+-- Tables
+ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tables_company_access_policy" 
+ON public.tables
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Table Sessions
+ALTER TABLE public.table_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "table_sessions_company_access_policy" 
+ON public.table_sessions
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Table Maintenance
+ALTER TABLE public.table_maintenance ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "table_maintenance_company_access_policy" 
+ON public.table_maintenance
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Table Reservations
+ALTER TABLE public.table_reservations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "table_reservations_company_access_policy" 
+ON public.table_reservations
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Table Activity Log
+ALTER TABLE public.table_activity_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "table_activity_log_company_access_policy" 
+ON public.table_activity_log
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Inventory Categories
+ALTER TABLE public.inventory_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "inventory_categories_company_access_policy" 
+ON public.inventory_categories
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Inventory Items
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "inventory_items_company_access_policy" 
+ON public.inventory_items
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Inventory Transactions
+ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "inventory_transactions_company_access_policy" 
+ON public.inventory_transactions
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- POS Orders
+ALTER TABLE public.pos_orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pos_orders_company_access_policy" 
+ON public.pos_orders
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Finance Categories
+ALTER TABLE public.finance_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "finance_categories_company_access_policy" 
+ON public.finance_categories
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
+
+-- Finance Transactions
+ALTER TABLE public.finance_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "finance_transactions_company_access_policy" 
+ON public.finance_transactions
+FOR ALL
+USING (
+  (company_id = get_user_company_id())
+  OR 
+  is_superadmin()
+);
 
 -- 2. USER-SPECIFIC RLS POLICIES
 
