@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
-import type { UserRole, Prisma } from "@prisma/client";
-import { auth, createOrUpdateUserProfile } from "@/lib/auth";
+import { UserRole } from "@prisma/client";
+import type { Prisma, Profile } from "@prisma/client";
+import { auth } from "@/lib/auth";
 
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
       const byIdEndpoint = '/api/profile/by-id';
       const response = await fetch(`${new URL(request.url).origin}${byIdEndpoint}?userId=${userIdParam}`, {
         headers: {
-          cookie: request.headers.get('cookie') || ''
+          cookie: request.headers.get('cookie') || '',
+          authorization: request.headers.get('authorization') || ''
         }
       });
       
@@ -25,19 +27,41 @@ export async function GET(request: NextRequest) {
     }
     
     // Regular authentication flow for current user
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     
-    // Get the current user - using getUser instead of getSession
-    const { data, error } = await supabase.auth.getUser();
+    // Try to extract bearer token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    let sessionData;
     
-    if (error || !data.user) {
-      return NextResponse.json(
-        { error: error?.message || "Not authenticated" },
-        { status: 401 }
-      );
+    // If we have an auth header, use it to get the session
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (!error && data.user) {
+          sessionData = data;
+        } else {
+          console.warn('Invalid token in Authorization header:', error?.message);
+        }
+      } catch (error) {
+        console.error('Error verifying token:', error);
+      }
+    }
+    
+    // Fallback to cookies if header auth failed
+    if (!sessionData) {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) {
+        return NextResponse.json(
+          { error: error?.message || "Not authenticated" },
+          { status: 401 }
+        );
+      }
+      sessionData = data;
     }
 
-    const userId = data.user.id;
+    const userId = sessionData.user.id;
     
     // Check if we already have a profile
     let profile = await prisma.profile.findUnique({
@@ -47,13 +71,26 @@ export async function GET(request: NextRequest) {
     if (!profile) {
       // Use the centralized function to create a profile
       try {
-        profile = await createOrUpdateUserProfile(
-          userId,
-          {
-            ...data.user.user_metadata,
-            email: data.user.email
+        // Extract user metadata and handle it as a generic object to avoid typing issues
+        const metadata = sessionData.user.user_metadata as Record<string, any> || {};
+        metadata.email = sessionData.user.email;
+        
+        // Check for superadmin indicators in metadata
+        const isSuperAdmin = 
+          metadata.role === 'SUPERADMIN' || 
+          metadata.isSuperAdmin === true || 
+          metadata.is_superadmin === true;
+        
+        profile = await prisma.profile.create({
+          data: {
+            userId,
+            firstName: metadata.firstName || metadata.first_name || null,
+            lastName: metadata.lastName || metadata.last_name || null,
+            avatarUrl: metadata.avatarUrl || metadata.avatar_url || null,
+            role: isSuperAdmin ? UserRole.SUPERADMIN : UserRole.USER,
+            active: true
           }
-        );
+        });
       } catch (error) {
         console.error("Error creating profile:", error);
         return NextResponse.json(
@@ -76,26 +113,71 @@ export async function GET(request: NextRequest) {
 // PUT: Update profile for the current authenticated user
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
-    // Get the current user - using getUser instead of getSession
-    const { data, error } = await supabase.auth.getUser();
-
-    if (error || !data.user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    // Try to extract bearer token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    let sessionData;
+    
+    // If we have an auth header, use it to get the session
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (!error && data.user) {
+          sessionData = data;
+        }
+      } catch (error) {
+        console.error('Error verifying token:', error);
+      }
+    }
+    
+    // Fallback to cookies if header auth failed
+    if (!sessionData) {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
+      sessionData = data;
     }
 
-    const userId = data.user.id;
+    const userId = sessionData.user.id;
     const requestData = await request.json();
     const { firstName, lastName, avatarUrl, active } = requestData;
 
-    // Use the centralized function to update the profile
+    // Update the profile directly
     try {
-      const updatedProfile = await createOrUpdateUserProfile(
-        userId,
-        { firstName, lastName, avatarUrl },
-        { active }
-      );
+      // Find the existing profile first
+      const existingProfile = await prisma.profile.findUnique({
+        where: { userId }
+      });
+
+      if (!existingProfile) {
+        // Create a new profile if it doesn't exist
+        const newProfile = await prisma.profile.create({
+          data: {
+            userId,
+            firstName: firstName || null,
+            lastName: lastName || null,
+            avatarUrl: avatarUrl || null,
+            active: active ?? true,
+            role: UserRole.USER  // Default role
+          }
+        });
+        return NextResponse.json(newProfile);
+      }
+      
+      // Update the existing profile
+      const updatedProfile = await prisma.profile.update({
+        where: { userId },
+        data: {
+          firstName: firstName !== undefined ? firstName : existingProfile.firstName,
+          lastName: lastName !== undefined ? lastName : existingProfile.lastName,
+          avatarUrl: avatarUrl !== undefined ? avatarUrl : existingProfile.avatarUrl,
+          active: active !== undefined ? active : existingProfile.active
+        }
+      });
       
       return NextResponse.json(updatedProfile);
     } catch (error) {
@@ -127,7 +209,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use the centralized function to create the profile
     try {
       // Check if profile already exists
       const existingProfile = await prisma.profile.findUnique({
@@ -141,11 +222,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const newProfile = await createOrUpdateUserProfile(
-        userId,
-        { firstName, lastName, avatarUrl },
-        { forcedRole: role as UserRole }
-      );
+      // Create the profile directly
+      const newProfile = await prisma.profile.create({
+        data: {
+          userId,
+          firstName: firstName || null,
+          lastName: lastName || null,
+          avatarUrl: avatarUrl || null,
+          role: (role as UserRole) || UserRole.USER,
+          active: true
+        }
+      });
 
       return NextResponse.json(newProfile, { status: 201 });
     } catch (error) {

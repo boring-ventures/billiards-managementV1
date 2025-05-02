@@ -14,35 +14,41 @@ export async function updateSession(request: NextRequest) {
     // Create a Supabase client specifically for this middleware request
     const supabase = createMiddlewareClient({ req: request, res: response })
     
-    // Always try to get the session first - this will check cookies
-    const { data: { session } } = await supabase.auth.getSession()
+    // First refresh the session - this will update cookies if token is expired
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     
-    // If we have a session, refresh it to ensure token isn't expired
-    if (session) {
-      // This creates a new access token if the current one is expired
-      // and updates the Cookie automatically
-      const { data: { user } } = await supabase.auth.getUser()
+    // If we have a session, ensure it's valid and refresh if needed
+    if (sessionData?.session) {
+      // Verify the user is still valid
+      const { data: userData, error: userError } = await supabase.auth.getUser()
       
-      // If session refresh failed and user is no longer valid, sign out
-      if (!user) {
+      if (userError || !userData?.user) {
+        console.error('Error in middleware user verification:', userError?.message)
+        // Clear invalid session
         await supabase.auth.signOut()
         
         // If trying to access protected route, redirect to login
-        if (request.nextUrl.pathname.startsWith('/dashboard') ||
-            request.nextUrl.pathname.startsWith('/company-selection') ||
-            request.nextUrl.pathname.startsWith('/waiting-approval')) {
+        if (isProtectedRoute(request.nextUrl.pathname)) {
           const redirectUrl = new URL('/sign-in', request.url)
           return NextResponse.redirect(redirectUrl)
         }
       }
     } 
     // No session but trying to access protected route
-    else if (
-      request.nextUrl.pathname.startsWith('/dashboard') ||
-      request.nextUrl.pathname.startsWith('/company-selection') ||
-      request.nextUrl.pathname.startsWith('/waiting-approval')
-    ) {
+    else if (isProtectedRoute(request.nextUrl.pathname)) {
+      // Check if this is an API route
+      if (request.nextUrl.pathname.startsWith('/api/')) {
+        // For API routes, just return 401 instead of redirecting
+        return NextResponse.json(
+          { error: 'Not authenticated', message: 'Authentication required' },
+          { status: 401 }
+        )
+      }
+      
+      // For browser routes, redirect to sign-in
       const redirectUrl = new URL('/sign-in', request.url)
+      // Add original URL as a query parameter to redirect back after login
+      redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
       return NextResponse.redirect(redirectUrl)
     }
     
@@ -51,11 +57,17 @@ export async function updateSession(request: NextRequest) {
     console.error('Error in updateSession middleware:', error)
     
     // If there's an error with auth and path requires auth, redirect to sign-in
-    if (
-      request.nextUrl.pathname.startsWith('/dashboard') ||
-      request.nextUrl.pathname.startsWith('/company-selection') ||
-      request.nextUrl.pathname.startsWith('/waiting-approval')
-    ) {
+    if (isProtectedRoute(request.nextUrl.pathname)) {
+      // Check if this is an API route
+      if (request.nextUrl.pathname.startsWith('/api/')) {
+        // For API routes, just return 401 instead of redirecting
+        return NextResponse.json(
+          { error: 'Auth error', message: 'Authentication failed' },
+          { status: 401 }
+        )
+      }
+      
+      // For browser routes, redirect to sign-in
       const redirectUrl = new URL('/sign-in', request.url)
       return NextResponse.redirect(redirectUrl)
     }
@@ -63,4 +75,16 @@ export async function updateSession(request: NextRequest) {
     // Otherwise, continue to next middleware
     return NextResponse.next()
   }
+}
+
+/**
+ * Helper function to determine if a route requires authentication
+ */
+function isProtectedRoute(pathname: string): boolean {
+  return (
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/company-selection') ||
+    pathname.startsWith('/waiting-approval') ||
+    pathname.startsWith('/api/') // API routes are also protected
+  )
 } 

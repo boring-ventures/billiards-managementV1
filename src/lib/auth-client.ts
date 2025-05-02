@@ -34,10 +34,7 @@ export async function getCurrentUser(): Promise<User | null> {
       if (error.message.includes('Invalid Refresh Token') || 
           error.message.includes('Token expired') ||
           error.message.includes('JWT expired')) {
-        await supabase.auth.signOut();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/sign-in';
-        }
+        await signOut();
         return null;
       }
     }
@@ -55,11 +52,18 @@ export async function getCurrentUser(): Promise<User | null> {
     
     // Use the profile API to get role and company info
     try {
-      const response = await fetch(`/api/profile?userId=${userId}`);
+      // Always include auth token in headers to help with server-side auth
+      const accessToken = data.session.access_token;
+      const response = await fetch(`/api/profile?userId=${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
       
       if (response.ok) {
-        const data = await response.json();
-        const profile = data.profile || data;
+        const responseData = await response.json();
+        // Handle both response formats: data.profile (from by-id format) or data directly
+        const profile = responseData.profile || responseData;
         
         // Store profile in cookie for fallback
         cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profile), {
@@ -78,6 +82,50 @@ export async function getCurrentUser(): Promise<User | null> {
           role: profile.role || data.session?.user.user_metadata?.role || UserRole.USER,
           companyId: profile.companyId
         };
+      } else {
+        console.error("Profile API error:", response.status);
+        
+        // If we get a 401, try to refresh the session and retry once
+        if (response.status === 401) {
+          const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            console.error("Failed to refresh session:", refreshError);
+            await signOut();
+            return null;
+          }
+          
+          if (refreshedData?.session) {
+            // Retry the profile fetch with the new token
+            const retryResponse = await fetch(`/api/profile?userId=${userId}`, {
+              headers: {
+                'Authorization': `Bearer ${refreshedData.session.access_token}`
+              }
+            });
+            
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              const retryProfile = retryData.profile || retryData;
+              
+              // Store profile in cookie for fallback
+              cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(retryProfile), {
+                expires: 1, // 1 day
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax'
+              });
+              
+              return {
+                id: userId,
+                email: refreshedData.session?.user.email,
+                name: retryProfile.firstName 
+                  ? `${retryProfile.firstName} ${retryProfile.lastName || ''}` 
+                  : refreshedData.session?.user.user_metadata?.name,
+                role: retryProfile.role || refreshedData.session?.user.user_metadata?.role || UserRole.USER,
+                companyId: retryProfile.companyId
+              };
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -150,6 +198,23 @@ export async function isLoggedIn(): Promise<boolean> {
 }
 
 /**
+ * Refresh the session token
+ */
+export async function refreshSession(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) {
+      console.error('Failed to refresh session:', error);
+      return false;
+    }
+    return !!data.session;
+  } catch (error) {
+    console.error('Error refreshing session:', error);
+    return false;
+  }
+}
+
+/**
  * Client-side sign out
  */
 export async function signOut(): Promise<void> {
@@ -157,7 +222,16 @@ export async function signOut(): Promise<void> {
     await supabase.auth.signOut();
     // Clear any cookies we might have set
     cookieUtils.clearAuthCookies();
+    
+    // Redirect to sign-in page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/sign-in';
+    }
   } catch (error) {
     console.error('Error signing out:', error);
+    // Still redirect even on error
+    if (typeof window !== 'undefined') {
+      window.location.href = '/sign-in';
+    }
   }
 } 
