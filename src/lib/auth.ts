@@ -1,9 +1,12 @@
 // Authentication implementation with proper role management
 // This handles superadmin, admin, and user roles with company associations
 
+// Mark as server-only to prevent importing in client components
+// This will cause a build error if imported from client components
+import 'server-only';
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/server";
 
 // Define the JoinRequestStatus enum since it might not be exported yet
 enum JoinRequestStatus {
@@ -12,7 +15,7 @@ enum JoinRequestStatus {
   REJECTED = "REJECTED"
 }
 
-interface User {
+export interface User {
   id: string;
   email?: string;
   name?: string;
@@ -20,12 +23,12 @@ interface User {
   companyId?: string;
 }
 
-interface Session {
+export interface Session {
   user: User;
   expires: Date;
 }
 
-interface JoinRequest {
+export interface JoinRequest {
   id: string;
   userId: string;
   companyId: string;
@@ -37,7 +40,7 @@ interface JoinRequest {
 }
 
 // Define profile type for type safety
-interface ProfileType {
+export interface ProfileType {
   id: string;
   userId: string;
   firstName?: string;

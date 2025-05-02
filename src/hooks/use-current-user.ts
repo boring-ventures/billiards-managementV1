@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth-client";
 import type { Profile as ProfileType } from "@/types/profile";
 import { getLocalStorage, setLocalStorage } from "@/lib/client-utils";
 import { UserRole } from "@prisma/client";
@@ -40,7 +40,7 @@ export function useCurrentUser() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        // Get the current user from the auth library
+        // Get the current user from the auth-client library
         const currentUser = await getCurrentUser();
         
         // Check if we have a specific user ID in localStorage (for user switching in admin)
