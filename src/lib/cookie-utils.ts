@@ -3,10 +3,54 @@ import Cookies from 'js-cookie';
 // Constants for cookie names
 export const AUTH_TOKEN_COOKIE = 'sb-auth-token';
 export const REFRESH_TOKEN_COOKIE = 'sb-refresh-token';
+export const ACCESS_TOKEN_COOKIE = 'sb-access-token';
 export const COMPANY_SELECTION_COOKIE = 'company-selection';
 export const VIEW_MODE_COOKIE = 'view-mode';
 export const USER_ID_COOKIE = 'user-id';
 export const FALLBACK_PROFILE_COOKIE = 'profile-fallback';
+
+// Get current domain for cookie setting
+// This makes cookies work in both development and production
+function getCurrentDomain(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  
+  const hostname = window.location.hostname;
+  
+  // In development or on localhost, don't specify domain
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return undefined;
+  }
+  
+  // For Vercel preview deployments
+  if (hostname.includes('vercel.app')) {
+    return hostname;
+  }
+  
+  // For production, use root domain to make cookies work across subdomains
+  const parts = hostname.split('.');
+  if (parts.length > 2) {
+    // Get the root domain (e.g., example.com from subdomain.example.com)
+    return parts.slice(-2).join('.');
+  }
+  
+  // Default to current hostname
+  return hostname;
+}
+
+// Default cookie options
+const getDefaultOptions = (): Cookies.CookieAttributes => {
+  const isProd = process.env.NODE_ENV === 'production';
+  
+  return {
+    path: '/',
+    sameSite: 'lax',
+    secure: isProd,
+    domain: getCurrentDomain(),
+    // Vercel environment cookies need special handling with short expiry times
+    // because of how serverless functions work
+    expires: 7 // 7 days default expiry
+  };
+};
 
 // Client-side cookie utilities
 export const cookieUtils = {
@@ -24,115 +68,101 @@ export const cookieUtils = {
       return undefined;
     }
   },
-  
+
   /**
-   * Set cookie with options
+   * Set cookie value
    * @param key The cookie key
    * @param value The cookie value
-   * @param options Cookie options (expires, secure, sameSite, etc.)
+   * @param options Optional cookie options
    */
-  set: (key: string, value: string, options?: Cookies.CookieAttributes): void => {
+  set: (
+    key: string,
+    value: string,
+    options?: Cookies.CookieAttributes
+  ): void => {
     if (typeof window === 'undefined') return;
-    
     try {
-      // Set secure by default in production
-      const isProduction = process.env.NODE_ENV === 'production';
-      const secureByDefault = isProduction && options?.secure !== false;
-      
-      // Always set path to '/' by default for consistency
-      const path = options?.path || '/';
-      
-      // In production, dynamically determine domain based on window.location.hostname
-      // This helps with Vercel deployments that might use custom domains
-      let domain = options?.domain;
-      if (isProduction && !domain && typeof window !== 'undefined') {
-        // Get the root domain (example.com from subdomain.example.com)
-        // This allows cookies to work across subdomains if needed
-        const hostname = window.location.hostname;
-        // Don't set domain for localhost or IP addresses
-        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
-          // For vercel.app domains or custom domains
-          domain = hostname.includes('.') ? hostname : undefined;
-        }
-      }
-      
-      Cookies.set(key, value, {
+      // Merge default options with provided options
+      const mergedOptions = {
+        ...getDefaultOptions(),
         ...options,
-        secure: secureByDefault || options?.secure,
-        sameSite: options?.sameSite || 'lax',
-        path,
-        domain
-      });
+      };
       
-      // Verify cookie was set
-      if (!Cookies.get(key) && key.startsWith('sb-')) {
-        console.warn(`Warning: Cookie ${key} may not have been set properly`);
-        console.log(`Attempted to set cookie with domain: ${domain}, path: ${path}`);
+      Cookies.set(key, value, mergedOptions);
+      
+      // Debug output for development
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Cookie set: ${key} with options:`, mergedOptions);
       }
     } catch (error) {
       console.error(`Error setting cookie ${key}:`, error);
     }
   },
-  
+
   /**
    * Remove cookie
-   * @param key The cookie key to remove
-   * @param options Cookie options (path, domain, etc.)
+   * @param key The cookie key
+   * @param options Optional cookie options
    */
   remove: (key: string, options?: Cookies.CookieAttributes): void => {
     if (typeof window === 'undefined') return;
-    
     try {
-      // Always set path to '/' by default for consistency with set method
-      const path = options?.path || '/';
+      // Merge default options with provided options
+      const mergedOptions = {
+        ...getDefaultOptions(),
+        ...options,
+      };
       
-      // In production, dynamically determine domain based on window.location.hostname
-      // This helps with Vercel deployments that might use custom domains
-      let domain = options?.domain;
-      if (process.env.NODE_ENV === 'production' && !domain && typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        // Don't set domain for localhost or IP addresses
-        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
-          // For vercel.app domains or custom domains
-          domain = hostname.includes('.') ? hostname : undefined;
-        }
-      }
-      
-      Cookies.remove(key, { ...options, path, domain });
+      Cookies.remove(key, mergedOptions);
     } catch (error) {
       console.error(`Error removing cookie ${key}:`, error);
     }
   },
-  
+
   /**
-   * Clear all auth cookies
+   * Get all cookies as an object
+   * @returns Object with all cookies
+   */
+  getAll: (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    try {
+      return Cookies.get();
+    } catch (error) {
+      console.error('Error getting all cookies:', error);
+      return {};
+    }
+  },
+
+  /**
+   * Clear all auth-related cookies
    */
   clearAuthCookies: (): void => {
     if (typeof window === 'undefined') return;
     
+    const options = getDefaultOptions();
+    
     try {
-      const cookies = [
-        AUTH_TOKEN_COOKIE,
-        REFRESH_TOKEN_COOKIE,
-        COMPANY_SELECTION_COOKIE,
-        VIEW_MODE_COOKIE,
-        USER_ID_COOKIE,
-        FALLBACK_PROFILE_COOKIE
-      ];
+      // Remove all auth cookies
+      Cookies.remove(AUTH_TOKEN_COOKIE, options);
+      Cookies.remove(REFRESH_TOKEN_COOKIE, options);
+      Cookies.remove(ACCESS_TOKEN_COOKIE, options);
       
-      // Remove each cookie with consistent path
-      cookies.forEach(cookie => {
-        // Get the same domain settings used when setting cookies
-        let domain;
-        if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
-          const hostname = window.location.hostname;
-          if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
-            domain = hostname.includes('.') ? hostname : undefined;
-          }
-        }
-        
-        Cookies.remove(cookie, { path: '/', domain });
-      });
+      // Also try removing with no domain specified (for cross-domain issues)
+      Cookies.remove(AUTH_TOKEN_COOKIE, { path: '/' });
+      Cookies.remove(REFRESH_TOKEN_COOKIE, { path: '/' });
+      Cookies.remove(ACCESS_TOKEN_COOKIE, { path: '/' });
+      
+      // Remove Supabase default cookies as well
+      Cookies.remove('sb-refresh-token', options);
+      Cookies.remove('sb-access-token', options);
+      Cookies.remove('supabase-auth-token', options);
+      
+      // Try no domain for Supabase cookies too
+      Cookies.remove('sb-refresh-token', { path: '/' });
+      Cookies.remove('sb-access-token', { path: '/' });
+      Cookies.remove('supabase-auth-token', { path: '/' });
+      
+      console.log('All auth cookies cleared');
     } catch (error) {
       console.error('Error clearing auth cookies:', error);
     }

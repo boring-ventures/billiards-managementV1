@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import Cookies from 'js-cookie';
-import { cookieUtils, AUTH_TOKEN_COOKIE } from '@/lib/cookie-utils';
+import { cookieUtils, AUTH_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE } from '@/lib/cookie-utils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -20,103 +19,146 @@ let globalInstance: any = null;
 const createCookieStorage = () => {
   return {
     getItem: (key: string) => {
-      if (typeof document === 'undefined') return null;
-      return cookieUtils.get(key) || null;
+      if (typeof document === 'undefined') {
+        return null;
+      }
+      
+      try {
+        // Map supabase keys to our cookie names
+        let cookieKey = key;
+        if (key === 'supabase.auth.token') {
+          cookieKey = AUTH_TOKEN_COOKIE;
+        } else if (key === 'supabase.auth.refreshToken') {
+          cookieKey = REFRESH_TOKEN_COOKIE;
+        } else if (key === 'supabase.auth.accessToken') {
+          cookieKey = ACCESS_TOKEN_COOKIE;
+        }
+        
+        const value = cookieUtils.get(cookieKey);
+        console.log(`[Cookie Storage] Reading ${cookieKey}: ${value ? 'present' : 'not found'}`);
+        return value || null;
+      } catch (error) {
+        console.error(`[Cookie Storage] Error getting ${key}:`, error);
+        return null;
+      }
     },
     setItem: (key: string, value: string) => {
-      if (typeof document === 'undefined') return;
-      
-      // Important: Determine if we're in production for cookie settings
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      // Get domain settings for proper cookie storage in production
-      let domain;
-      if (isProduction && typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
-          domain = hostname.includes('.') ? hostname : undefined;
-        }
+      if (typeof document === 'undefined') {
+        return;
       }
       
-      cookieUtils.set(key, value, { 
-        expires: 7, // 7 days
-        secure: isProduction,
-        sameSite: 'lax',
-        path: '/', // Ensure cookies are available for entire domain
-        domain, // Use determined domain in production
-      });
+      try {
+        console.log(`[Cookie Storage] Setting ${key}`);
+        
+        // Map Supabase keys to our cookie names
+        if (key === 'supabase.auth.token') {
+          const tokenData = JSON.parse(value);
+          
+          // Store the actual token in a separate cookie for API auth
+          if (tokenData?.access_token) {
+            cookieUtils.set(ACCESS_TOKEN_COOKIE, tokenData.access_token, {
+              expires: 1, // 1 day (shorter expiry for security)
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax', 
+              path: '/'
+            });
+          }
+          
+          // Store refresh token separately too
+          if (tokenData?.refresh_token) {
+            cookieUtils.set(REFRESH_TOKEN_COOKIE, tokenData.refresh_token, {
+              expires: 30, // 30 days (longer expiry for refresh)
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/'
+            });
+          }
+          
+          // Store the full auth token data as well
+          cookieUtils.set(AUTH_TOKEN_COOKIE, value, {
+            expires: 7, // 7 days
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+          });
+        } else {
+          // For other keys, just store directly
+          cookieUtils.set(key, value, {
+            expires: 7, // 7 days
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+          });
+        }
+      } catch (error) {
+        console.error(`[Cookie Storage] Error setting ${key}:`, error);
+      }
     },
     removeItem: (key: string) => {
-      if (typeof document === 'undefined') return;
-      
-      // Use same domain settings for removal
-      let domain;
-      if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        if (!hostname.match(/^(localhost|(\d{1,3}\.){3}\d{1,3})$/)) {
-          domain = hostname.includes('.') ? hostname : undefined;
-        }
+      if (typeof document === 'undefined') {
+        return;
       }
       
-      cookieUtils.remove(key, { path: '/', domain });
+      try {
+        console.log(`[Cookie Storage] Removing ${key}`);
+        // Remove both mapped and original keys
+        if (key === 'supabase.auth.token') {
+          cookieUtils.remove(AUTH_TOKEN_COOKIE, { path: '/' });
+          cookieUtils.remove(ACCESS_TOKEN_COOKIE, { path: '/' });
+        } else if (key === 'supabase.auth.refreshToken') {
+          cookieUtils.remove(REFRESH_TOKEN_COOKIE, { path: '/' });
+        } else {
+          cookieUtils.remove(key, { path: '/' });
+        }
+      } catch (error) {
+        console.error(`[Cookie Storage] Error removing ${key}:`, error);
+      }
     }
   };
 };
 
 /**
- * Creates and returns a singleton Supabase client instance
- * This ensures we only have one Supabase client per browser session
- * Uses cookies instead of localStorage for better SSR compatibility
+ * Create a Supabase client configured for browser usage
  */
-export function createSupabaseClient() {
-  // In a browser environment, return the singleton instance if it exists
-  if (typeof window !== 'undefined' && globalInstance) {
+export const supabase = createClient<Database>(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      storage: createCookieStorage(),
+      flowType: 'pkce',
+      debug: process.env.NODE_ENV !== 'production'
+    },
+    global: {
+      fetch: (...args) => {
+        // Add custom headers to all Supabase requests
+        // For troubleshooting authentication issues
+        const [url, config] = args;
+        const headers = (config?.headers || {}) as Record<string, string>;
+        return fetch(url, {
+          ...config,
+          headers: {
+            ...headers,
+            'X-Client-Info': 'supabase-js-client/2.0'
+          }
+        });
+      }
+    }
+  }
+);
+
+/**
+ * Get a singleton instance of Supabase client to ensure consistent auth state
+ */
+export const getSupabase = () => {
+  if (globalInstance) {
     return globalInstance;
   }
   
-  // For SSR, create a non-persistent client
-  if (typeof window === 'undefined') {
-    return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        flowType: 'pkce',
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-      }
-    });
-  }
-  
-  // Create a cookie-based storage system
-  const cookieStorage = createCookieStorage();
-  
-  // Create a new client instance for browser with additional debug info
-  const newInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      storageKey: AUTH_TOKEN_COOKIE,
-      storage: cookieStorage,
-      flowType: 'pkce',
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      // Note: Cookie settings are managed by the cookieStorage implementation above
-    },
-    global: {
-      headers: {
-        'X-Client-Info': 'supabase-js/2.0.0',
-      },
-    },
-  });
-  
-  // Add debug information to console if not in production
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('Supabase client initialized with cookie storage');
-  }
-  
-  // Store the instance globally
-  globalInstance = newInstance;
-  
-  return newInstance;
-}
-
-// Get the singleton instance
-export const supabase = createSupabaseClient();
+  console.log('Creating new Supabase client instance');
+  globalInstance = supabase;
+  return globalInstance;
+};
