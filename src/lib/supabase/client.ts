@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import Cookies from 'js-cookie';
 import { cookieUtils, AUTH_TOKEN_COOKIE } from '@/lib/cookie-utils';
 
@@ -10,7 +11,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Global instance that is shared between calls in the same browser session
-let globalInstance: ReturnType<typeof createClient> | null = null;
+// Use explicit Database type to avoid type mismatch between "public" and "never"
+let globalInstance: ReturnType<typeof createClient<Database>> | null = null;
 
 /**
  * Creates a custom storage interface that uses cookies instead of localStorage
@@ -50,7 +52,7 @@ export function createSupabaseClient() {
   
   // For SSR, create a non-persistent client
   if (typeof window === 'undefined') {
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    return createClient<Database>(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         flowType: 'pkce',
@@ -64,7 +66,7 @@ export function createSupabaseClient() {
   const cookieStorage = createCookieStorage();
   
   // Create a new client instance for browser
-  const newInstance = createClient(supabaseUrl, supabaseAnonKey, {
+  const newInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       storageKey: AUTH_TOKEN_COOKIE,
