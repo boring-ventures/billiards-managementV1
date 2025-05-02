@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { validateSession } from "@/lib/auth-utils";
 
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
@@ -27,149 +28,99 @@ export async function GET(request: NextRequest) {
     }
     
     // Log cookies and auth headers for debugging
-    const authHeader = request.headers.get('authorization');
-    console.log('[Profile API] Auth header present:', !!authHeader);
-    console.log('[Profile API] Cookie header present:', !!request.headers.get('cookie'));
+    console.log(`[API:profile] Cookie header: ${request.headers.get('cookie')?.substring(0, 50)}...`);
+    console.log(`[API:profile] Auth header present: ${Boolean(request.headers.get('authorization'))}`);
     
-    // Create Supabase client with the new SSR package
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            const cookie = request.cookies.get(name);
-            return cookie?.value || null;
-          },
-          set() {
-            // Can't set cookies in API routes
-          },
-          remove() {
-            // Can't remove cookies in API routes
-          }
-        }
-      }
-    );
+    // ALWAYS use getUser() instead of getSession() for safer server-side auth validation
+    const { user, error } = await validateSession();
     
-    // Get the authenticated user - ALWAYS use getUser() over getSession() for more reliable auth
-    let userId = null;
-    
-    // First try Authorization header if present (Bearer token)
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      try {
-        console.log('[Profile API] Using Authorization header token');
-        const { data, error } = await supabase.auth.getUser(token);
-        if (!error && data.user) {
-          userId = data.user.id;
-          console.log('[Profile API] User found from token:', userId);
-        } else {
-          console.warn('[Profile API] Invalid token in Authorization header:', error?.message);
-        }
-      } catch (error) {
-        console.error('[Profile API] Error verifying token:', error);
-      }
-    }
-    
-    // Fallback to cookies if header auth failed
-    if (!userId) {
-      try {
-        console.log('[Profile API] Trying cookies for authentication');
-        const { data, error } = await supabase.auth.getUser();
-        if (error) {
-          console.error('[Profile API] Cookie auth error:', error.message);
-          return NextResponse.json(
-            { error: error?.message || "Not authenticated", detail: "No active session" },
-            { status: 401 }
-          );
-        }
-        
-        if (!data?.user) {
-          console.error('[Profile API] No user found in cookie auth');
-          return NextResponse.json(
-            { error: "User not found", detail: "No active session" },
-            { status: 401 }
-          );
-        }
-        
-        userId = data.user.id;
-        console.log('[Profile API] User found from cookies:', userId);
-      } catch (error) {
-        console.error('[Profile API] Supabase getUser error:', error);
-        return NextResponse.json(
-          { error: "Authentication error", detail: "No active session" },
-          { status: 401 }
-        );
-      }
-    }
-    
-    // If we still don't have a userId, we can't proceed
-    if (!userId) {
-      console.error('[Profile API] Could not determine user ID');
+    if (error || !user) {
+      console.error(`[API:profile] Authentication error: ${error}`);
       return NextResponse.json(
-        { error: "User not authenticated", detail: "No active session" },
+        { error: "Not authenticated", detail: error || "No active session" },
         { status: 401 }
       );
     }
     
-    // Check if we already have a profile
-    let profile = await prisma.profile.findUnique({
-      where: { userId },
+    console.log(`[API:profile] Authenticated user ID: ${user.id}`);
+    
+    // Fetch the user's profile
+    const profile = await prisma.profile.findUnique({
+      where: { userId: user.id },
     });
-
+    
     if (!profile) {
-      // Use the centralized function to create a profile
+      console.log(`[API:profile] Profile not found for user ${user.id}, checking if we should create one`);
+      
+      // Check if we have user metadata to create a profile with
+      const userMetadata = user.user_metadata || {};
+      const email = user.email || '';
+      
+      // For new users, create a default profile
       try {
-        // Get user data directly from Supabase
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData?.user) {
-          throw new Error("Failed to get user data");
-        }
+        // Extract name from email if needed 
+        const emailName = email.split('@')[0];
+        const emailNameParts = emailName ? emailName.split('.') : [];
         
-        // Extract user metadata and handle it as a generic object to avoid typing issues
-        const metadata = userData.user.user_metadata as Record<string, any> || {};
-        metadata.email = userData.user.email;
+        // Get name information with fallbacks
+        const firstName = 
+          userMetadata.firstName || 
+          userMetadata.first_name || 
+          userMetadata.given_name ||
+          (emailNameParts.length > 0 ? 
+            emailNameParts[0].charAt(0).toUpperCase() + emailNameParts[0].slice(1) : 
+            "User");
         
-        // Check for superadmin indicators in metadata
-        const isSuperAdmin = 
-          metadata.role === 'SUPERADMIN' || 
-          metadata.isSuperAdmin === true || 
-          metadata.is_superadmin === true;
+        const lastName = 
+          userMetadata.lastName || 
+          userMetadata.last_name || 
+          userMetadata.family_name || 
+          (emailNameParts.length > 1 ? 
+            emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : 
+            "");
         
-        console.log('[Profile API] Creating profile for user, superadmin:', isSuperAdmin);
+        console.log(`[API:profile] Creating new profile for user ${user.id}`);
         
-        profile = await prisma.profile.create({
+        const newProfile = await prisma.profile.create({
           data: {
-            userId,
-            firstName: metadata.firstName || metadata.first_name || null,
-            lastName: metadata.lastName || metadata.last_name || null,
-            avatarUrl: metadata.avatarUrl || metadata.avatar_url || null,
-            role: isSuperAdmin ? UserRole.SUPERADMIN : UserRole.USER,
-            active: true
-          }
+            userId: user.id,
+            firstName,
+            lastName,
+            avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
+            role: UserRole.USER, // Default role for new users
+            active: true,
+            companyId: null
+          },
         });
         
-        console.log('[Profile API] Profile created successfully');
-      } catch (error) {
-        console.error("[Profile API] Error creating profile:", error);
+        console.log(`[API:profile] New profile created successfully`);
+        return NextResponse.json({ profile: newProfile });
+      } catch (createError: any) {
+        // Unique constraint error means someone else created the profile (race condition)
+        if (createError.code === 'P2002') {
+          const existingProfile = await prisma.profile.findUnique({
+            where: { userId: user.id },
+          });
+          
+          if (existingProfile) {
+            return NextResponse.json({ profile: existingProfile });
+          }
+        }
+        
+        console.error(`[API:profile] Error creating profile: ${createError}`);
         return NextResponse.json(
-          { error: "Failed to create profile" },
+          { error: "Failed to create profile", detail: createError.message },
           { status: 500 }
         );
       }
-    } else {
-      console.log('[Profile API] Existing profile found for user');
     }
-
-    // Add auth information to the response headers to help debugging
-    const headers = new Headers();
-    headers.set('X-Auth-Method', userId ? 'success' : 'none');
     
-    return NextResponse.json(profile, { headers });
-  } catch (error) {
-    console.error("[Profile API] Error in profile endpoint:", error);
+    // Return the profile
+    return NextResponse.json({ profile });
+  } catch (error: any) {
+    console.error(`[API:profile] Unexpected error: ${error}`);
     return NextResponse.json(
-      { error: "Failed to fetch profile" },
+      { error: "Internal server error", detail: error.message },
       { status: 500 }
     );
   }

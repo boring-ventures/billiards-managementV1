@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAuthClient, AUTH_TOKEN_KEY } from '@/lib/auth-utils'
 
 /**
  * Auth callback handler for Supabase authentication
@@ -16,18 +16,7 @@ export async function GET(request: NextRequest) {
       console.log('[Auth Callback] Processing auth code')
       
       // Create a Supabase client for handling the auth exchange
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          auth: {
-            flowType: 'pkce',
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-            persistSession: false
-          }
-        }
-      )
+      const supabase = createAuthClient()
 
       // Exchange the code for a session
       const { data, error } = await supabase.auth.exchangeCodeForSession(code)
@@ -49,7 +38,7 @@ export async function GET(request: NextRequest) {
       
       // Extract project reference from the Supabase URL for cookie naming
       const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
-      console.log(`[Auth Callback] Setting cookies for project: ${projectRef}`)
+      console.log(`[Auth Callback] Using auth token key: ${AUTH_TOKEN_KEY}`)
       
       // Primary auth token cookie that Supabase looks for - must be carefully formatted
       const authToken = {
@@ -79,7 +68,7 @@ export async function GET(request: NextRequest) {
       
       // Set the main auth cookie that Supabase uses for session management
       response.cookies.set({
-        name: `sb-${projectRef}-auth-token`,
+        name: AUTH_TOKEN_KEY,
         value: authCookieValue,
         path: '/',
         sameSite: 'lax',

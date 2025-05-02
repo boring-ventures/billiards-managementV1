@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAuthClient, AUTH_TOKEN_KEY } from '@/lib/auth-utils'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
 /**
  * Auth confirmation endpoint for handling token exchange
- * This is essential for SSR environments with Supabase
+ * This is essential for SSR environments with Supabase auth flows like:
+ * - Email verification
+ * - Password resets
+ * - Magic links
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,95 +21,103 @@ export async function GET(request: NextRequest) {
     redirectTo.pathname = next
     redirectTo.searchParams.delete('token_hash')
     redirectTo.searchParams.delete('type')
-    redirectTo.searchParams.delete('next')
 
-    console.log(`[Auth Confirm] Processing token verification: type=${type}`)
-
-    if (token_hash && type) {
-      // Create a response object that we'll send back
-      const response = NextResponse.redirect(redirectTo)
-      
-      // Create a Supabase client with minimal config for OTP verification
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          auth: {
-            flowType: 'pkce',
-            autoRefreshToken: false,
-            detectSessionInUrl: false,
-            persistSession: false
-          }
-        }
+    // If there's no token hash or type, redirect to the error page
+    if (!token_hash || !type) {
+      console.error('[Auth Confirm] Missing token_hash or type')
+      return NextResponse.redirect(
+        new URL('/auth-error?error=Missing verification parameters', requestUrl.origin)
       )
-
-      // Verify the OTP token
-      const { data, error } = await supabase.auth.verifyOtp({ 
-        type, 
-        token_hash 
-      })
-
-      if (error) {
-        console.error(`[Auth Confirm] Error verifying token: ${error.message}`)
-        return NextResponse.redirect(
-          new URL(`/auth-error?error=${encodeURIComponent(error.message)}`, requestUrl.origin)
-        )
-      }
-
-      // On successful verification, set cookies for the session
-      if (data.session) {
-        const { access_token, refresh_token, expires_at, expires_in } = data.session
-        
-        // Extract project reference from the Supabase URL for cookie naming
-        const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
-        console.log(`[Auth Confirm] Setting cookies for project: ${projectRef}`)
-        
-        // Primary auth token cookie that Supabase looks for
-        const authToken = {
-          access_token,
-          refresh_token,
-          expires_at: expires_at,
-          expires_in: expires_in || 3600,
-          token_type: 'bearer',
-          type: 'access',
-          provider: 'email'
-        }
-
-        // Sanitize the user object to include only necessary fields
-        const sanitizedUser = {
-          id: data.session.user.id,
-          email: data.session.user.email,
-          role: data.session.user.role,
-          app_metadata: data.session.user.app_metadata,
-          user_metadata: data.session.user.user_metadata,
-          aud: data.session.user.aud
-        }
-        
-        const authCookieValue = JSON.stringify({
-          ...authToken,
-          user: sanitizedUser
-        })
-        
-        // Set the main auth cookie for session management
-        response.cookies.set({
-          name: `sb-${projectRef}-auth-token`,
-          value: authCookieValue,
-          path: '/',
-          sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-          secure: process.env.NODE_ENV === 'production',
-          httpOnly: true
-        })
-      }
-
-      console.log('[Auth Confirm] Token verified successfully, redirecting to:', next)
-      return response
     }
 
-    console.error('[Auth Confirm] Missing token_hash or type parameters')
-    return NextResponse.redirect(new URL('/sign-in', requestUrl.origin))
-  } catch (error) {
-    console.error('[Auth Confirm] Unexpected error:', error)
+    // Verify the OTP token
+    const supabase = createAuthClient()
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type,
+    })
+
+    if (error) {
+      console.error('[Auth Confirm] Error verifying OTP:', error.message)
+      return NextResponse.redirect(
+        new URL(`/auth-error?error=${encodeURIComponent(error.message)}`, requestUrl.origin)
+      )
+    }
+
+    console.log('[Auth Confirm] OTP verification successful')
+
+    // Create a response to redirect to the next page
+    const response = NextResponse.redirect(redirectTo)
+
+    // If the verification gave us a session, save it in cookies
+    if (data?.session) {
+      // Set cookies manually for the session to ensure auth state is retained
+      const { access_token, refresh_token, expires_at, expires_in } = data.session
+      
+      // Primary auth token cookie that Supabase looks for
+      const authToken = {
+        access_token,
+        refresh_token,
+        expires_at: expires_at, 
+        expires_in: expires_in || 3600,
+        token_type: 'bearer',
+        type: 'access',
+        provider: type === 'email' ? 'email' : 'magic_link'
+      }
+
+      // Sanitize the user object to include only necessary fields for the cookie
+      const sanitizedUser = {
+        id: data.session.user.id,
+        email: data.session.user.email,
+        role: data.session.user.role,
+        app_metadata: data.session.user.app_metadata,
+        user_metadata: data.session.user.user_metadata,
+        aud: data.session.user.aud
+      }
+      
+      const authCookieValue = JSON.stringify({
+        ...authToken,
+        user: sanitizedUser
+      })
+      
+      // Set the main auth cookie that Supabase uses for session management
+      response.cookies.set({
+        name: AUTH_TOKEN_KEY,
+        value: authCookieValue,
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true
+      })
+      
+      // Also set individual cookies for access and refresh tokens
+      response.cookies.set({
+        name: `sb-access-token`,
+        value: access_token,
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60, // 1 hour
+        secure: process.env.NODE_ENV === 'production'
+      })
+      
+      response.cookies.set({
+        name: `sb-refresh-token`,
+        value: refresh_token,
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        secure: process.env.NODE_ENV === 'production'
+      })
+      
+      console.log('[Auth Confirm] Auth cookies set successfully')
+    } else {
+      console.log('[Auth Confirm] No session received after OTP verification')
+    }
+
+    return response
+  } catch (err) {
+    console.error('[Auth Confirm] Unexpected error:', err)
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
 } 
