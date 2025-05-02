@@ -3,8 +3,7 @@
 
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { supabase } from "@/lib/supabase/client";
 
 interface User {
   id: string;
@@ -26,7 +25,6 @@ export async function auth(): Promise<Session | null> {
   try {
     // Try to get Supabase auth session
     try {
-      const supabase = createServerComponentClient({ cookies });
       const { data } = await supabase.auth.getSession();
       
       if (data.session?.user) {
