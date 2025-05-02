@@ -39,17 +39,16 @@ export async function middleware(req: NextRequest) {
   }
 }
 
-// Update matcher pattern to comply with Next.js 15 requirements
-// Avoid using complex capturing groups which are no longer supported
+// Updated matcher pattern to comply with Next.js 15 requirements
+// Use explicit route matching instead of capturing groups
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (images, etc)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Protected routes
+    '/dashboard/:path*',
+    '/company-selection/:path*',
+    '/waiting-approval/:path*',
+    '/select-company/:path*',
+    // Root path
+    '/'
   ],
 };
