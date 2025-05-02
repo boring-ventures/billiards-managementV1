@@ -1,6 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from "@/types/database.types";
-import { cookieUtils, AUTH_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE } from '@/lib/cookie-utils';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -23,14 +22,14 @@ export const supabase = createBrowserClient(
       get(name: string) {
         if (typeof document === 'undefined') return null;
         
-        try {
-          const value = cookieUtils.get(name);
-          console.log(`[Cookie Storage] Reading ${name}: ${value ? 'present' : 'not found'}`);
-          return value || null;
-        } catch (error) {
-          console.error(`[Cookie Storage] Error getting ${name}:`, error);
-          return null;
-        }
+        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          if (key) acc[key] = value || '';
+          return acc;
+        }, {} as Record<string, string>);
+        
+        console.log(`[Cookie Storage] Reading ${name}: ${cookies[name] ? 'present' : 'not found'}`);
+        return cookies[name] || null;
       },
       set(name: string, value: string, options: any) {
         if (typeof document === 'undefined') return;
@@ -38,32 +37,23 @@ export const supabase = createBrowserClient(
         try {
           console.log(`[Cookie Storage] Setting ${name}`);
           
-          // For auth tokens, set with specific options
-          if (name.includes('access-token')) {
-            cookieUtils.set(ACCESS_TOKEN_COOKIE, value, {
-              ...options,
-              expires: 1, // 1 day (shorter expiry for security)
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              path: '/'
-            });
-          } else if (name.includes('refresh-token')) {
-            cookieUtils.set(REFRESH_TOKEN_COOKIE, value, {
-              ...options,
-              expires: 30, // 30 days
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              path: '/'
-            });
-          } else {
-            // For other cookies, use default options
-            cookieUtils.set(name, value, {
-              ...options,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              path: '/'
-            });
-          }
+          const cookieOptions = Object.entries({
+            path: '/',
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: name.includes('access-token') ? 3600 : 86400 * 30, // 1 hour for access token, 30 days for refresh
+            ...options
+          })
+            .map(([key, val]) => {
+              if (key === 'maxAge') return `max-age=${val}`;
+              if (val === true) return key;
+              if (val === false) return '';
+              return `${key}=${val}`;
+            })
+            .filter(Boolean)
+            .join('; ');
+          
+          document.cookie = `${name}=${value}; ${cookieOptions}`;
         } catch (error) {
           console.error(`[Cookie Storage] Error setting ${name}:`, error);
         }
@@ -73,7 +63,19 @@ export const supabase = createBrowserClient(
         
         try {
           console.log(`[Cookie Storage] Removing ${name}`);
-          cookieUtils.remove(name, { path: '/' });
+          const cookieOptions = Object.entries({
+            path: '/',
+            ...options
+          })
+            .map(([key, val]) => {
+              if (val === true) return key;
+              if (val === false) return '';
+              return `${key}=${val}`;
+            })
+            .filter(Boolean)
+            .join('; ');
+            
+          document.cookie = `${name}=; max-age=0; ${cookieOptions}`;
         } catch (error) {
           console.error(`[Cookie Storage] Error removing ${name}:`, error);
         }
@@ -81,7 +83,9 @@ export const supabase = createBrowserClient(
     },
     auth: {
       flowType: 'pkce',
-      debug: process.env.NODE_ENV !== 'production'
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      persistSession: true
     }
   }
 );

@@ -60,13 +60,14 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // This gets the session using the cookies and updates cookies if needed
-  const { data: { session } } = await supabase.auth.getUser()
+  // This gets the user and checks if there's a valid session
+  const { data } = await supabase.auth.getUser()
+  const user = data?.user
   
   // Log status for debugging
   const pathname = request.nextUrl.pathname
-  if (session) {
-    console.log(`[Middleware] Session found for user ${session.user.id.slice(0, 6)}... on ${pathname}`)
+  if (user) {
+    console.log(`[Middleware] Session found for user ${user.id.slice(0, 6)}... on ${pathname}`)
   } else {
     console.log(`[Middleware] No session found for path ${pathname}`)
     

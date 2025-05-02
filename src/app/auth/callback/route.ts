@@ -43,8 +43,28 @@ export async function GET(request: NextRequest) {
       // Set cookies manually for the session
       const { access_token, refresh_token } = data.session
       
+      // Explicitly set cookies with correct names expected by the Supabase client
+      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
+      
       response.cookies.set({
-        name: 'sb-access-token',
+        name: `sb-${projectRef}-auth-token`,
+        value: JSON.stringify({
+          access_token,
+          refresh_token,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_in: 3600,
+          token_type: 'bearer',
+          user: data.session.user
+        }),
+        path: '/',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true
+      })
+      
+      response.cookies.set({
+        name: `sb-access-token`,
         value: access_token,
         path: '/',
         sameSite: 'lax',
@@ -53,7 +73,7 @@ export async function GET(request: NextRequest) {
       })
       
       response.cookies.set({
-        name: 'sb-refresh-token',
+        name: `sb-refresh-token`,
         value: refresh_token,
         path: '/',
         sameSite: 'lax',
