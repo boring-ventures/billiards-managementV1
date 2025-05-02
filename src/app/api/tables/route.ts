@@ -70,8 +70,8 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    // Ensure companyId is not null before querying
-    if (!companyId) {
+    // Ensure companyId is not null before querying for non-superadmins
+    if (!companyId && profile.role !== UserRole.SUPERADMIN) {
       return NextResponse.json(
         { error: "No company context available" },
         { status: 400 }
@@ -80,8 +80,14 @@ export async function GET(req: NextRequest) {
 
     // Get tables for the company with their active sessions
     const tables = await db.table.findMany({
-      where: { companyId },
+      where: companyId ? { companyId } : {},
       include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         sessions: {
           where: { endedAt: null },
         },

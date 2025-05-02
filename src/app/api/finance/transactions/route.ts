@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
     let companyId: string | null = null;
     
     // Check if the user is a SUPERADMIN
-    if (profile.role && profile.role.toString() === "SUPERADMIN") {
+    const isSuperAdmin = profile.role && profile.role.toString() === "SUPERADMIN";
+    
+    if (isSuperAdmin) {
       // For superadmins, use the company ID from the query params if provided
       if (specificCompanyId) {
         companyId = specificCompanyId;
@@ -86,19 +88,25 @@ export async function GET(req: NextRequest) {
       companyId = profile.companyId;
     }
     
-    if (!companyId) {
+    // Only require companyId for non-superadmins
+    if (!companyId && !isSuperAdmin) {
       return NextResponse.json({ error: "No company ID available" }, { status: 400 });
     }
     
     console.log("Finance transactions: Using companyId:", companyId);
     
-    // Fetch all transactions for this company with related data
+    // Fetch transactions for this company with related data
+    // If no company ID and superadmin, this will already have returned above
     const transactions = await db.financeTransaction.findMany({
-      where: {
-        companyId,
-      },
+      where: companyId ? { companyId } : {},
       include: {
         category: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
         staff: {
           select: {
             firstName: true,

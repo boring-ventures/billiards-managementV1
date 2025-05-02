@@ -77,25 +77,24 @@ export function TableList({
           companyId = selectedCompanyId;
           apiUrl += `?companyId=${companyId}`;
         }
-        // If no company is selected, don't append companyId parameter
+        // If no company is selected for superadmin, don't append companyId parameter
+        // The API will return all tables across companies
       } else if (companyId) {
         // For regular users, always use their assigned company
         apiUrl += `?companyId=${companyId}`;
-      } else {
-        console.error("No company ID available");
-        setLoading(false);
-        return;
       }
       
+      console.log(`Fetching tables with URL: ${apiUrl}`);
       const response = await fetch(apiUrl);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch tables");
+        throw new Error(errorData.error || `Failed to fetch tables: ${response.status}`);
       }
       
       const data = await response.json();
-      setTables(data.tables);
+      console.log(`Received ${data.tables?.length || 0} tables`);
+      setTables(data.tables || []);
     } catch (error) {
       console.error("Error fetching tables:", error);
     } finally {

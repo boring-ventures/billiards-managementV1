@@ -20,6 +20,10 @@ export async function GET(request: Request) {
       where: { userId: session.user.id },
     });
     
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+    
     // Check for superadmin
     const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
 
