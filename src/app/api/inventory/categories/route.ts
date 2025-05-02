@@ -9,18 +9,42 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
+    
+    // Get the user's session
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Get user profile to check role
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
+    });
+    
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+    
+    // Check for superadmin
+    const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
 
-    if (!companyId) {
+    // For non-superadmins, companyId is required
+    if (!isSuperAdmin && !companyId) {
       return NextResponse.json(
         { error: "Company ID is required" },
         { status: 400 }
       );
     }
+    
+    // If superadmin but no companyId specified, send empty list since categories should be company-specific
+    if (isSuperAdmin && !companyId) {
+      return NextResponse.json([]);
+    }
 
     // Get inventory categories
     const categories = await prisma.inventoryCategory.findMany({
       where: {
-        companyId,
+        companyId: companyId as string,
       },
       orderBy: {
         name: "asc",

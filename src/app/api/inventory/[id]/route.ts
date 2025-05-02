@@ -36,6 +36,25 @@ export async function GET(
       );
     }
     
+    // Get the session for authentication
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Get user profile to check role
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
+    });
+    
+    if (!profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+    
+    // Check for superadmin
+    const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
+    
+    // Fetch the item
     const item = await prisma.inventoryItem.findUnique({
       where: { id },
       include: {
@@ -60,6 +79,14 @@ export async function GET(
       return NextResponse.json(
         { error: "Item not found" },
         { status: 404 }
+      );
+    }
+    
+    // For non-superadmins, verify the item belongs to their company
+    if (!isSuperAdmin && item.companyId !== profile.companyId) {
+      return NextResponse.json(
+        { error: "Unauthorized to access this item" },
+        { status: 403 }
       );
     }
     

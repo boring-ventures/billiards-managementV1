@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
 
     // For non-superadmins, companyId is required
-    if (!isSuperAdmin && !companyId) {
+    if (!isSuperAdmin && !companyId && !profile.companyId) {
       return NextResponse.json(
         { error: "Company ID is required" },
         { status: 400 }
@@ -36,13 +36,21 @@ export async function GET(request: Request) {
     }
     
     // For superadmins without companyId, get all items across companies
-    let where = {};
+    let where: any = {};
     
     if (companyId) {
       where = { companyId };
     } else if (!isSuperAdmin && profile?.companyId) {
       where = { companyId: profile.companyId };
     }
+    
+    // Log the query we're about to execute
+    console.log("Inventory query:", { 
+      isSuperAdmin, 
+      requestCompanyId: companyId,
+      profileCompanyId: profile.companyId,
+      whereClause: where 
+    });
 
     // Get inventory items with their categories
     const items = await prisma.inventoryItem.findMany({
