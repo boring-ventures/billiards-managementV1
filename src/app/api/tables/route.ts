@@ -36,6 +36,26 @@ export async function GET(req: NextRequest) {
     let companyId: string | null = null;
     
     if (profile.role === UserRole.SUPERADMIN) {
+      // For superadmins without a companyId specified, fetch all tables across companies
+      if (!requestCompanyId) {
+        // Get all tables grouped by company
+        const allTables = await db.table.findMany({
+          include: {
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            sessions: {
+              where: { endedAt: null },
+            },
+          },
+          orderBy: { name: "asc" },
+        });
+        
+        return NextResponse.json({ tables: allTables });
+      }
       companyId = requestCompanyId;
     } else {
       // For regular users, enforce using their assigned company

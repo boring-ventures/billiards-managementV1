@@ -52,14 +52,30 @@ export async function GET(req: NextRequest) {
         console.log("Finance transactions: SUPERADMIN accessing company:", companyId);
       } else {
         // Superadmin with no company specified - return all transactions grouped by company
-        // This could be a fallback behavior or you could require a company ID
-        console.log("Finance transactions: SUPERADMIN but no company specified in query");
+        console.log("Finance transactions: SUPERADMIN fetching all transactions");
         
-        // Return appropriate response for superadmin with no company specified
-        return NextResponse.json({ 
-          error: "Please select a company to view transactions", 
-          isSuperAdmin: true 
-        }, { status: 400 });
+        const allTransactions = await db.financeTransaction.findMany({
+          include: {
+            category: true,
+            company: {
+              select: {
+                id: true,
+                name: true,
+              }
+            },
+            staff: {
+              select: {
+                firstName: true,
+                lastName: true,
+              }
+            },
+          },
+          orderBy: {
+            transactionDate: "desc",
+          },
+        });
+        
+        return NextResponse.json({ transactions: allTransactions });
       }
     } else {
       // For regular users, use their assigned company
@@ -126,19 +142,50 @@ export async function POST(req: NextRequest) {
       where: { userId: user.id },
     });
     
-    if (!profile || !profile.companyId) {
-      return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
+    if (!profile) {
+      return NextResponse.json({ error: "No profile found for user" }, { status: 400 });
     }
-    
-    const companyId = profile.companyId;
     
     // Parse request body
     const body = await req.json();
-    const { categoryId, amount, transactionDate, description } = body;
+    const { categoryId, amount, transactionDate, description, companyId: requestCompanyId } = body;
     
     // Validate inputs
     if (!categoryId || !amount || !transactionDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+    
+    // Determine the company ID to use
+    let companyId: string;
+    
+    if (profile.role && profile.role.toString() === "SUPERADMIN") {
+      // Superadmins must specify a companyId
+      if (!requestCompanyId) {
+        return NextResponse.json({ 
+          error: "Company ID is required for superadmins",
+          isSuperAdmin: true 
+        }, { status: 400 });
+      }
+      
+      // Verify the company exists
+      const companyExists = await db.company.findUnique({
+        where: { id: requestCompanyId },
+      });
+      
+      if (!companyExists) {
+        return NextResponse.json({ 
+          error: "Company not found", 
+          isSuperAdmin: true 
+        }, { status: 404 });
+      }
+      
+      companyId = requestCompanyId;
+    } else {
+      // Regular users must have a company associated with their profile
+      if (!profile.companyId) {
+        return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
+      }
+      companyId = profile.companyId;
     }
     
     // Create the transaction

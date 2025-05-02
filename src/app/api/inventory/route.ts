@@ -9,19 +9,40 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
+    
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Get user profile to check role
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id },
+    });
+    
+    // Check for superadmin
+    const isSuperAdmin = profile?.role === UserRole.SUPERADMIN;
 
-    if (!companyId) {
+    // For non-superadmins, companyId is required
+    if (!isSuperAdmin && !companyId) {
       return NextResponse.json(
         { error: "Company ID is required" },
         { status: 400 }
       );
     }
+    
+    // For superadmins without companyId, get all items across companies
+    let where = {};
+    
+    if (companyId) {
+      where = { companyId };
+    } else if (!isSuperAdmin && profile?.companyId) {
+      where = { companyId: profile.companyId };
+    }
 
     // Get inventory items with their categories
     const items = await prisma.inventoryItem.findMany({
-      where: {
-        companyId,
-      },
+      where,
       include: {
         category: {
           select: {
@@ -29,6 +50,12 @@ export async function GET(request: Request) {
             name: true,
           },
         },
+        company: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
       },
       orderBy: {
         name: "asc",
@@ -79,13 +106,54 @@ export async function POST(request: Request) {
       );
     }
     
-    // Parse and validate input
+    // Parse input
     const body = await request.json();
-    const result = inventoryItemSchema.safeParse(body);
+    
+    // For superadmins, companyId is required in the request
+    // For regular admins, use their own companyId and ignore the request
+    let companyId = body.companyId;
+    const isSuperAdmin = profile.role.toString() === "SUPERADMIN";
+    
+    if (isSuperAdmin) {
+      if (!companyId) {
+        return NextResponse.json(
+          { error: "Company ID is required for superadmins", isSuperAdmin: true },
+          { status: 400 }
+        );
+      }
+      
+      // Verify the company exists
+      const companyExists = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+      
+      if (!companyExists) {
+        return NextResponse.json(
+          { error: "Company not found", isSuperAdmin: true },
+          { status: 404 }
+        );
+      }
+    } else {
+      // For regular admins, always use their assigned company
+      if (!profile.companyId) {
+        return NextResponse.json(
+          { error: "No company associated with admin" },
+          { status: 400 }
+        );
+      }
+      
+      companyId = profile.companyId;
+    }
+    
+    // Update body with correct companyId
+    const updatedBody = { ...body, companyId };
+    
+    // Validate input
+    const result = inventoryItemSchema.safeParse(updatedBody);
     
     if (!result.success) {
       return NextResponse.json(
-        { error: "Invalid input", details: result.error.format() },
+        { error: "Invalid input", details: result.error.format(), isSuperAdmin },
         { status: 400 }
       );
     }
