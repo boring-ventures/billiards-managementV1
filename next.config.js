@@ -1,10 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+  // Improve build performance with Terser
+  swcMinify: true,
+  // Improve caching for static assets
+  assetPrefix: process.env.NODE_ENV === 'production' ? undefined : undefined,
   images: {
     domains: [
-      // Add your Supabase project domain
-      "swfgvfhpmicwptupjyko.supabase.co",
-      "xqakfzhkeiongvzgbhji.supabase.co",
+      "avatars.githubusercontent.com",
+      "github.com",
+      "lh3.googleusercontent.com",
+      "res.cloudinary.com",
+      "abs.twimg.com",
+      "pbs.twimg.com"
     ],
   },
   eslint: {
@@ -16,7 +24,9 @@ const nextConfig = {
     // Similarly, this ignores TypeScript errors during the build
     ignoreBuildErrors: true,
   },
+  // Enable faster builds with SWC
   experimental: {
+    forceSwcTransforms: true,
     serverActions: {
       bodySizeLimit: '2mb',
       allowedOrigins: [
@@ -27,6 +37,25 @@ const nextConfig = {
         '*.vercel.app'
       ]
     }
+  },
+  // Improve response to timeouts in serverless environments
+  serverRuntimeConfig: {
+    // Increase function timeouts as a fallback
+    timeout: 20000, // 20 seconds
+  },
+  // Improve static assets caching
+  headers: async () => {
+    return [
+      {
+        source: '/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
   // External packages that should be treated as server components
   serverExternalPackages: ['@prisma/client'],

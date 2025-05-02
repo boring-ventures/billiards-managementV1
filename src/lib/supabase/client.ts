@@ -1,30 +1,45 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables");
 }
 
-// Create a singleton Supabase client for browser-side usage
-let supabaseInstance: ReturnType<typeof createClient> | null = null;
-
-// Use the original storage key to maintain compatibility with existing sessions
+// Storage key constants
 const STORAGE_KEY = 'app-token';
 
-export const supabase = (() => {
-  if (supabaseInstance) return supabaseInstance;
+// Global instance that is shared between calls in the same browser session
+let globalInstance: ReturnType<typeof createClient> | null = null;
+
+/**
+ * Creates and returns a singleton Supabase client instance
+ * This ensures we only have one Supabase client per browser session
+ */
+export function createSupabaseClient() {
+  // For SSR, always create a fresh client
+  if (typeof window === 'undefined') {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+      }
+    });
+  }
   
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+  // In browser, use global singleton
+  if (globalInstance) return globalInstance;
+  
+  globalInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       storageKey: STORAGE_KEY,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
+      storage: window.localStorage,
     },
   });
   
-  return supabaseInstance;
-})();
+  return globalInstance;
+}
+
+// Export a singleton instance for direct imports
+export const supabase = createSupabaseClient();
