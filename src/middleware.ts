@@ -17,7 +17,8 @@ export async function middleware(req: NextRequest) {
     req.nextUrl.pathname === "/documentation" ||
     req.nextUrl.pathname.startsWith("/_next") ||
     req.nextUrl.pathname.startsWith("/static") ||
-    req.nextUrl.pathname.startsWith("/api/") // API routes handle their own auth
+    req.nextUrl.pathname.startsWith("/api/") || // API routes handle their own auth
+    req.nextUrl.pathname.includes(".") // Skip files with extensions
   ) {
     return res;
   }
@@ -67,7 +68,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip static files, images and API routes in middleware matcher for performance
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(svg|png|jpg|jpeg|webp)|api/|auth/callback).*)",
+    // Use simple patterns instead of complex regex
+    '/((?!_next/static|_next/image|favicon.ico|api|auth/callback).*)',
   ],
 };
