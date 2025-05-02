@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabase/client";
 
 const formSchema = z.object({
   email: z
@@ -32,7 +32,6 @@ interface MagicLinkFormProps extends React.HTMLAttributes<HTMLDivElement> {}
 export function MagicLinkForm({ className, ...props }: MagicLinkFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const supabase = createClientComponentClient();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
