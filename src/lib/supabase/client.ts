@@ -8,6 +8,32 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables");
 }
 
+// Get current domain for cookie settings
+function getCurrentDomain() {
+  if (typeof window === 'undefined') return '';
+  
+  // Extract domain from current URL
+  const { hostname } = window.location;
+  
+  // For localhost, don't set domain (browser default behavior works best)
+  if (hostname === 'localhost') return '';
+  
+  // For Vercel and other production deployments
+  // Start with the hostname
+  let domain = hostname;
+  
+  // If it's a subdomain (contains multiple dots), use root domain instead
+  // e.g., app.example.com -> .example.com
+  const parts = hostname.split('.');
+  if (parts.length > 2 && !hostname.endsWith('.vercel.app')) {
+    // Create a root domain with leading dot (.example.com)
+    domain = `.${parts.slice(-2).join('.')}`;
+  }
+  
+  console.log(`[Cookie] Using domain: ${domain || 'default'} for hostname: ${hostname}`);
+  return domain;
+}
+
 // Global instance that is shared between calls in the same browser session
 let globalInstance: any = null;
 
@@ -46,16 +72,21 @@ export const supabase = createBrowserClient(
         try {
           console.log(`[Browser] Setting cookie: ${name}`);
           
+          // Get the current domain for cookie settings
+          const domain = getCurrentDomain();
+          
           const cookieOptions = {
             path: '/',
             sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
+            secure: true, // Always use secure in production
+            domain: domain || undefined, // Only set if we have a domain
             maxAge: name.includes('access-token') ? 3600 : 86400 * 30, // 1 hour for access token, 30 days for refresh
             ...options
           };
           
           // Convert to cookie string
           const cookieString = Object.entries(cookieOptions)
+            .filter(([_, val]) => val !== undefined) // Skip undefined values
             .map(([key, val]) => {
               if (key === 'maxAge') return `max-age=${val}`;
               if (val === true) return key;
@@ -65,12 +96,25 @@ export const supabase = createBrowserClient(
             .filter(Boolean)
             .join('; ');
           
-          document.cookie = `${name}=${value}; ${cookieString}`;
+          const fullCookie = `${name}=${value}; ${cookieString}`;
+          console.log(`[Browser] Cookie string: ${fullCookie.substring(0, 50)}...`);
+          document.cookie = fullCookie;
           
           // Verify cookie was set
           setTimeout(() => {
             const checkCookie = this.get(name);
             console.log(`[Browser] Cookie verification: ${name} = ${checkCookie ? 'set successfully' : 'FAILED TO SET'}`);
+            
+            if (!checkCookie) {
+              console.error('[Browser] Cookie was not set successfully. Check domain and secure settings.');
+              // Try again without domain as fallback
+              document.cookie = `${name}=${value}; path=/; max-age=${cookieOptions.maxAge}; SameSite=Lax; Secure`;
+              
+              setTimeout(() => {
+                const recheck = this.get(name);
+                console.log(`[Browser] Fallback cookie verification: ${name} = ${recheck ? 'set successfully' : 'FAILED AGAIN'}`);
+              }, 100);
+            }
           }, 100);
         } catch (error) {
           console.error(`[Browser] Error setting cookie ${name}:`, error);
@@ -82,13 +126,18 @@ export const supabase = createBrowserClient(
         try {
           console.log(`[Browser] Removing cookie: ${name}`);
           
+          // Get the current domain for cookie settings
+          const domain = getCurrentDomain();
+          
           const cookieOptions = {
             path: '/',
+            domain: domain || undefined,
             ...options
           };
           
           // Convert to cookie string
           const cookieString = Object.entries(cookieOptions)
+            .filter(([_, val]) => val !== undefined) // Skip undefined values
             .map(([key, val]) => {
               if (val === true) return key;
               if (val === false) return '';
@@ -97,12 +146,17 @@ export const supabase = createBrowserClient(
             .filter(Boolean)
             .join('; ');
             
-          document.cookie = `${name}=; max-age=0; ${cookieString}`;
+          document.cookie = `${name}=; max-age=0; ${cookieString}; Secure`;
           
           // Verify cookie was removed
           setTimeout(() => {
             const checkCookie = this.get(name);
             console.log(`[Browser] Cookie removal verification: ${name} = ${!checkCookie ? 'removed successfully' : 'FAILED TO REMOVE'}`);
+            
+            if (checkCookie) {
+              // Try again without domain
+              document.cookie = `${name}=; max-age=0; path=/; Secure`;
+            }
           }, 100);
         } catch (error) {
           console.error(`[Browser] Error removing cookie ${name}:`, error);
