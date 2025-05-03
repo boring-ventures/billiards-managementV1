@@ -13,6 +13,7 @@ import {
 
 // List of paths that should not check for authentication
 const PUBLIC_PATHS = [
+  '/',
   '/sign-in',
   '/sign-up',
   '/sign-out',
