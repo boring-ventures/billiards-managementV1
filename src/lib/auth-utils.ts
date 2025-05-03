@@ -122,21 +122,6 @@ export function createServerSupabaseClient() {
  * Create a Supabase server client for use in middleware
  */
 export function createMiddlewareClient(request: NextRequest, response: NextResponse) {
-  // Debug cookie values
-  console.log('[Middleware Client] Creating client with cookies:', 
-    Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value.length > 20 ? c.value.substring(0, 10) + '...' : c.value])));
-  
-  const authCookie = request.cookies.get(AUTH_TOKEN_KEY);
-  if (authCookie) {
-    console.log('[Middleware Client] AUTH_TOKEN_KEY found:', AUTH_TOKEN_KEY);
-    console.log('[Middleware Client] Auth cookie raw value:', 
-      authCookie.value.length > 50 ? 
-      authCookie.value.substring(0, 25) + '...' + authCookie.value.substring(authCookie.value.length - 25) : 
-      authCookie.value);
-  } else {
-    console.log('[Middleware Client] AUTH_TOKEN_KEY not found in cookies');
-  }
-  
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -144,26 +129,9 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
       cookies: {
         get(name: string) {
           const cookie = request.cookies.get(name);
-          const cookieValue = cookie?.value || null;
-          const processedValue = processAuthCookieValue(cookieValue);
-          
-          console.log(`[Middleware Client] Getting cookie: ${name}`, { 
-            exists: !!cookie,
-            originalLength: cookieValue?.length,
-            processedLength: processedValue?.length,
-            changed: cookieValue !== processedValue
-          });
-          
-          return processedValue;
+          return cookie?.value;
         },
         set(name: string, value: string, options: any) {
-          // Log cookie being set
-          console.log(`[Middleware Client] Setting cookie: ${name}`, { 
-            valueLength: value?.length,
-            options
-          });
-          
-          // We need to set cookies on the response
           response.cookies.set({
             name,
             value,
@@ -173,7 +141,6 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
           });
         },
         remove(name: string, options: any) {
-          console.log(`[Middleware Client] Removing cookie: ${name}`);
           response.cookies.set({
             name,
             value: '',
@@ -182,12 +149,6 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
             maxAge: 0,
           });
         }
-      },
-      auth: {
-        flowType: 'pkce',
-        detectSessionInUrl: false,
-        autoRefreshToken: true,
-        persistSession: true,
       }
     }
   )
