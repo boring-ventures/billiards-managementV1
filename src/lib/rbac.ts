@@ -5,7 +5,7 @@ import type { Profile } from "@/types/profile";
 
 // Server-side imports - these will only be used in server context
 let cookies: any;
-let createRouteHandlerClient: any;
+let createServerClient: any;
 
 // Dynamically import server-only modules
 if (typeof window === 'undefined') {
@@ -17,14 +17,14 @@ if (typeof window === 'undefined') {
       cookies = headers.cookies;
     };
     
-    const importAuthHelpers = async () => {
-      const authHelpers = await import('@supabase/auth-helpers-nextjs');
-      createRouteHandlerClient = authHelpers.createRouteHandlerClient;
+    const importSSR = async () => {
+      const ssr = await import('@supabase/ssr');
+      createServerClient = ssr.createServerClient;
     };
     
     // Execute the imports (no await needed here as we'll await when we use them)
     importHeaders();
-    importAuthHelpers();
+    importSSR();
   } catch (error) {
     console.warn("Could not import server-only modules:", error);
   }
@@ -35,9 +35,26 @@ export const getEffectiveRole = async (profile: Profile | null, viewMode: UserRo
   if (!profile) return null;
   
   // First try to get role from JWT claims if we're server-side
-  if (typeof window === 'undefined' && cookies && createRouteHandlerClient) {
+  if (typeof window === 'undefined' && cookies && createServerClient) {
     try {
-      const supabase = createRouteHandlerClient({ cookies });
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      
+      const supabase = createServerClient(
+        supabaseUrl,
+        supabaseAnonKey,
+        {
+          cookies: {
+            get: (name: string) => {
+              const cookieStore = cookies();
+              return cookieStore.get(name)?.value || null;
+            },
+            set: () => {}, // Not needed for read-only operation
+            remove: () => {}, // Not needed for read-only operation
+          }
+        }
+      );
+      
       const { data } = await supabase.auth.getSession();
       
       if (data?.session?.user?.app_metadata?.role) {

@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { hasCompanyAccess } from "@/lib/auth";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 // This endpoint allows updating a user's role by a superadmin
@@ -56,7 +56,42 @@ export async function POST(request: NextRequest) {
     }
 
     // For Supabase admin operations, we still need the Supabase client
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          async get(name: string) {
+            try {
+              const cookieStore = cookies();
+              let cookieValue: string | null = null;
+              
+              try {
+                // Await the promise
+                const allCookies = await cookieStore;
+                // Get the specific cookie value
+                cookieValue = allCookies.get(name)?.value || null;
+              } catch (err) {
+                // Fallback for sync context
+                // @ts-ignore - Access sync API
+                cookieValue = cookieStore.get?.(name)?.value || null;
+              }
+              
+              return cookieValue;
+            } catch (error) {
+              console.error('[Cookie] Error reading cookie:', error);
+              return null;
+            }
+          },
+          async set() {
+            // Not needed for API routes
+          },
+          async remove() {
+            // Not needed for API routes
+          }
+        }
+      }
+    );
     
     // Get the user to verify they exist
     const { data: user, error: userError } = await supabase.auth.admin.getUserById(userId);

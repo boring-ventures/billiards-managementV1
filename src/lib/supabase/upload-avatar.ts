@@ -1,4 +1,4 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabase } from "./client";
 
 const STORAGE_BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "avatars";
@@ -25,7 +25,7 @@ export async function uploadAvatar(file: File, userId: string) {
   }
 
   try {
-    const supabase = createClientComponentClient();
+    const supabase = getSupabase();
 
     // Upload the file to Supabase storage
     const fileExt = file.name.split(".").pop();
