@@ -7,12 +7,12 @@ import 'server-only';
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
-
-import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { z } from 'zod';
+import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
 
 // Define the JoinRequestStatus enum since it might not be exported yet
 export enum JoinRequestStatus {
@@ -190,12 +190,6 @@ export async function createOrUpdateUserProfile(
 /**
  * Authentication utilities
  */
-import { cookies } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
-import { z } from 'zod';
-import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
 
 // Create a reusable server-side Supabase client for route handlers
 export function createApiClient(request?: NextRequest) {
@@ -291,7 +285,7 @@ export function createApiClient(request?: NextRequest) {
 }
 
 // A service client for non-authenticated server-side operations
-export const auth = createClient(
+export const supabaseServiceClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
