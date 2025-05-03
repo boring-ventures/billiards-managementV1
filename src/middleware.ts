@@ -42,6 +42,52 @@ function isStaticAsset(path: string): boolean {
 }
 
 /**
+ * Log detailed cookie information for debugging
+ */
+function logCookieDetails(request: NextRequest) {
+  try {
+    // Get all cookies
+    const allCookies = request.cookies.getAll();
+    console.log(`[Cookie Debug] Found ${allCookies.length} cookies in request`);
+    
+    // Check for auth cookie specifically
+    const authCookie = request.cookies.get(AUTH_TOKEN_KEY);
+    
+    if (authCookie) {
+      console.log(`[Cookie Debug] Auth cookie found with name: ${AUTH_TOKEN_KEY}`);
+      console.log(`[Cookie Debug] Auth cookie length: ${authCookie.value.length}`);
+      console.log(`[Cookie Debug] Auth cookie first 10 chars: ${authCookie.value.substring(0, 10)}...`);
+      
+      try {
+        // If it's a JSON, parse it to see structure
+        const parsedValue = JSON.parse(authCookie.value);
+        console.log(`[Cookie Debug] Auth cookie structure valid: ${!!parsedValue}`);
+        console.log(`[Cookie Debug] Auth cookie contains access_token: ${!!parsedValue.access_token}`);
+        console.log(`[Cookie Debug] Auth cookie contains refresh_token: ${!!parsedValue.refresh_token}`);
+      } catch (error: any) {
+        console.log(`[Cookie Debug] Auth cookie is not valid JSON: ${error.message}`);
+      }
+    } else {
+      console.log(`[Cookie Debug] Auth cookie NOT found with name: ${AUTH_TOKEN_KEY}`);
+      
+      // List all cookies for debugging
+      allCookies.forEach(cookie => {
+        console.log(`[Cookie Debug] Found cookie: ${cookie.name}, length: ${cookie.value.length}`);
+      });
+    }
+    
+    // Check raw cookie header
+    const cookieHeader = request.headers.get('cookie');
+    console.log(`[Cookie Debug] Raw cookie header length: ${cookieHeader?.length || 0}`);
+    if (cookieHeader) {
+      console.log(`[Cookie Debug] Raw cookie header contains auth cookie name: ${cookieHeader.includes(AUTH_TOKEN_KEY)}`);
+    }
+  } catch (error) {
+    console.error('[Cookie Debug] Error analyzing cookies:', error);
+  }
+}
+
+/**
  * Middleware runs on every request to verify authentication
  */
 export async function middleware(request: NextRequest) {
@@ -55,9 +101,9 @@ export async function middleware(request: NextRequest) {
     console.log('[Middleware] Cookie header:', request.headers.get('cookie'));
     console.log('[Middleware] Auth header present:', !!request.headers.get('authorization'));
     console.log('[Middleware] Auth cookie present:', request.cookies.has(AUTH_TOKEN_KEY));
-    if (request.cookies.has(AUTH_TOKEN_KEY)) {
-      console.log('[Middleware] Auth cookie value length:', request.cookies.get(AUTH_TOKEN_KEY)?.value?.length);
-    }
+    
+    // Add detailed cookie debugging
+    logCookieDetails(request);
     
     // Skip middleware for public paths and static files
     if (isPublicPath(pathname) || isStaticAsset(pathname)) {

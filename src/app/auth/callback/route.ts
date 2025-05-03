@@ -73,31 +73,16 @@ export async function GET(request: NextRequest) {
         path: '/',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true
+        secure: true, // Always set secure in production and development
+        httpOnly: true,
+        domain: getDomainForCookie(request)
       })
       
-      // Also set individual cookies for access and refresh tokens
-      // These can be helpful for client-side token management
-      response.cookies.set({
-        name: `sb-access-token`,
-        value: access_token,
-        path: '/',
-        sameSite: 'lax',
-        maxAge: 60 * 60, // 1 hour
-        secure: process.env.NODE_ENV === 'production'
-      })
+      console.log('[Auth Callback] Auth cookies set with value length:', authCookieValue.length);
+      console.log('[Auth Callback] Auth cookie domain:', getDomainForCookie(request));
+      console.log('[Auth Callback] Auth cookie name:', AUTH_TOKEN_KEY);
       
-      response.cookies.set({
-        name: `sb-refresh-token`,
-        value: refresh_token,
-        path: '/',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-        secure: process.env.NODE_ENV === 'production'
-      })
-      
-      console.log('[Auth Callback] Auth cookies set successfully')
+      // Use session.getSession() on the next request to pick up this cookie
       return response
     } catch (err) {
       console.error('Unexpected error in auth callback:', err)
@@ -108,4 +93,37 @@ export async function GET(request: NextRequest) {
   // No code found, redirect to sign-in
   console.error('No code found in callback URL')
   return NextResponse.redirect(new URL('/sign-in', requestUrl.origin))
+}
+
+/**
+ * Helper function to get the appropriate domain for cookies
+ * For localhost, this should be undefined (browser default)
+ * For production, this should be the root domain
+ */
+function getDomainForCookie(request: NextRequest): string | undefined {
+  const host = request.headers.get('host') || '';
+  
+  // Don't set domain for localhost (let browser default to host)
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return undefined;
+  }
+  
+  // For Vercel previews, don't set domain (use the complete subdomain as is)
+  if (host.includes('vercel.app')) {
+    return undefined;
+  }
+  
+  // Extract domain parts
+  const hostParts = host.split('.');
+  
+  // If we have at least domain.tld format
+  if (hostParts.length >= 2) {
+    // For production, use the root domain (e.g., example.com)
+    const rootDomain = hostParts.slice(-2).join('.');
+    console.log(`[Auth Callback] Setting cookie domain to root domain: ${rootDomain}`);
+    return rootDomain;
+  }
+  
+  // Default to undefined (browser will use the host header)
+  return undefined;
 }
