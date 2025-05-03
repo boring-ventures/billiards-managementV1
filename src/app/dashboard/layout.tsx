@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { DashboardLayoutClient } from "@/components/dashboard/dashboard-layout-client";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createServerSupabaseClient } from "@/lib/auth-utils";
 
 export default async function DashboardLayout({
   children,
@@ -10,8 +9,8 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   try {
-    // Create a supabase client specifically for this server component
-    const supabase = createServerComponentClient({ cookies });
+    // Create a supabase client using our custom helper that handles both sync and async cookies API
+    const supabase = createServerSupabaseClient();
     
     // Get the user session - using getUser to force token verification
     const { data, error } = await supabase.auth.getUser();
