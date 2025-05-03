@@ -20,8 +20,24 @@ function getSupabaseAuthCookieName(): string {
 }
 
 /**
+ * Process auth cookie value - handles "base64-" prefixed cookies
+ * Supabase auth cookie format can change between versions
+ */
+function processAuthCookieValue(value: string | null): string | null {
+  if (!value) return null;
+  
+  // Handle "base64-" prefixed cookies - strip the prefix
+  if (value.startsWith('base64-')) {
+    console.log('[Cookie] Processing base64 prefixed cookie');
+    return value.substring(7); // Remove 'base64-' prefix
+  }
+  
+  return value;
+}
+
+/**
  * Create a Supabase server client with custom cookie handling for server components
- * This implementation handles both sync and async cookies API (Next.js 14+ is async)
+ * This implementation handles Next.js 14+ async cookie API
  */
 export function createServerSupabaseClient() {
   return createServerClient(
@@ -30,49 +46,65 @@ export function createServerSupabaseClient() {
     {
       cookies: {
         async get(name: string) {
+          // For Next.js 14, cookies() returns a Promise<ReadonlyRequestCookies>
           try {
-            const cookieStore = await cookies()
-            return cookieStore.get(name)?.value || null
-          } catch (e) {
-            // Fallback for older Next.js versions or sync contexts
+            // Using the new AsyncLocalStorage solution
+            const cookieStore = cookies();
+            
+            // Use a different approach that's TypeScript-friendly
+            let cookieValue: string | null = null;
             try {
-              // @ts-ignore - Handle both async and sync cookies API
-              const cookieStore = cookies()
-              return cookieStore.get?.(name)?.value || null
-            } catch (error) {
-              console.error('Error getting cookie:', error)
-              return null
+              // Await the promise
+              const allCookies = await cookieStore;
+              // Get the specific cookie value
+              cookieValue = allCookies.get(name)?.value || null;
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieValue = cookieStore.get?.(name)?.value || null;
             }
+            
+            return processAuthCookieValue(cookieValue);
+          } catch (error) {
+            console.error('[Cookie] Error reading cookie:', error);
+            return null;
           }
         },
         async set(name: string, value: string, options: any) {
+          // For Next.js 14, cookies() returns a Promise<ReadonlyRequestCookies>
           try {
-            const cookieStore = await cookies()
-            cookieStore.set(name, value, options)
-          } catch (e) {
-            // Fallback for older Next.js versions or sync contexts
+            // Using the new AsyncLocalStorage solution
+            const cookieStore = cookies();
+            
             try {
-              // @ts-ignore - Handle both async and sync cookies API
-              const cookieStore = cookies()
-              cookieStore.set?.(name, value, options)
-            } catch (error) {
-              console.error('Error setting cookie:', error)
+              // Await the promise and set the cookie
+              const store = await cookieStore;
+              store.set(name, value, options);
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieStore.set?.(name, value, options);
             }
+          } catch (error) {
+            console.error('[Cookie] Error setting cookie:', error);
           }
         },
         async remove(name: string, options: any) {
           try {
-            const cookieStore = await cookies()
-            cookieStore.set(name, '', { ...options, maxAge: 0 })
-          } catch (e) {
-            // Fallback for older Next.js versions or sync contexts
+            // Using the new AsyncLocalStorage solution
+            const cookieStore = cookies();
+            
             try {
-              // @ts-ignore - Handle both async and sync cookies API
-              const cookieStore = cookies()
-              cookieStore.set?.(name, '', { ...options, maxAge: 0 })
-            } catch (error) {
-              console.error('Error removing cookie:', error)
+              // Await the promise and remove the cookie
+              const store = await cookieStore;
+              store.set(name, '', { ...options, maxAge: 0 });
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieStore.set?.(name, '', { ...options, maxAge: 0 });
             }
+          } catch (error) {
+            console.error('[Cookie] Error removing cookie:', error);
           }
         }
       },
@@ -97,7 +129,8 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
       cookies: {
         get(name: string) {
           const cookie = request.cookies.get(name)
-          return cookie?.value || null
+          const cookieValue = cookie?.value || null;
+          return processAuthCookieValue(cookieValue);
         },
         set(name: string, value: string, options: any) {
           // We need to set cookies on the response
@@ -173,32 +206,36 @@ export async function debugServerCookies() {
   if (typeof window !== 'undefined') return 'Cannot debug server cookies on client'
   
   try {
-    const cookieStore = await cookies()
-    const allCookies = cookieStore.getAll()
-    const hasSbAuthCookie = allCookies.some((c: RequestCookie) => c.name === AUTH_TOKEN_KEY)
+    let allCookies: Array<RequestCookie> = [];
+    let authCookie: RequestCookie | undefined;
+    
+    try {
+      // Using the new AsyncLocalStorage solution
+      const cookieStore = cookies();
+      const store = await cookieStore;
+      // Use a type assertion to resolve the linter error
+      allCookies = (store as any).getAll();
+    } catch (e) {
+      // Fallback for sync context
+      // @ts-ignore - Access sync API
+      const cookieStore = cookies();
+      allCookies = cookieStore.getAll?.() || [];
+    }
+    
+    authCookie = allCookies.find((c: RequestCookie) => c.name === AUTH_TOKEN_KEY);
+    const hasSbAuthCookie = !!authCookie;
     
     return {
       cookieCount: allCookies.length,
       cookieNames: allCookies.map((c: RequestCookie) => c.name),
       hasSbAuthCookie,
-      authCookieValue: hasSbAuthCookie ? 'present' : 'missing'
+      authCookieValue: hasSbAuthCookie ? 
+        (authCookie?.value?.startsWith('base64-') ? 'Has base64 prefix' : 'Standard format') : 
+        'missing',
+      authCookieValueSample: hasSbAuthCookie && authCookie?.value ? 
+        authCookie.value.substring(0, 15) + '...' : null
     }
-  } catch (e) {
-    // Fallback for older Next.js versions or sync contexts
-    try {
-      // @ts-ignore - Handle both async and sync cookies API
-      const cookieStore = cookies()
-      const allCookies = cookieStore.getAll?.() || []
-      const hasSbAuthCookie = allCookies.some((c: RequestCookie) => c.name === AUTH_TOKEN_KEY)
-      
-      return {
-        cookieCount: allCookies.length,
-        cookieNames: allCookies.map((c: RequestCookie) => c.name),
-        hasSbAuthCookie,
-        authCookieValue: hasSbAuthCookie ? 'present' : 'missing'
-      }
-    } catch (error) {
-      return { error: 'Error reading cookies' }
-    }
+  } catch (error) {
+    return { error: 'Error reading cookies' }
   }
 } 
