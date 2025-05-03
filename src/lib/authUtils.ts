@@ -1,8 +1,33 @@
 import { UserRole } from "@prisma/client";
 import type { Profile } from "@/types/profile";
 import { cookieUtils, COMPANY_SELECTION_COOKIE, VIEW_MODE_COOKIE } from "./cookie-utils";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+
+// Server-side imports - these will only be used in server context
+let cookies: any;
+let createRouteHandlerClient: any;
+
+// Dynamically import server-only modules
+if (typeof window === 'undefined') {
+  // We're in a server context
+  try {
+    // Dynamic imports to prevent client-side bundling
+    const importHeaders = async () => {
+      const headers = await import('next/headers');
+      cookies = headers.cookies;
+    };
+    
+    const importAuthHelpers = async () => {
+      const authHelpers = await import('@supabase/auth-helpers-nextjs');
+      createRouteHandlerClient = authHelpers.createRouteHandlerClient;
+    };
+    
+    // Execute the imports
+    importHeaders();
+    importAuthHelpers();
+  } catch (error) {
+    console.warn("Could not import server-only modules:", error);
+  }
+}
 
 /**
  * Gets the active company ID for the current user
@@ -14,7 +39,7 @@ export const getActiveCompanyId = async (profile: Profile | null): Promise<strin
   if (!profile) return null;
   
   // First try to get companyId from JWT claims if we're server-side
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' && cookies && createRouteHandlerClient) {
     try {
       const supabase = createRouteHandlerClient({ cookies });
       const { data } = await supabase.auth.getSession();

@@ -1,45 +1,30 @@
 -- Implement Row Level Security (RLS) policies for all tables
 -- This migration enables RLS and creates appropriate policies for each table
 
--- PART 1: Create or update helper functions if needed
-DO $$
-BEGIN
-  -- Check if is_superadmin function exists
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_superadmin') THEN
-    EXECUTE 'CREATE FUNCTION public.is_superadmin()
-    RETURNS BOOLEAN AS $$
-      SELECT role = ''SUPERADMIN''
-      FROM profiles
-      WHERE "userId" = auth.uid();
-    $$ LANGUAGE sql SECURITY DEFINER;';
-    RAISE NOTICE 'Created is_superadmin() function';
-  END IF;
-  
-  -- Check if is_admin_or_superadmin function exists
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_admin_or_superadmin') THEN
-    EXECUTE 'CREATE FUNCTION public.is_admin_or_superadmin()
-    RETURNS BOOLEAN AS $$
-      SELECT role IN (''ADMIN'', ''SUPERADMIN'')
-      FROM profiles
-      WHERE "userId" = auth.uid();
-    $$ LANGUAGE sql SECURITY DEFINER;';
-    RAISE NOTICE 'Created is_admin_or_superadmin() function';
-  END IF;
-  
-  -- Check if get_user_company_id function exists
-  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_company_id') THEN
-    EXECUTE 'CREATE FUNCTION public.get_user_company_id()
-    RETURNS UUID AS $$
-      SELECT company_id::UUID
-      FROM profiles
-      WHERE "userId" = auth.uid();
-    $$ LANGUAGE sql SECURITY DEFINER;';
-    RAISE NOTICE 'Created get_user_company_id() function';
-  END IF;
-  
-  -- All functions exist
-  RAISE NOTICE 'All required helper functions exist. Proceeding with RLS policy creation.';
-END $$;
+-- PART 1: Create or update helper functions
+DROP FUNCTION IF EXISTS public.is_superadmin();
+CREATE FUNCTION public.is_superadmin()
+RETURNS BOOLEAN AS $$
+  SELECT role = 'SUPERADMIN'
+  FROM profiles
+  WHERE "userId" = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER;
+
+DROP FUNCTION IF EXISTS public.is_admin_or_superadmin();
+CREATE FUNCTION public.is_admin_or_superadmin()
+RETURNS BOOLEAN AS $$
+  SELECT role IN ('ADMIN', 'SUPERADMIN')
+  FROM profiles
+  WHERE "userId" = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER;
+
+DROP FUNCTION IF EXISTS public.get_user_company_id();
+CREATE FUNCTION public.get_user_company_id()
+RETURNS UUID AS $$
+  SELECT company_id::UUID
+  FROM profiles
+  WHERE "userId" = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER;
 
 -- PART 2: Enable RLS and create policies for tables
 
@@ -220,7 +205,7 @@ USING (
 
 -- 3. COMPANY JOIN REQUESTS
 
--- Check if CompanyJoinRequest table exists
+-- Check if CompanyJoinRequest table exists and apply policies
 DO $$
 BEGIN
   IF EXISTS (
@@ -229,49 +214,49 @@ BEGIN
     AND table_name = 'company_join_requests'
   ) THEN
     -- CompanyJoinRequest table
-    EXECUTE 'ALTER TABLE public.company_join_requests ENABLE ROW LEVEL SECURITY;';
+    ALTER TABLE public.company_join_requests ENABLE ROW LEVEL SECURITY;
 
     -- Drop existing policies
-    EXECUTE 'DROP POLICY IF EXISTS "join_requests_view_own_policy" ON public.company_join_requests;';
-    EXECUTE 'DROP POLICY IF EXISTS "join_requests_insert_policy" ON public.company_join_requests;';
-    EXECUTE 'DROP POLICY IF EXISTS "join_requests_admin_view_policy" ON public.company_join_requests;';
-    EXECUTE 'DROP POLICY IF EXISTS "join_requests_admin_update_policy" ON public.company_join_requests;';
+    DROP POLICY IF EXISTS "join_requests_view_own_policy" ON public.company_join_requests;
+    DROP POLICY IF EXISTS "join_requests_insert_policy" ON public.company_join_requests;
+    DROP POLICY IF EXISTS "join_requests_admin_view_policy" ON public.company_join_requests;
+    DROP POLICY IF EXISTS "join_requests_admin_update_policy" ON public.company_join_requests;
 
     -- Users can see their own join requests
-    EXECUTE 'CREATE POLICY "join_requests_view_own_policy"
+    CREATE POLICY "join_requests_view_own_policy"
     ON public.company_join_requests
     FOR SELECT
     USING (
       user_id = auth.uid()
-    );';
+    );
 
     -- Users can create their own join requests
-    EXECUTE 'CREATE POLICY "join_requests_insert_policy"
+    CREATE POLICY "join_requests_insert_policy"
     ON public.company_join_requests
     FOR INSERT
     WITH CHECK (
       user_id = auth.uid()
-    );';
+    );
 
     -- Admins can see join requests for their company
-    EXECUTE 'CREATE POLICY "join_requests_admin_view_policy"
+    CREATE POLICY "join_requests_admin_view_policy"
     ON public.company_join_requests
     FOR SELECT
     USING (
       (company_id = public.get_user_company_id() AND public.is_admin_or_superadmin())
       OR
       public.is_superadmin()
-    );';
+    );
 
     -- Admins can update join requests for their company
-    EXECUTE 'CREATE POLICY "join_requests_admin_update_policy"
+    CREATE POLICY "join_requests_admin_update_policy"
     ON public.company_join_requests
     FOR UPDATE
     USING (
       (company_id = public.get_user_company_id() AND public.is_admin_or_superadmin())
       OR
       public.is_superadmin()
-    );';
+    );
   END IF;
 END $$;
 
@@ -353,15 +338,15 @@ BEGIN
     ) INTO column_exists;
     
     -- Enable RLS on the table
-    EXECUTE 'ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;';
+    ALTER TABLE public.finance_reports ENABLE ROW LEVEL SECURITY;
     
     -- Drop existing policies
-    EXECUTE 'DROP POLICY IF EXISTS "finance_reports_policy" ON public.finance_reports;';
+    DROP POLICY IF EXISTS "finance_reports_policy" ON public.finance_reports;
     
     -- Create appropriate policy based on column name
     IF column_exists THEN
       -- Use profile_id if it exists
-      EXECUTE 'CREATE POLICY "finance_reports_policy"
+      CREATE POLICY "finance_reports_policy"
       ON public.finance_reports
       FOR ALL
       USING (
@@ -377,7 +362,7 @@ BEGIN
         )
         OR
         public.is_superadmin()
-      );';
+      );
     ELSE
       -- Check if user_id exists
       SELECT EXISTS (
@@ -389,7 +374,7 @@ BEGIN
       
       IF column_exists THEN
         -- Use user_id if it exists
-        EXECUTE 'CREATE POLICY "finance_reports_policy"
+        CREATE POLICY "finance_reports_policy"
         ON public.finance_reports
         FOR ALL
         USING (
@@ -405,17 +390,17 @@ BEGIN
           )
           OR
           public.is_superadmin()
-        );';
+        );
       ELSE
         -- Fall back to company_id only
-        EXECUTE 'CREATE POLICY "finance_reports_policy"
+        CREATE POLICY "finance_reports_policy"
         ON public.finance_reports
         FOR ALL
         USING (
           (company_id = public.get_user_company_id())
           OR
           public.is_superadmin()
-        );';
+        );
       END IF;
     END IF;
   END IF;

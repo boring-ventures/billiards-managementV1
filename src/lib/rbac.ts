@@ -2,15 +2,40 @@ import { redirect } from "next/navigation";
 import { UserRole } from "@prisma/client";
 import { getActiveCompanyId } from "./authUtils";
 import type { Profile } from "@/types/profile";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+
+// Server-side imports - these will only be used in server context
+let cookies: any;
+let createRouteHandlerClient: any;
+
+// Dynamically import server-only modules
+if (typeof window === 'undefined') {
+  // We're in a server context
+  try {
+    // Dynamic imports to prevent client-side bundling
+    const importHeaders = async () => {
+      const headers = await import('next/headers');
+      cookies = headers.cookies;
+    };
+    
+    const importAuthHelpers = async () => {
+      const authHelpers = await import('@supabase/auth-helpers-nextjs');
+      createRouteHandlerClient = authHelpers.createRouteHandlerClient;
+    };
+    
+    // Execute the imports (no await needed here as we'll await when we use them)
+    importHeaders();
+    importAuthHelpers();
+  } catch (error) {
+    console.warn("Could not import server-only modules:", error);
+  }
+}
 
 // Client-side utility to get the current effective role (considering view mode)
 export const getEffectiveRole = async (profile: Profile | null, viewMode: UserRole | null): Promise<UserRole | null> => {
   if (!profile) return null;
   
   // First try to get role from JWT claims if we're server-side
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' && cookies && createRouteHandlerClient) {
     try {
       const supabase = createRouteHandlerClient({ cookies });
       const { data } = await supabase.auth.getSession();
@@ -57,7 +82,7 @@ export const assertRoleAndCompany = async (
   }
 
   // Get the active company ID (from profile or superadmin selection)
-  const companyId = getActiveCompanyId(profile);
+  const companyId = await getActiveCompanyId(profile);
   
   // Must have a company context
   if (!companyId) {
