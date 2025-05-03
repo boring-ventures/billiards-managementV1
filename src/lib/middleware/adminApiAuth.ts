@@ -3,8 +3,8 @@
  * This provides a security layer for all admin operations
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+
 import { UserRole } from '@prisma/client';
 import { logAdminOperation } from '../serverClient';
 
@@ -18,7 +18,7 @@ export async function verifySuperAdmin(
 ): Promise<NextResponse | null> {
   try {
     // Get the authenticated user
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const { data: { session }, error } = await supabase.auth.getSession();
     
     if (error || !session) {

@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -43,7 +42,7 @@ async function checkSuperAdminRole(userId: string) {
 // GET: Fetch all companies for superadmin
 export async function GET(_request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
 
     // Get the current user's session
     const {
@@ -109,7 +108,7 @@ export async function GET(_request: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();

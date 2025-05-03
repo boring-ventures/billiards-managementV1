@@ -1,5 +1,5 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { UserRole } from "@prisma/client";
@@ -10,7 +10,7 @@ export async function POST(
 ) {
   try {
     const { id: companyId } = params;
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
 
     // Get the current user - using getUser() instead of getSession() as recommended
     const { data, error } = await supabase.auth.getUser();

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();

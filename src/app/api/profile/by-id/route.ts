@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";

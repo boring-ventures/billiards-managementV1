@@ -2,8 +2,8 @@
 // This file handles app_metadata operations for roles and company assignments
 import 'server-only';
 import { UserRole } from '@prisma/client';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+
 import { createClient } from '@supabase/supabase-js';
 import { AuthMetadata, UserMetadata } from '@/types/auth/metadata';
 
@@ -115,7 +115,7 @@ export async function updateUserCompany(
 export async function getAuthMetadataFromSession(): Promise<AuthMetadata | null> {
   try {
     // Use route handler client to get the session with cookies
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const { data, error } = await supabase.auth.getSession();
     
     if (error || !data.session) {

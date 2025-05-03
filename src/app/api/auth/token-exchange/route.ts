@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseRouteHandlerClient, getAllCookies } from '@/lib/supabase/server-utils';
 
 type AuthResults = {
   headers: {
@@ -41,17 +40,16 @@ type AuthResults = {
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = createSupabaseRouteHandlerClient();
     
     // Get auth headers and cookies
     const authHeader = request.headers.get('authorization');
     const hasBearerToken = authHeader?.startsWith('Bearer ');
     
     // Get cookie information safely
-    const allCookies = cookieStore.getAll();
-    const cookieNames = allCookies.map((c) => c.name);
-    const cookieList = allCookies.map((c) => `${c.name}: ${c.value.substring(0, 5)}...`);
+    const allCookies = await getAllCookies();
+    const cookieNames = allCookies.map(c => c.name);
+    const cookieList = allCookies.map(c => `${c.name}: ${c.value.substring(0, 5)}...`);
     
     // Check for specific cookies
     const hasSbAuthToken = allCookies.some(c => c.name === 'sb-auth-token');
