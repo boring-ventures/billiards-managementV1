@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,23 +15,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { PasswordInput } from "@/components/utils/password-input";
-import { PasswordStrengthIndicator } from "@/components/utils/password-strength-indicator";
+import { getSupabase } from "@/lib/supabase/client";
 
 const formSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-      .regex(/[0-9]/, "Password must contain at least one number")
-      .regex(
-        /[^A-Za-z0-9]/,
-        "Password must contain at least one special character"
-      ),
+      .min(8, { message: "Password must be at least 8 characters" }),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -48,9 +40,8 @@ export function ResetPasswordForm({
   ...props
 }: ResetPasswordFormProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [password, setPassword] = useState("");
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = getSupabase();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -60,16 +51,11 @@ export function ResetPasswordForm({
     },
   });
 
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value);
-    form.setValue("password", e.target.value);
-  };
-
   async function onSubmit(data: FormValues) {
     try {
       setIsLoading(true);
 
-      // Update the user's password
+      // Update user's password
       const { error } = await supabase.auth.updateUser({
         password: data.password,
       });
@@ -79,17 +65,25 @@ export function ResetPasswordForm({
       }
 
       toast({
-        title: "Password Updated",
+        title: "Password updated",
         description: "Your password has been reset successfully.",
       });
 
-      // Redirect to the login page
-      router.push("/sign-in");
+      // Get session to determine where to redirect
+      const { data: sessionData } = await supabase.auth.getSession();
+      const hasSession = !!sessionData?.session;
+
+      // Redirect based on session state
+      if (hasSession) {
+        router.push("/dashboard");
+      } else {
+        router.push("/sign-in?message=Password reset successful. Please sign in with your new password.");
+      }
     } catch (error) {
       console.error("Reset password error:", error);
       toast({
         title: "Error",
-        description: "Failed to reset password. Please try again.",
+        description: "Something went wrong. Please try again or request a new reset link.",
         variant: "destructive",
       });
     } finally {
@@ -108,18 +102,12 @@ export function ResetPasswordForm({
               <FormItem>
                 <FormLabel>New Password</FormLabel>
                 <FormControl>
-                  <PasswordInput
-                    placeholder="********"
-                    {...field}
-                    onChange={handlePasswordChange}
-                  />
+                  <Input type="password" {...field} />
                 </FormControl>
-                <PasswordStrengthIndicator password={password} />
                 <FormMessage />
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="confirmPassword"
@@ -127,13 +115,12 @@ export function ResetPasswordForm({
               <FormItem>
                 <FormLabel>Confirm Password</FormLabel>
                 <FormControl>
-                  <PasswordInput placeholder="********" {...field} />
+                  <Input type="password" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? "Resetting..." : "Reset Password"}
           </Button>

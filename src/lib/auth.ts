@@ -9,12 +9,16 @@ import { UserRole } from "@prisma/client";
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from "next/headers";
 import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { z } from 'zod';
 
 // Define the JoinRequestStatus enum since it might not be exported yet
-enum JoinRequestStatus {
-  PENDING = "PENDING",
-  APPROVED = "APPROVED",
-  REJECTED = "REJECTED"
+export enum JoinRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
 }
 
 export interface User {
@@ -182,6 +186,132 @@ export async function createOrUpdateUserProfile(
     throw error;
   }
 }
+
+/**
+ * Authentication utilities
+ */
+import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { z } from 'zod';
+import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
+
+// Create a reusable server-side Supabase client for route handlers
+export function createApiClient(request?: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  // If we have a request object, we can use the cookies from it
+  if (request) {
+    return createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          get(name: string) {
+            return request.cookies.get(name)?.value || null;
+          },
+          set() {
+            // API routes don't need to set cookies
+          },
+          remove() {
+            // API routes don't need to remove cookies
+          }
+        }
+      }
+    );
+  }
+
+  // Otherwise use the global cookies() API (for RSC/Server Components)
+  return createServerClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        async get(name: string) {
+          try {
+            const cookieStore = cookies();
+            let cookieValue: string | null = null;
+            
+            try {
+              // Await the promise
+              const allCookies = await cookieStore;
+              // Get the specific cookie value
+              cookieValue = allCookies.get(name)?.value || null;
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieValue = cookieStore.get?.(name)?.value || null;
+            }
+            
+            return cookieValue;
+          } catch (error) {
+            console.error('[Cookie] Error reading cookie:', error);
+            return null;
+          }
+        },
+        async set(name: string, value: string, options: any) {
+          try {
+            const cookieStore = cookies();
+            
+            try {
+              // Await the promise and set the cookie
+              const store = await cookieStore;
+              store.set(name, value, options);
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieStore.set?.(name, value, options);
+            }
+          } catch (error) {
+            console.error('[Cookie] Error setting cookie:', error);
+          }
+        },
+        async remove(name: string, options: any) {
+          try {
+            const cookieStore = cookies();
+            
+            try {
+              // Await the promise and remove the cookie
+              const store = await cookieStore;
+              store.set(name, '', { ...options, maxAge: 0 });
+            } catch (err) {
+              // Fallback for sync context
+              // @ts-ignore - Access sync API
+              cookieStore.set?.(name, '', { ...options, maxAge: 0 });
+            }
+          } catch (error) {
+            console.error('[Cookie] Error removing cookie:', error);
+          }
+        }
+      }
+    }
+  );
+}
+
+// A service client for non-authenticated server-side operations
+export const auth = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    }
+  }
+);
+
+// Schema for validating auth token
+export const authTokenSchema = z.object({
+  access_token: z.string(),
+  refresh_token: z.string().optional(),
+  expires_at: z.number().optional(),
+  expires_in: z.number().optional(),
+  token_type: z.string().optional(),
+});
+
+export type AuthToken = z.infer<typeof authTokenSchema>;
 
 /**
  * Get authentication information using a three-tier approach:

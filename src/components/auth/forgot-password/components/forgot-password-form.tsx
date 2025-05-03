@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabase } from "@/lib/supabase/client";
 
 const formSchema = z.object({
   email: z
@@ -36,7 +36,7 @@ export function ForgotPasswordForm({
 }: ForgotPasswordFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const supabase = createClientComponentClient();
+  const supabase = getSupabase();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { validateSession } from "@/lib/auth-utils";
 import { 
   calculateFinanceSummary, 
   getTodayFinanceSummary,
@@ -15,76 +16,134 @@ import { FinanceCategoryType } from "@prisma/client";
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    // Validate authentication
+    const { user, error } = await validateSession();
     
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (error || !user) {
+      return NextResponse.json(
+        { error: "Not authenticated" },
+        { status: 401 }
+      );
     }
-    
-    // Get query params
+
+    // Get the company ID from the request
     const { searchParams } = new URL(request.url);
-    const companyId = searchParams.get("companyId");
-    const period = searchParams.get("period") || "today"; // today, week, month, all
+    const companyId = searchParams.get('companyId');
+    const period = searchParams.get('period') || 'month';
     
-    // Validate company ID
     if (!companyId) {
-      return NextResponse.json({ error: "Company ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
     }
+
+    // Get time range based on period
+    const today = new Date();
+    let startDate: Date;
     
-    // Check if user has access to this company's finance data
-    try {
-      await assertFinanceAccess(companyId, session.user.id);
-    } catch (error) {
-      return NextResponse.json({ error: "Unauthorized access to finance data" }, { status: 403 });
+    switch (period) {
+      case 'week':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(today);
+        startDate.setMonth(today.getMonth() - 1);
+        break;
+      case 'year':
+        startDate = new Date(today);
+        startDate.setFullYear(today.getFullYear() - 1);
+        break;
+      default:
+        startDate = new Date(today);
+        startDate.setMonth(today.getMonth() - 1);
     }
-    
-    // Calculate date ranges based on period
-    let dateFrom: Date | undefined;
-    let dateTo: Date | undefined;
-    
-    const now = new Date();
-    
-    if (period === "today") {
-      // Today's data
-      const todaySummary = await getTodayFinanceSummary(companyId);
-      
-      // Get top categories
-      const topIncomeCategories = await getTopCategories(companyId, FinanceCategoryType.INCOME, 3);
-      const topExpenseCategories = await getTopCategories(companyId, FinanceCategoryType.EXPENSE, 3);
-      
-      return NextResponse.json({
-        summary: todaySummary,
-        topIncomeCategories,
-        topExpenseCategories,
-      });
-    } else if (period === "week") {
-      // Last 7 days
-      dateFrom = new Date();
-      dateFrom.setDate(dateFrom.getDate() - 7);
-      dateTo = now;
-    } else if (period === "month") {
-      // Last 30 days
-      dateFrom = new Date();
-      dateFrom.setDate(dateFrom.getDate() - 30);
-      dateTo = now;
-    }
-    
-    // Calculate summary with date range
-    const summary = await calculateFinanceSummary(companyId, dateFrom, dateTo);
-    
-    // Get top categories
-    const topIncomeCategories = await getTopCategories(companyId, FinanceCategoryType.INCOME, 3);
-    const topExpenseCategories = await getTopCategories(companyId, FinanceCategoryType.EXPENSE, 3);
-    
+
+    // Aggregate income data
+    const income = await prisma.financeTransaction.aggregate({
+      _sum: {
+        amount: true,
+      },
+      where: {
+        companyId: companyId,
+        type: 'INCOME',
+        createdAt: {
+          gte: startDate,
+        },
+      },
+    });
+
+    // Aggregate expense data
+    const expense = await prisma.financeTransaction.aggregate({
+      _sum: {
+        amount: true,
+      },
+      where: {
+        companyId: companyId,
+        type: 'EXPENSE',
+        createdAt: {
+          gte: startDate,
+        },
+      },
+    });
+
+    // Calculate totals and profit
+    const totalIncome = income._sum.amount || 0;
+    const totalExpense = expense._sum.amount || 0;
+    const profit = totalIncome - totalExpense;
+
+    // Get transactions by category
+    const categorySummary = await prisma.financeTransaction.groupBy({
+      by: ['categoryId'],
+      _sum: {
+        amount: true,
+      },
+      where: {
+        companyId: companyId,
+        createdAt: {
+          gte: startDate,
+        },
+      },
+    });
+
+    // Fetch category details to include names
+    const categories = await prisma.financeCategory.findMany({
+      where: {
+        id: {
+          in: categorySummary.map(item => item.categoryId),
+        },
+      },
+    });
+
+    // Combine category data
+    const categoryData = categorySummary.map(item => {
+      const category = categories.find(cat => cat.id === item.categoryId);
+      return {
+        categoryId: item.categoryId,
+        categoryName: category?.name || 'Unknown',
+        type: category?.type || 'UNKNOWN',
+        amount: item._sum.amount || 0,
+      };
+    });
+
+    // Return the summary data
     return NextResponse.json({
-      summary,
-      topIncomeCategories,
-      topExpenseCategories,
+      summary: {
+        totalIncome,
+        totalExpense,
+        profit,
+        period,
+        startDate: startDate.toISOString(),
+        endDate: today.toISOString(),
+      },
+      categoryData,
     });
   } catch (error) {
-    console.error("Error fetching finance summary:", error);
-    return NextResponse.json({ error: "Failed to fetch finance summary" }, { status: 500 });
+    console.error('Error fetching finance summary:', error);
+    return NextResponse.json(
+      { error: "Failed to fetch finance summary" },
+      { status: 500 }
+    );
   }
 } 
