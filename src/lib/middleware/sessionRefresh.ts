@@ -28,6 +28,10 @@ export async function refreshSessionWithBackoff(
   // Generate a request-specific cache key
   const cacheKey = `${request.url}_${Date.now()}`;
   
+  // Add detailed debugging
+  console.log('[SessionRefresh] Request headers:', Object.fromEntries(request.headers.entries()));
+  console.log('[SessionRefresh] Request cookies:', Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value.substring(0, 10) + '...'])));
+  
   // Get current attempt count or initialize to 0
   const currentAttempt = sessionRefreshAttempts.get(cacheKey) || 0;
   sessionRefreshAttempts.set(cacheKey, currentAttempt + 1);
@@ -47,6 +51,9 @@ export async function refreshSessionWithBackoff(
     // Create Supabase client
     const supabase = createMiddlewareClient(request, response);
     
+    // Log before getUser call
+    console.log('[SessionRefresh] Calling supabase.auth.getUser()');
+    
     // Calculate backoff duration with exponential increase (2^attempt * base)
     const backoffMs = Math.min(
       RETRY_BACKOFF_MS * Math.pow(2, currentAttempt),
@@ -61,6 +68,14 @@ export async function refreshSessionWithBackoff(
     
     // Try to refresh the session
     const { data, error } = await supabase.auth.getUser();
+    
+    // Log detailed results
+    console.log('[SessionRefresh] Auth result:', { 
+      success: !error, 
+      hasUser: !!data?.user,
+      userId: data?.user?.id,
+      error: error?.message
+    });
     
     // Log attempt result
     if (error) {

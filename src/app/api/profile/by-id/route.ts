@@ -11,8 +11,12 @@ import { UserRole } from "@prisma/client";
  */
 export async function GET(request: NextRequest) {
   try {
+    // Add detailed debugging for request headers and cookies
+    console.log('[DEBUG] Request headers:', Object.fromEntries(request.headers.entries()));
+    console.log('[DEBUG] Cookie header:', request.headers.get('cookie'));
+    
     const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = createSupabaseRouteHandlerClient();
     
     // Log cookies and auth headers for debugging
     const authHeader = request.headers.get('authorization');
@@ -181,7 +185,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = createSupabaseRouteHandlerClient();
     
     // Authenticate the requesting user
     let requestingUserId = null;

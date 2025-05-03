@@ -50,8 +50,18 @@ export async function middleware(request: NextRequest) {
   try {
     const { pathname } = request.nextUrl
     
+    // Enhanced debugging
+    console.log('[Middleware] Processing request for path:', pathname);
+    console.log('[Middleware] Cookie header:', request.headers.get('cookie'));
+    console.log('[Middleware] Auth header present:', !!request.headers.get('authorization'));
+    console.log('[Middleware] Auth cookie present:', request.cookies.has(AUTH_TOKEN_KEY));
+    if (request.cookies.has(AUTH_TOKEN_KEY)) {
+      console.log('[Middleware] Auth cookie value length:', request.cookies.get(AUTH_TOKEN_KEY)?.value?.length);
+    }
+    
     // Skip middleware for public paths and static files
     if (isPublicPath(pathname) || isStaticAsset(pathname)) {
+      console.log('[Middleware] Skipping middleware for public path or static asset');
       return NextResponse.next()
     }
     

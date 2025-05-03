@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
-
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { auth } from "@/lib/auth";
 
 const orderSchema = z.object({
   companyId: z.string(),
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();

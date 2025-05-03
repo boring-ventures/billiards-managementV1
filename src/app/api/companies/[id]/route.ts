@@ -1,5 +1,5 @@
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
-
+import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -100,7 +100,7 @@ export async function PATCH(
   const companyId = params.id;
 
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -154,7 +154,7 @@ export async function DELETE(
   const companyId = params.id;
 
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseRouteHandlerClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();
