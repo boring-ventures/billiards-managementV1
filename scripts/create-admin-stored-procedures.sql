@@ -6,7 +6,11 @@ CREATE OR REPLACE FUNCTION get_user_counts_by_company()
 RETURNS TABLE (
   "companyId" UUID,
   count BIGINT
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -16,8 +20,7 @@ BEGIN
   WHERE profiles.company_id IS NOT NULL
   GROUP BY profiles.company_id;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER;
+$$;
 
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION get_user_counts_by_company() TO authenticated;
@@ -28,7 +31,11 @@ RETURNS TABLE (
   "companyId" UUID,
   role TEXT,
   count BIGINT
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -39,8 +46,7 @@ BEGIN
   WHERE profiles.company_id IS NOT NULL
   GROUP BY profiles.company_id, profiles.role;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER;
+$$;
 
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION get_user_stats_by_company_role() TO authenticated;
@@ -58,7 +64,11 @@ RETURNS TABLE (
   "performedByEmail" TEXT,
   "performedByName" TEXT,
   "created_at" TIMESTAMPTZ
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -76,13 +86,12 @@ BEGIN
   LIMIT limit_count
   OFFSET offset_count;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER;
+$$;
 
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION get_admin_audit_logs(INTEGER, INTEGER) TO authenticated;
 
 -- Comment on procedures
-COMMENT ON FUNCTION get_user_counts_by_company() IS 'Get count of users per company';
-COMMENT ON FUNCTION get_user_stats_by_company_role() IS 'Get count of users per company broken down by role';
-COMMENT ON FUNCTION get_admin_audit_logs(INTEGER, INTEGER) IS 'Get admin audit logs with performer information'; 
+COMMENT ON FUNCTION get_user_counts_by_company() IS 'Get count of users per company (with explicit search_path)';
+COMMENT ON FUNCTION get_user_stats_by_company_role() IS 'Get count of users per company broken down by role (with explicit search_path)';
+COMMENT ON FUNCTION get_admin_audit_logs(INTEGER, INTEGER) IS 'Get admin audit logs with performer information (with explicit search_path)'; 

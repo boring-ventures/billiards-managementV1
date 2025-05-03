@@ -1,9 +1,8 @@
--- Fix search_path for database functions
--- This script updates all database functions to explicitly set the search_path parameter
+-- Migration: Fix search_path for database functions
+-- This migration updates all database functions to explicitly set the search_path parameter
 -- to ensure predictable behavior regardless of session settings
 
 -- 1. Update the RLS helper functions
--- Don't drop functions as they have dependencies
 CREATE OR REPLACE FUNCTION public.is_superadmin()
 RETURNS BOOLEAN
 LANGUAGE sql SECURITY DEFINER
@@ -120,12 +119,4 @@ $$;
 -- Re-grant permissions to ensure they persist after function updates
 GRANT EXECUTE ON FUNCTION public.get_user_counts_by_company() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_stats_by_company_role() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_admin_audit_logs(INTEGER, INTEGER) TO authenticated;
-
--- Add comments to document the functions
-COMMENT ON FUNCTION public.is_superadmin() IS 'Check if the current user has SUPERADMIN role (with explicit search_path)';
-COMMENT ON FUNCTION public.is_admin_or_superadmin() IS 'Check if the current user has ADMIN or SUPERADMIN role (with explicit search_path)';
-COMMENT ON FUNCTION public.get_user_company_id() IS 'Get the company ID for the current user (with explicit search_path)';
-COMMENT ON FUNCTION public.get_user_counts_by_company() IS 'Get count of users per company (with explicit search_path)';
-COMMENT ON FUNCTION public.get_user_stats_by_company_role() IS 'Get count of users per company broken down by role (with explicit search_path)';
-COMMENT ON FUNCTION public.get_admin_audit_logs(INTEGER, INTEGER) IS 'Get admin audit logs with performer information (with explicit search_path)'; 
+GRANT EXECUTE ON FUNCTION public.get_admin_audit_logs(INTEGER, INTEGER) TO authenticated; 
