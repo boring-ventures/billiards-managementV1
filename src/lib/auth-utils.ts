@@ -28,7 +28,7 @@ function processAuthCookieValue(value: string | null): string | null {
   
   // Handle "base64-" prefixed cookies - strip the prefix
   if (value.startsWith('base64-')) {
-    console.log('[Cookie] Processing base64 prefixed cookie');
+    console.log('[Cookie] Removing base64 prefix from cookie value');
     return value.substring(7); // Remove 'base64-' prefix
   }
   
@@ -206,33 +206,21 @@ export async function debugServerCookies() {
   if (typeof window !== 'undefined') return 'Cannot debug server cookies on client'
   
   try {
-    let allCookies: Array<RequestCookie> = [];
-    let authCookie: RequestCookie | undefined;
+    // Using the new AsyncLocalStorage solution for Next.js 14
+    const cookieStore = cookies();
+    const store = await cookieStore;
     
-    try {
-      // Using the new AsyncLocalStorage solution
-      const cookieStore = cookies();
-      const store = await cookieStore;
-      // Use a type assertion to resolve the linter error
-      allCookies = (store as any).getAll();
-    } catch (e) {
-      // Fallback for sync context
-      // @ts-ignore - Access sync API
-      const cookieStore = cookies();
-      allCookies = cookieStore.getAll?.() || [];
-    }
-    
-    authCookie = allCookies.find((c: RequestCookie) => c.name === AUTH_TOKEN_KEY);
-    const hasSbAuthCookie = !!authCookie;
+    // For Next.js 14, use store as ReadonlyRequestCookies
+    const authCookie = store.get(AUTH_TOKEN_KEY);
+    const authCookieExists = !!authCookie;
     
     return {
-      cookieCount: allCookies.length,
-      cookieNames: allCookies.map((c: RequestCookie) => c.name),
-      hasSbAuthCookie,
-      authCookieValue: hasSbAuthCookie ? 
+      cookieCount: 'unknown', // We can't get all cookies easily in Next.js 14
+      hasSbAuthCookie: authCookieExists,
+      authCookieValue: authCookieExists ? 
         (authCookie?.value?.startsWith('base64-') ? 'Has base64 prefix' : 'Standard format') : 
         'missing',
-      authCookieValueSample: hasSbAuthCookie && authCookie?.value ? 
+      authCookieValueSample: authCookieExists && authCookie?.value ? 
         authCookie.value.substring(0, 15) + '...' : null
     }
   } catch (error) {

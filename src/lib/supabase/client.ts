@@ -75,6 +75,9 @@ export const supabase = createBrowserClient(
           // Get the current domain for cookie settings
           const domain = getCurrentDomain();
           
+          // Do not modify the original value - pass it directly
+          // This is critical for auth tokens to work properly
+          
           const cookieOptions = {
             path: '/',
             sameSite: 'lax',
@@ -97,7 +100,7 @@ export const supabase = createBrowserClient(
             .join('; ');
           
           const fullCookie = `${name}=${value}; ${cookieString}`;
-          console.log(`[Browser] Cookie string: ${fullCookie.substring(0, 50)}...`);
+          console.log(`[Browser] Setting cookie: ${name} (${value.substring(0, 5)}...)`);
           document.cookie = fullCookie;
           
           // Verify cookie was set
@@ -109,11 +112,6 @@ export const supabase = createBrowserClient(
               console.error('[Browser] Cookie was not set successfully. Check domain and secure settings.');
               // Try again without domain as fallback
               document.cookie = `${name}=${value}; path=/; max-age=${cookieOptions.maxAge}; SameSite=Lax; Secure`;
-              
-              setTimeout(() => {
-                const recheck = this.get(name);
-                console.log(`[Browser] Fallback cookie verification: ${name} = ${recheck ? 'set successfully' : 'FAILED AGAIN'}`);
-              }, 100);
             }
           }, 100);
         } catch (error) {
@@ -148,16 +146,8 @@ export const supabase = createBrowserClient(
             
           document.cookie = `${name}=; max-age=0; ${cookieString}; Secure`;
           
-          // Verify cookie was removed
-          setTimeout(() => {
-            const checkCookie = this.get(name);
-            console.log(`[Browser] Cookie removal verification: ${name} = ${!checkCookie ? 'removed successfully' : 'FAILED TO REMOVE'}`);
-            
-            if (checkCookie) {
-              // Try again without domain
-              document.cookie = `${name}=; max-age=0; path=/; Secure`;
-            }
-          }, 100);
+          // Also try without domain just to be safe
+          document.cookie = `${name}=; max-age=0; path=/; Secure`;
         } catch (error) {
           console.error(`[Browser] Error removing cookie ${name}:`, error);
         }
@@ -167,8 +157,7 @@ export const supabase = createBrowserClient(
       flowType: 'pkce',
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      persistSession: true,
-      debug: true // Enable auth debugging
+      persistSession: true
     }
   }
 );
