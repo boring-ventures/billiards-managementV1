@@ -56,6 +56,13 @@ export const supabase = createBrowserClient(
           if (parts.length === 2) {
             const cookieValue = parts.pop()?.split(';').shift() || null;
             console.log(`[Browser] Cookie read: ${name} = ${cookieValue ? 'present' : 'not found'}`);
+            
+            // If cookie value starts with base64-, strip it here
+            if (cookieValue?.startsWith('base64-')) {
+              console.log('[Browser] Removing base64 prefix from cookie value on read');
+              return cookieValue.substring(7);
+            }
+            
             return cookieValue;
           }
           
@@ -78,6 +85,10 @@ export const supabase = createBrowserClient(
           // Do not modify the original value - pass it directly
           // This is critical for auth tokens to work properly
           
+          // IMPORTANT: Ensure we're not adding 'base64-' prefix
+          // If value already has this prefix, remove it
+          const cleanValue = value.startsWith('base64-') ? value.substring(7) : value;
+          
           const cookieOptions = {
             path: '/',
             sameSite: 'lax',
@@ -99,8 +110,8 @@ export const supabase = createBrowserClient(
             .filter(Boolean)
             .join('; ');
           
-          const fullCookie = `${name}=${value}; ${cookieString}`;
-          console.log(`[Browser] Setting cookie: ${name} (${value.substring(0, 5)}...)`);
+          const fullCookie = `${name}=${cleanValue}; ${cookieString}`;
+          console.log(`[Browser] Setting cookie: ${name} (${cleanValue.substring(0, 5)}...)`);
           document.cookie = fullCookie;
           
           // Verify cookie was set
@@ -111,7 +122,7 @@ export const supabase = createBrowserClient(
             if (!checkCookie) {
               console.error('[Browser] Cookie was not set successfully. Check domain and secure settings.');
               // Try again without domain as fallback
-              document.cookie = `${name}=${value}; path=/; max-age=${cookieOptions.maxAge}; SameSite=Lax; Secure`;
+              document.cookie = `${name}=${cleanValue}; path=/; max-age=${cookieOptions.maxAge}; SameSite=Lax; Secure`;
             }
           }, 100);
         } catch (error) {
