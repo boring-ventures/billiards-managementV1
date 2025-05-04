@@ -1,37 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
-
-// Helper function to create a Supabase client with correct cookie handling for API routes
-function createSupabaseClient(request: NextRequest) {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name) {
-          // Get cookie directly from the request
-          const cookie = request.cookies.get(name);
-          
-          // Debug logging for auth cookies
-          if (name.includes('auth') || name.includes('supabase')) {
-            console.log(`[API:profile] Reading cookie: ${name} = ${cookie ? 'present' : 'not found'}`);
-          }
-          
-          return cookie?.value || null;
-        },
-        set() {
-          // Not setting cookies in API routes
-        },
-        remove() {
-          // Not removing cookies in API routes
-        }
-      }
-    }
-  );
-}
+import { createAPIRouteClient } from "@/lib/auth-server-utils";
 
 // Common function to create a JSON response with proper headers
 function createJsonResponse(data: any, status: number = 200) {
@@ -47,6 +18,15 @@ function createJsonResponse(data: any, status: number = 200) {
   );
 }
 
+// Common error handler function to standardize auth error responses
+function handleAuthError(error: any, message: string = "Authentication failed") {
+  console.error(`[API:profile] Auth error: ${error?.message || 'Unknown error'}`);
+  return createJsonResponse({ 
+    error: "Not authenticated", 
+    detail: error?.message || message
+  }, 401);
+}
+
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -54,21 +34,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
     
-    // Initialize Supabase client using our helper with the request object
-    const supabase = createSupabaseClient(request);
+    // Initialize Supabase client using our enhanced API Route client
+    const supabase = createAPIRouteClient(request);
+    
+    // Get authenticated user - this is common for both paths
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return handleAuthError(authError, 'Auth session missing!');
+    }
+
+    console.log(`[API:profile] Authenticated user: ${user.id}`);
     
     if (userIdParam) {
-      // Get user from auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
-        return createJsonResponse({ 
-          error: "Not authenticated", 
-          detail: authError?.message || 'Auth session missing!' 
-        }, 401);
-      }
-      
       // Check if the user is requesting their own profile or has admin permission
       if (userIdParam !== user.id) {
         // Fetch requester's profile to check role
@@ -99,19 +77,6 @@ export async function GET(request: NextRequest) {
       
       return createJsonResponse({ profile });
     }
-    
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
-      return createJsonResponse({ 
-        error: "Not authenticated", 
-        detail: authError?.message || 'Auth session missing!' 
-      }, 401);
-    }
-    
-    console.log(`[API:profile] Authenticated user: ${user.id}`);
     
     // Get the user's profile from the database
     const profile = await prisma.profile.findUnique({
@@ -183,17 +148,11 @@ export async function GET(request: NextRequest) {
         
         console.log(`[API:profile] New profile created successfully`);
         
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        headers.set('X-Profile-Created', 'true');
-        
-        return new NextResponse(
-          JSON.stringify({ profile: newProfile }), 
-          {
-            status: 200,
-            headers: headers
-          }
-        );
+        // Use our helper to return a consistent JSON response
+        return createJsonResponse({ 
+          profile: newProfile,
+          created: true
+        });
       } catch (createError) {
         console.error(`[API:profile] Failed to create profile:`, createError);
         return createJsonResponse({
@@ -223,23 +182,14 @@ export async function PUT(request: NextRequest) {
     const data = await request.json();
     const { firstName, lastName, avatarUrl, active } = data;
     
-    // Initialize Supabase client using our helper
-    const supabase = createSupabaseClient(request);
+    // Initialize Supabase client using our enhanced API Route client
+    const supabase = createAPIRouteClient(request);
     
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'No user found' }),
-        { 
-          status: 401,
-          headers: headers
-        }
-      );
+      return handleAuthError(authError, 'Auth session missing!');
     }
     
     const userId = user.id;
@@ -264,16 +214,7 @@ export async function PUT(request: NextRequest) {
           }
         });
         
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify(newProfile),
-          { 
-            status: 201,
-            headers: headers
-          }
-        );
+        return createJsonResponse({ profile: newProfile }, 201);
       }
       
       // Update the existing profile
@@ -287,43 +228,20 @@ export async function PUT(request: NextRequest) {
         }
       });
       
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify(updatedProfile),
-        { 
-          status: 200,
-          headers: headers
-        }
-      );
+      return createJsonResponse({ profile: updatedProfile });
     } catch (error) {
-      console.error("Error updating profile:", error);
-      
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Failed to update profile" }),
-        { 
-          status: 500,
-          headers: headers
-        }
-      );
+      console.error("[API:profile] Error updating profile:", error);
+      return createJsonResponse({ 
+        error: "Failed to update profile",
+        detail: error instanceof Error ? error.message : String(error)
+      }, 500);
     }
   } catch (error) {
-    console.error("Error in profile PUT endpoint:", error);
-    
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ error: "Failed to update profile" }),
-      { 
-        status: 500,
-        headers: headers
-      }
-    );
+    console.error("[API:profile] Error in profile PUT endpoint:", error);
+    return createJsonResponse({ 
+      error: "Failed to process update request",
+      detail: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 }
 
@@ -334,16 +252,33 @@ export async function POST(request: NextRequest) {
     const { userId, firstName, lastName, avatarUrl, role } = data;
 
     if (!userId) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
+      return createJsonResponse({ error: "User ID is required" }, 400);
+    }
+
+    // Initialize Supabase client and verify authentication for security
+    const supabase = createAPIRouteClient(request);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return handleAuthError(authError, 'Auth session missing!');
+    }
+    
+    // Check if user has admin privileges to create profiles for others
+    if (userId !== user.id) {
+      const requesterProfile = await prisma.profile.findUnique({
+        where: { userId: user.id },
+        select: { role: true }
+      });
       
-      return new NextResponse(
-        JSON.stringify({ error: "User ID is required" }),
-        { 
-          status: 400,
-          headers: headers
-        }
-      );
+      const isSuperAdmin = requesterProfile?.role === UserRole.SUPERADMIN;
+      const isAdmin = requesterProfile?.role === UserRole.ADMIN;
+      
+      if (!isSuperAdmin && !isAdmin) {
+        return createJsonResponse({ 
+          error: "Forbidden", 
+          detail: "Insufficient permissions to create profiles for other users" 
+        }, 403);
+      }
     }
 
     try {
@@ -353,16 +288,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (existingProfile) {
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ error: "Profile already exists" }),
-          { 
-            status: 409,
-            headers: headers
-          }
-        );
+        return createJsonResponse({ error: "Profile already exists" }, 409);
       }
 
       // Create the profile directly
@@ -377,52 +303,50 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify(newProfile),
-        { 
-          status: 201,
-          headers: headers
-        }
-      );
+      return createJsonResponse({ profile: newProfile }, 201);
     } catch (error) {
-      console.error("Database error creating profile:", error);
-      
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Database error creating profile", details: errorMessage }),
-        { 
-          status: 500,
-          headers: headers
-        }
-      );
+      console.error("[API:profile] Database error creating profile:", error);
+      return createJsonResponse({ 
+        error: "Database error creating profile", 
+        detail: error instanceof Error ? error.message : String(error)
+      }, 500);
     }
   } catch (error) {
-    console.error("Error in profile creation endpoint:", error);
-    
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    return new NextResponse(
-      JSON.stringify({ error: "Failed to create profile", details: errorMessage }),
-      { 
-        status: 500,
-        headers: headers
-      }
-    );
+    console.error("[API:profile] Error in profile creation endpoint:", error);
+    return createJsonResponse({ 
+      error: "Failed to create profile", 
+      detail: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 }
 
 export async function GETAll(req: Request) {
   try {
+    // Initialize Supabase client and verify authentication
+    const request = req as unknown as NextRequest;
+    const supabase = createAPIRouteClient(request);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return handleAuthError(authError, 'Auth session missing!');
+    }
+    
+    // Check if user has admin privileges to list all profiles
+    const requesterProfile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { role: true }
+    });
+    
+    const isSuperAdmin = requesterProfile?.role === UserRole.SUPERADMIN;
+    const isAdmin = requesterProfile?.role === UserRole.ADMIN;
+    
+    if (!isSuperAdmin && !isAdmin) {
+      return createJsonResponse({ 
+        error: "Forbidden", 
+        detail: "Insufficient permissions to list all profiles" 
+      }, 403);
+    }
+
     const { searchParams } = new URL(req.url);
     const role = searchParams.get("role");
     const active = searchParams.get("active");
@@ -439,12 +363,13 @@ export async function GETAll(req: Request) {
       },
     });
 
-    return NextResponse.json({ profiles });
+    // Use our helper to return a consistent JSON response
+    return createJsonResponse({ profiles });
   } catch (error) {
-    console.error("Error fetching profiles:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("[API:profile] Error fetching profiles:", error);
+    return createJsonResponse({ 
+      error: "Internal server error",
+      detail: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 }
