@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, createContext, useContext } from 'react';
+import { useEffect, useState, useCallback, createContext, useContext, useMemo } from 'react';
 import { createBrowserSupabaseClient, refreshSession } from '@/lib/auth-client-utils';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -59,7 +59,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     error: null,
   });
 
-  const supabase = createBrowserSupabaseClient();
+  // Create Supabase client once using the singleton pattern
+  // This ensures only one GoTrueClient instance exists throughout the app
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   // Fetch profile data
   const fetchProfile = useCallback(async (userId: string) => {
@@ -322,16 +324,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Set up auth state listener
+  // Listen for auth changes
   useEffect(() => {
     // Initial auth check
     checkAuth();
     
-    // Subscribe to auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    // Set up auth state change listener using the singleton client
+    const { data: listener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN') {
-          await checkAuth();
+        console.log(`[Auth] Auth state changed: ${event}`, session ? 'Session exists' : 'No session');
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          checkAuth();
         } else if (event === 'SIGNED_OUT') {
           setState({
             isLoading: false,
@@ -345,9 +349,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     );
     
-    // Cleanup subscription
+    // Cleanup
     return () => {
-      authListener?.subscription.unsubscribe();
+      listener.subscription.unsubscribe();
     };
   }, [checkAuth, supabase.auth]);
 

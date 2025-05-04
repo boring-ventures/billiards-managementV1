@@ -9,34 +9,39 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Global instance that is shared between calls in the same browser session
-let globalInstance: any = null;
-
-/**
- * Create a Supabase client configured for browser usage with the SSR package
- */
-export const supabase = createBrowserClient(
-  supabaseUrl,
-  supabaseAnonKey
-);
+let globalInstance: ReturnType<typeof createBrowserClient> | null = null;
 
 /**
  * Get a singleton instance of Supabase client to ensure consistent auth state
+ * This is the preferred way to access the Supabase client in browser context
  */
 export const getSupabase = () => {
+  if (typeof window === 'undefined') {
+    throw new Error("getSupabase should only be called in browser context");
+  }
+
   if (globalInstance) {
     return globalInstance;
   }
   
   console.log('[Browser] Creating new Supabase client instance');
-  globalInstance = supabase;
+  globalInstance = createBrowserClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey
+  );
+  
   return globalInstance;
 };
+
+// Export a function that always returns the singleton instance
+// This replaces the direct client export
+export const supabase = () => getSupabase();
 
 /**
  * Debug function to log all cookies in browser
  */
 export const debugCookies = () => {
-  if (typeof document === 'undefined') return;
+  if (typeof window === 'undefined') return;
   
   try {
     const cookies = document.cookie.split(';').reduce((acc, cookie) => {

@@ -33,7 +33,7 @@ export async function getAuthSession() {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase().auth.getSession();
     if (error) {
       console.error('Session error in getAuthSession:', error.message);
       return null;
@@ -99,7 +99,7 @@ export async function signInWithPassword(email: string, password: string) {
     isAuthenticating = true;
     console.log('Starting authentication process...');
     
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase().auth.signInWithPassword({
       email,
       password
     });
@@ -126,7 +126,7 @@ export async function signInWithPassword(email: string, password: string) {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Force a session refresh to ensure tokens are properly synchronized
-      await supabase.auth.getUser();
+      await supabase().auth.getUser();
       
       authInitialized = true;
     }
@@ -152,7 +152,7 @@ export async function getCurrentUser(): Promise<User | null> {
     }
     
     // Get current session from Supabase
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase().auth.getSession();
     
     if (error) {
       console.error('Session error:', error.message);
@@ -232,7 +232,7 @@ export async function getCurrentUser(): Promise<User | null> {
         if (response.status === 401) {
           console.log("Attempting to refresh session and retry profile fetch");
           
-          const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+          const { data: refreshedData, error: refreshError } = await supabase().auth.refreshSession();
           
           if (refreshError) {
             console.error("Failed to refresh session:", refreshError);
@@ -252,16 +252,6 @@ export async function getCurrentUser(): Promise<User | null> {
               const retryData = await retryResponse.json();
               const retryProfile = retryData.profile || retryData;
               
-              // Store profile in cookie for fallback
-              cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(retryProfile), {
-                expires: 1, // 1 day
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/'
-              });
-              
-              console.log("Profile fetched successfully after refresh");
-              
               return {
                 id: userId,
                 email: refreshedData.session?.user.email,
@@ -271,63 +261,59 @@ export async function getCurrentUser(): Promise<User | null> {
                 role: retryProfile.role || refreshedData.session?.user.user_metadata?.role || UserRole.USER,
                 companyId: retryProfile.companyId
               };
-            } else {
-              console.error("Profile retry failed with status:", retryResponse.status);
-              
-              // Try to get more error details from the retry response
-              try {
-                const retryErrorData = await retryResponse.json();
-                console.error("Retry error details:", retryErrorData);
-              } catch (e) {
-                console.error("Could not parse retry error response");
-              }
             }
           }
         }
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
-    
-    console.log("Trying fallback profile fetch");
-    
-    // Try to load from cookie fallback
-    try {
-      const fallbackJson = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
-      if (fallbackJson) {
-        console.log("Using fallback profile from cookie");
-        const fallbackProfile = JSON.parse(fallbackJson);
+        
+        // Try to use fallback profile from cookie if API fails
+        const fallbackProfileJson = cookieUtils.get(FALLBACK_PROFILE_COOKIE);
+        if (fallbackProfileJson) {
+          try {
+            const fallbackProfile = JSON.parse(fallbackProfileJson);
+            console.log("Using fallback profile from cookie");
+            
+            return {
+              id: userId,
+              email: data.session?.user.email,
+              name: fallbackProfile.firstName 
+                ? `${fallbackProfile.firstName} ${fallbackProfile.lastName || ''}` 
+                : data.session?.user.user_metadata?.name,
+              role: fallbackProfile.role || data.session?.user.user_metadata?.role || UserRole.USER,
+              companyId: fallbackProfile.companyId
+            };
+          } catch (e) {
+            console.error("Failed to parse fallback profile:", e);
+          }
+        }
+        
         return {
           id: userId,
-          email: data.session.user.email || undefined,
-          name: fallbackProfile.firstName 
-            ? `${fallbackProfile.firstName} ${fallbackProfile.lastName || ''}` 
-            : data.session.user.user_metadata?.name,
-          role: fallbackProfile.role || data.session.user.user_metadata?.role || UserRole.USER,
-          companyId: fallbackProfile.companyId
+          email: data.session?.user.email,
+          name: data.session?.user.user_metadata?.name,
+          role: data.session?.user.user_metadata?.role || UserRole.USER,
+          companyId: data.session?.user.user_metadata?.companyId
         };
       }
     } catch (e) {
-      console.error("Error parsing fallback profile:", e);
+      console.error("Error fetching profile:", e);
+      
+      // Fallback to basic user object from session
+      return {
+        id: userId,
+        email: data.session?.user.email,
+        name: data.session?.user.user_metadata?.name,
+        role: data.session?.user.user_metadata?.role || UserRole.USER,
+        companyId: data.session?.user.user_metadata?.companyId
+      };
     }
-    
-    console.log("Using basic session data as fallback");
-    
-    // Fallback to just the session data without profile info
-    return {
-      id: userId,
-      email: data.session.user.email || undefined,
-      name: data.session.user.user_metadata?.name,
-      role: data.session.user.user_metadata?.role || UserRole.USER
-    };
-  } catch (error) {
-    console.error("Error in client-side getCurrentUser:", error);
+  } catch (e) {
+    console.error("Error in getCurrentUser:", e);
     return null;
   }
 }
 
 /**
- * Sets the current user ID for admin view switching
+ * Set the current user ID (for admin view as another user)
  */
 export function setCurrentUserId(userId: string | null): void {
   if (userId) {
@@ -338,71 +324,68 @@ export function setCurrentUserId(userId: string | null): void {
       path: '/'
     });
   } else {
-    cookieUtils.remove(USER_ID_COOKIE, { path: '/' });
+    cookieUtils.remove(USER_ID_COOKIE);
   }
 }
 
 /**
- * Client-side check if user is logged in
+ * Check if the user is currently logged in
  */
 export async function isLoggedIn(): Promise<boolean> {
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase().auth.getSession();
     
     if (error) {
-      console.error('Session check error:', error.message);
+      console.error('Error checking login status:', error.message);
       return false;
     }
     
     return !!data.session;
-  } catch (error) {
-    console.error('IsLoggedIn error:', error);
+  } catch (e) {
+    console.error('Exception in isLoggedIn:', e);
     return false;
   }
 }
 
 /**
- * Attempt to refresh the session
+ * Force refresh the auth session
  */
 export async function refreshSession(): Promise<boolean> {
   try {
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data, error } = await supabase().auth.refreshSession();
     
     if (error) {
-      console.error('Session refresh error:', error.message);
+      console.error('Failed to refresh session:', error.message);
       return false;
     }
     
     return !!data.session;
-  } catch (error) {
-    console.error('RefreshSession error:', error);
+  } catch (e) {
+    console.error('Exception in refreshSession:', e);
     return false;
   }
 }
 
 /**
- * Sign out the current user
+ * Sign out from Supabase and clear local state
  */
 export async function signOut(): Promise<void> {
   try {
-    await supabase.auth.signOut();
+    // Clear any override user cookie
+    setCurrentUserId(null);
     
-    // Clear all auth-related cookies
-    cookieUtils.clearAuthCookies();
+    // Clear profile cookie
+    cookieUtils.remove(FALLBACK_PROFILE_COOKIE);
     
-    // Force reload the page to reset all client state
-    if (typeof window !== 'undefined') {
-      window.location.href = '/sign-in';
-    }
-  } catch (error) {
-    console.error('SignOut error:', error);
+    // Sign out from Supabase
+    await supabase().auth.signOut({ scope: 'local' });
     
-    // Try to clear cookies even if sign out failed
-    cookieUtils.clearAuthCookies();
+    console.log('Successfully signed out');
     
-    // Force reload as a fallback
-    if (typeof window !== 'undefined') {
-      window.location.href = '/sign-in';
-    }
+    // Reset our tracking
+    authInitialized = false;
+  } catch (e) {
+    console.error('Error during sign out:', e);
+    throw e;
   }
 } 

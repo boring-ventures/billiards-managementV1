@@ -6,6 +6,9 @@ import { createClient } from '@supabase/supabase-js'
 // Common token names
 export const AUTH_TOKEN_KEY = getSupabaseAuthCookieName()
 
+// Singleton instance for browser
+let browserClientInstance: ReturnType<typeof createClient> | null = null;
+
 /**
  * Get the properly formatted Supabase cookie name for the current project
  */
@@ -33,9 +36,19 @@ export function processAuthCookieValue(value: string | null): string | null {
 
 /**
  * Create a Supabase client for browser use with proper cookie handling
+ * Implements singleton pattern to ensure only one instance exists
  */
 export function createBrowserSupabaseClient() {
-  return createClient(
+  if (browserClientInstance) {
+    return browserClientInstance;
+  }
+
+  if (typeof window === 'undefined') {
+    throw new Error('createBrowserSupabaseClient should only be called in browser context');
+  }
+
+  console.log('[Auth] Creating singleton Supabase browser client instance');
+  browserClientInstance = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -46,7 +59,9 @@ export function createBrowserSupabaseClient() {
         persistSession: true
       }
     }
-  )
+  );
+  
+  return browserClientInstance;
 }
 
 /**

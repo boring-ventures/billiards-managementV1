@@ -48,8 +48,8 @@ export function MagicLinkForm({ className, ...props }: MagicLinkFormProps) {
       const siteUrl =
         process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
 
-      // Send magic link email
-      const { error } = await supabase.auth.signInWithOtp({
+      // Send magic link email - note the function call to get the client instance
+      const { error } = await supabase().auth.signInWithOtp({
         email: data.email,
         options: {
           emailRedirectTo: `${siteUrl}/auth/callback`,

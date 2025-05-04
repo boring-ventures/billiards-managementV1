@@ -3,14 +3,16 @@ import { createBrowserClient } from '@supabase/ssr'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabase } from './supabase/client'
 
 // Environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Browser client (client-side)
+// Browser client (client-side) - uses the singleton pattern
 export const createClient = () => {
-  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+  // Use our singleton implementation instead of creating a new instance
+  return getSupabase()
 }
 
 // Server client (server components, API routes)

@@ -4,8 +4,26 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Singleton instance
+let clientInstance: ReturnType<typeof createClient> | null = null;
+
+// Create and get Supabase client using singleton pattern
+export const supabase = () => {
+  if (typeof window === 'undefined') {
+    // For server-side usage, create a new instance each time
+    // Server-side doesn't have the multiple instance issue
+    return createClient(supabaseUrl, supabaseAnonKey);
+  }
+  
+  // For client-side, use singleton pattern
+  if (clientInstance) {
+    return clientInstance;
+  }
+  
+  console.log('[Global] Creating singleton Supabase client');
+  clientInstance = createClient(supabaseUrl, supabaseAnonKey);
+  return clientInstance;
+};
 
 // Helper function to handle Supabase errors consistently
 export function handleSupabaseError(error: any, operation: string): Error {
