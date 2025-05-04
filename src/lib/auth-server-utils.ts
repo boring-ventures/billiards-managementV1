@@ -142,30 +142,54 @@ export function createAPIRouteClient(request: NextRequest) {
   const cookiePattern = getSupabaseCookiePattern();
   console.log(`[API] Creating API route client with cookie pattern: ${cookiePattern}`);
   
+  // Debug all request cookies to identify potential issues
+  const allRequestCookies = request.cookies.getAll();
+  console.log(`[API] All request cookies (${allRequestCookies.length}): ${allRequestCookies.map(c => c.name).join(', ')}`);
+  
+  // Log specifically auth-related cookies
+  const authCookies = getAllAuthCookies(request);
+  
+  if (authCookies.length === 0) {
+    console.log(`[API] ⚠️ WARNING: No auth cookies found in request. Authentication will likely fail.`);
+    // Check headers for debug purposes
+    const authHeader = request.headers.get('authorization');
+    if (authHeader) {
+      console.log(`[API] Found Authorization header: ${authHeader.substring(0, 15)}...`);
+    }
+  } else {
+    console.log(`[API] Found ${authCookies.length} auth cookie(s): ${authCookies.map(c => c.name).join(', ')}`);
+  }
+  
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name) {
-          // Log that we're looking for this specific cookie
+          // Log that we're looking for this specific cookie with more details
           if (name.includes('auth') || name.includes('supabase')) {
             console.log(`[API] Looking for cookie: ${name}`);
           }
           
-          // First try the exact cookie name
+          // First try the exact cookie name with more detailed logging
           const cookie = request.cookies.get(name);
           if (cookie) {
-            console.log(`[API] Found exact cookie match: ${name}`);
+            console.log(`[API] Found exact cookie match: ${name} = ${cookie.value.substring(0, 15)}...`);
             return cookie.value;
           }
           
           // If it's an auth token and not found, try to find any auth token cookie
           if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
-            const authCookies = getAllAuthCookies(request);
-            if (authCookies.length > 0) {
-              console.log(`[API] Using alternative auth cookie: ${authCookies[0].name}`);
-              return authCookies[0].value;
+            // More detailed logging
+            console.log(`[API] Exact cookie not found, looking for alternate auth cookies: ${name}`);
+            
+            // Always look through all cookies rather than using cached results
+            const freshAuthCookies = getAllAuthCookies(request);
+            if (freshAuthCookies.length > 0) {
+              console.log(`[API] Using alternative auth cookie: ${freshAuthCookies[0].name} instead of ${name}`);
+              return freshAuthCookies[0].value;
+            } else {
+              console.log(`[API] ⚠️ No auth cookies found when looking for ${name}`);
             }
           }
           
@@ -173,12 +197,14 @@ export function createAPIRouteClient(request: NextRequest) {
           return null;
         },
         set() {
-          // API routes should return cookies in the response
-          // but we can't set them in this callback
+          // API routes should return cookies in the response headers
+          // This will be handled externally
+          console.log(`[API] Attempted to set cookie in API route (will be handled by response)`);
         },
         remove() {
-          // API routes should return cookies in the response
-          // but we can't remove them in this callback
+          // API routes should handle cookie removal in response headers
+          // This will be handled externally
+          console.log(`[API] ⚠️ Attempted to remove cookie in API route client. This should only happen during logout.`);
         }
       }
     }
