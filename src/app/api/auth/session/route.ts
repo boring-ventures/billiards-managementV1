@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/auth-utils";
+import { createServerSupabaseClient } from "@/lib/auth-server-utils";
 import prisma from "@/lib/prisma";
 
 export async function GET() {

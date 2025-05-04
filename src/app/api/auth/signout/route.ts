@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/auth-utils";
+import { createServerSupabaseClient } from "@/lib/auth-server-utils";
 
 export async function POST() {
   try {

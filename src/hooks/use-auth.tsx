@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, createContext, useContext } from 'react';
-import { createBrowserSupabaseClient, refreshSession } from '@/lib/auth-utils';
+import { createBrowserSupabaseClient, refreshSession } from '@/lib/auth-client-utils';
 import type { User, Session } from '@supabase/supabase-js';
 
 export type Profile = {

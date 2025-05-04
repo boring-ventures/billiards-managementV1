@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/auth-utils";
+import { createServerSupabaseClient } from "@/lib/auth-server-utils";
 import { z } from "zod";
 
 // Schema for sign-up validation
