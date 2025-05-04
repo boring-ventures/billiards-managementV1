@@ -30,15 +30,31 @@ export default async function DashboardLayout({
       const session = await auth();
       
       if (!session?.user) {
-        console.error("Missing user data in dashboard layout");
-        // Don't redirect here, auth() might not find data in some environments
-        // but we already confirmed user is authenticated with Supabase above
+        // Log this issue but don't redirect - the client component will 
+        // handle fetching profile data and company assignment checks
+        console.warn("Missing user data in dashboard layout - will rely on client-side fetching");
+        
+        // Return a special header for debugging
+        const headers = new Headers();
+        headers.set('X-Server-Auth-Status', 'basic-auth-only');
+        headers.set('X-User-Id', data.user.id);
+        
+        // We have a valid Supabase user, so render the dashboard
+        // The client component will handle profile fetching and permission checks
+        return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
       }
       
-      // Continue with rendering the dashboard since we have a valid Supabase user
+      // We have all the data we need, render the dashboard
       return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
     } catch (profileError) {
       console.error("Error getting user profile:", profileError);
+      
+      // Log detailed error for debugging
+      if (profileError instanceof Error) {
+        console.error("Profile error details:", profileError.message);
+        console.error("Profile error stack:", profileError.stack);
+      }
+      
       // We still have a valid Supabase session, so render the dashboard
       // The profile will be fetched client-side if needed
       return <DashboardLayoutClient>{children}</DashboardLayoutClient>;
@@ -50,6 +66,7 @@ export default async function DashboardLayout({
     }
     
     console.error("Error in dashboard layout:", error);
+    // For any other error, redirect to sign-in for safety
     return redirect("/sign-in");
   }
 } 

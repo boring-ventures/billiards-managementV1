@@ -56,24 +56,57 @@ export function useCurrentUser() {
           try {
             // Use a more direct API path to avoid routing issues with Next.js/Vercel
             const profileEndpoint = '/api/profile';
-            const response = await fetch(`${profileEndpoint}?userId=${effectiveUserId}`);
+            
+            // Use fetch with explicit credentials inclusion and specific options to avoid encoding issues
+            const response = await fetch(`${profileEndpoint}?userId=${effectiveUserId}`, {
+              method: 'GET',
+              credentials: 'include', // Ensure cookies are sent with the request
+              headers: {
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache', // Prevent caching issues
+              }
+            });
             
             if (response.ok) {
-              const data = await response.json();
-              // Handle both response formats: data.profile (from by-id format) or data directly
-              const profileData = data.profile || data;
-              setProfile(profileData);
-              
-              // Store profile in cookie for fallback
-              cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profileData), {
-                expires: 1, // 1 day
-                sameSite: 'lax'
-              });
-              
-              // Reset retry counter on successful fetch
-              setApiRetries(0);
+              try {
+                // Process response with more error handling for content decoding errors
+                const responseText = await response.text();
+                let data;
+                
+                try {
+                  // Try to parse the JSON response
+                  data = JSON.parse(responseText);
+                } catch (parseError) {
+                  console.error("Error parsing profile API response:", parseError);
+                  console.log("Response text that failed to parse:", responseText.substring(0, 100) + "...");
+                  throw new Error("Failed to parse API response");
+                }
+                
+                // Handle both response formats: data.profile (from by-id format) or data directly
+                const profileData = data.profile || data;
+                setProfile(profileData);
+                
+                // Store profile in cookie for fallback
+                cookieUtils.set(FALLBACK_PROFILE_COOKIE, JSON.stringify(profileData), {
+                  expires: 1, // 1 day
+                  sameSite: 'lax'
+                });
+                
+                // Reset retry counter on successful fetch
+                setApiRetries(0);
+              } catch (contentError) {
+                console.error("Error processing profile API response:", contentError);
+                throw contentError; // Pass to the outer catch block
+              }
             } else {
               console.warn("Profile API returned an error:", response.status);
+              // Try to get the error details from the response
+              try {
+                const errorText = await response.text();
+                console.warn("Profile API error details:", errorText);
+              } catch (e) {
+                console.warn("Could not read error details");
+              }
               
               // If we've tried multiple times and still getting errors, use a fallback
               if (apiRetries >= 2) {
@@ -123,6 +156,25 @@ export function useCurrentUser() {
             }
           } catch (error) {
             console.error("Error fetching profile data:", error);
+            
+            // First, try refreshing the authentication
+            try {
+              console.log("Attempting to refresh auth session...");
+              // Import the refreshSession function dynamically to avoid circular imports
+              const { refreshSession } = await import("@/lib/auth-client");
+              const refreshed = await refreshSession();
+              
+              if (refreshed) {
+                console.log("Auth session refreshed successfully, retrying profile fetch");
+                // Increment retry counter to trigger a refetch
+                setApiRetries(prev => prev + 1);
+                return; // Exit this iteration and let the next one try again
+              }
+            } catch (refreshError) {
+              console.error("Failed to refresh session:", refreshError);
+            }
+            
+            // Continue with fallback handling if refresh failed
             // Use fallback on network/fetch errors
             // Try to load from cookie first
             const savedFallback = cookieUtils.get(FALLBACK_PROFILE_COOKIE);

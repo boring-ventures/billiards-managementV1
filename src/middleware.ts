@@ -12,18 +12,30 @@ const PUBLIC_PATHS = [
   '/auth/confirm',
   '/auth/callback',
   '/forgot-password',
-  '/api/auth',
+  '/api/auth', // Only this specific API path should be public, not all API routes
   '/terms',
   '/privacy',
 ]
 
 // Helper to check if a path starts with any of the public paths
 function isPublicPath(path: string): boolean {
+  // Use exact matching for API routes to ensure /api/profile paths aren't mistakenly matched by /api/auth
+  if (path.startsWith('/api/')) {
+    return PUBLIC_PATHS.some(publicPath => 
+      publicPath.startsWith('/api/') && path.startsWith(publicPath)
+    );
+  }
+  // For non-API paths, use the original logic
   return PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath))
 }
 
 // Helper to check if path is a static asset
 function isStaticAsset(path: string): boolean {
+  // API paths should never be considered static assets
+  if (path.startsWith('/api/')) {
+    return false;
+  }
+  
   return (
     path.startsWith('/_next/') || 
     path.startsWith('/favicon.ico') || 

@@ -49,17 +49,33 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabase.auth.getUser();
         if (error) {
           console.error('[Profile By-ID API] Cookie auth error:', error.message);
-          return NextResponse.json(
-            { error: error?.message || "Not authenticated" },
-            { status: 401 }
+          
+          // Set explicit headers to avoid content encoding issues
+          const headers = new Headers();
+          headers.set('Content-Type', 'application/json');
+          
+          return new NextResponse(
+            JSON.stringify({ error: error?.message || "Not authenticated" }),
+            { 
+              status: 401,
+              headers: headers
+            }
           );
         }
         
         if (!data?.user) {
           console.error('[Profile By-ID API] No user found in cookie auth');
-          return NextResponse.json(
-            { error: "User not found" },
-            { status: 401 }
+          
+          // Set explicit headers to avoid content encoding issues
+          const headers = new Headers();
+          headers.set('Content-Type', 'application/json');
+          
+          return new NextResponse(
+            JSON.stringify({ error: "User not found" }),
+            { 
+              status: 401,
+              headers: headers
+            }
           );
         }
         
@@ -67,14 +83,36 @@ export async function GET(request: NextRequest) {
         console.log('[Profile By-ID API] Requester found via cookies:', requestingUserId);
       } catch (error) {
         console.error('[Profile By-ID API] Supabase getUser error:', error);
-        return NextResponse.json({ error: "Authentication error" }, { status: 401 });
+        
+        // Set explicit headers to avoid content encoding issues
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "Authentication error" }),
+          { 
+            status: 401,
+            headers: headers
+          }
+        );
       }
     }
     
     // If we still can't identify the requesting user, they're not authenticated
     if (!requestingUserId) {
       console.error('[Profile By-ID API] Could not authenticate requesting user');
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      
+      // Set explicit headers to avoid content encoding issues
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated" }),
+        { 
+          status: 401,
+          headers: headers
+        }
+      );
     }
     
     // Get the target user ID from query parameters
@@ -82,9 +120,16 @@ export async function GET(request: NextRequest) {
     const targetUserId = searchParams.get("userId");
     
     if (!targetUserId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
+      // Set explicit headers to avoid content encoding issues
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "User ID is required" }),
+        { 
+          status: 400,
+          headers: headers
+        }
       );
     }
     
@@ -103,9 +148,17 @@ export async function GET(request: NextRequest) {
       
       if (!isAdmin) {
         console.error('[Profile By-ID API] Unauthorized access attempt');
-        return NextResponse.json(
-          { error: "You are not authorized to access this profile" },
-          { status: 403 }
+        
+        // Set explicit headers to avoid content encoding issues
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "You are not authorized to access this profile" }),
+          { 
+            status: 403,
+            headers: headers
+          }
         );
       }
     }
@@ -123,9 +176,17 @@ export async function GET(request: NextRequest) {
       
       if (userError || !userData?.user) {
         console.error('[Profile By-ID API] User not found in Supabase:', userError?.message);
-        return NextResponse.json(
-          { error: "Profile not found" },
-          { status: 404 }
+        
+        // Set explicit headers to avoid content encoding issues
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "Profile not found" }),
+          { 
+            status: 404,
+            headers: headers
+          }
         );
       }
       
@@ -151,32 +212,62 @@ export async function GET(request: NextRequest) {
         
         console.log('[Profile By-ID API] Created new profile for user');
         
-        // Add auth information to the response headers
+        // Set explicit headers for response
         const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
         headers.set('X-Profile-Created', 'true');
         
-        return NextResponse.json({ profile: newProfile }, { headers });
+        return new NextResponse(
+          JSON.stringify({ profile: newProfile }),
+          { 
+            status: 200,
+            headers: headers
+          }
+        );
       } catch (error) {
         console.error('[Profile By-ID API] Error creating profile:', error);
-        return NextResponse.json(
-          { error: "Failed to create profile" },
-          { status: 500 }
+        
+        // Set explicit headers to avoid content encoding issues
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "Failed to create profile" }),
+          { 
+            status: 500,
+            headers: headers
+          }
         );
       }
     }
     
     console.log('[Profile By-ID API] Retrieved profile successfully');
     
-    // Add auth information to the response headers
+    // Set explicit headers for response
     const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
     headers.set('X-Auth-Method', requestingUserId ? 'success' : 'none');
     
-    return NextResponse.json({ profile }, { headers });
+    return new NextResponse(
+      JSON.stringify({ profile }),
+      { 
+        status: 200,
+        headers: headers
+      }
+    );
   } catch (error) {
     console.error('[Profile By-ID API] Unexpected error:', error);
-    return NextResponse.json(
-      { error: "Failed to fetch profile" },
-      { status: 500 }
+    
+    // Set explicit headers to avoid content encoding issues
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Failed to fetch profile" }),
+      { 
+        status: 500,
+        headers: headers
+      }
     );
   }
 }

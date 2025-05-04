@@ -15,14 +15,33 @@ export async function GET(request: NextRequest) {
     if (userIdParam) {
       // Redirect to the by-id endpoint
       const byIdEndpoint = '/api/profile/by-id';
-      const response = await fetch(`${new URL(request.url).origin}${byIdEndpoint}?userId=${userIdParam}`, {
-        headers: {
-          cookie: request.headers.get('cookie') || '',
-          authorization: request.headers.get('authorization') || ''
-        }
-      });
-      
-      return response;
+      try {
+        const response = await fetch(`${new URL(request.url).origin}${byIdEndpoint}?userId=${userIdParam}`, {
+          headers: {
+            cookie: request.headers.get('cookie') || '',
+            authorization: request.headers.get('authorization') || ''
+          }
+        });
+        
+        // Read the response body as text first to avoid decoding issues
+        const responseText = await response.text();
+        
+        // Set proper content type without encoding to prevent ERR_CONTENT_DECODING_FAILED
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        // Return the response with proper headers
+        return new NextResponse(responseText, {
+          status: response.status,
+          headers: headers
+        });
+      } catch (fetchError) {
+        console.error(`[API:profile] Error proxying to by-id endpoint: ${fetchError}`);
+        return NextResponse.json(
+          { error: "Failed to fetch profile", detail: "Internal routing error" },
+          { status: 500 }
+        );
+      }
     }
     
     // Initialize the Supabase client with cookie handling for Next.js 14
@@ -51,9 +70,17 @@ export async function GET(request: NextRequest) {
     
     if (authError || !user) {
       console.error(`[API:profile] Authentication error: ${authError?.message || 'No active session'}`);
-      return NextResponse.json(
-        { error: "Not authenticated", detail: authError?.message || "Auth session missing!" },
-        { status: 401 }
+      
+      // Set proper headers to prevent encoding issues
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated", detail: authError?.message || "Auth session missing!" }),
+        { 
+          status: 401,
+          headers: headers
+        }
       );
     }
     
@@ -130,13 +157,30 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Return the profile
-    return NextResponse.json({ profile });
+    // Return the profile with proper headers to prevent encoding issues
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ profile }),
+      { 
+        status: 200,
+        headers: headers
+      }
+    );
   } catch (error: any) {
     console.error(`[API:profile] Unexpected error: ${error}`);
-    return NextResponse.json(
-      { error: "Internal server error", detail: error.message },
-      { status: 500 }
+    
+    // Set proper headers to prevent encoding issues
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Internal server error", detail: error.message }),
+      { 
+        status: 500,
+        headers: headers
+      }
     );
   }
 }
