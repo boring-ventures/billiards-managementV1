@@ -1,7 +1,6 @@
-"use client";
-
 import { useEffect, useState, useCallback, createContext, useContext, useMemo } from 'react';
-import { createBrowserSupabaseClient, refreshSession } from '@/lib/auth-client-utils';
+import { refreshSession } from '@/lib/auth-client-utils';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
 export type Profile = {
@@ -63,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Create Supabase client once using the singleton pattern
   // This ensures only one GoTrueClient instance exists throughout the app
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const supabase = useMemo(() => getSupabaseClient(), []);
 
   // Fetch profile data
   const fetchProfile = useCallback(async (userId: string) => {

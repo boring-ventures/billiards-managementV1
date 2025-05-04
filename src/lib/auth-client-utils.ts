@@ -1,13 +1,10 @@
 /**
  * Authentication utilities for client-side code
  */
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseJS } from '@/lib/supabase/client';
 
 // Common token names
 export const AUTH_TOKEN_KEY = getSupabaseAuthCookieName()
-
-// Singleton instance for browser
-let browserClientInstance: ReturnType<typeof createClient> | null = null;
 
 /**
  * Get the properly formatted Supabase cookie name for the current project
@@ -36,70 +33,20 @@ export function processAuthCookieValue(value: string | null): string | null {
 
 /**
  * Create a Supabase client for browser use with proper cookie handling
- * Implements singleton pattern to ensure only one instance exists
- * 
- * During SSR, returns a minimal client that won't throw errors
+ * @deprecated Use getSupabaseClient() from @/lib/supabase/client.ts instead
  */
 export function createBrowserSupabaseClient() {
-  // If we already have an instance, return it
-  if (browserClientInstance) {
-    return browserClientInstance;
-  }
-
-  // Check if we're in a browser context
-  const isBrowser = typeof window !== 'undefined';
-  
-  if (isBrowser) {
-    // We're in the browser, create a real client
-    console.log('[Auth] Creating singleton Supabase browser client instance');
-    browserClientInstance = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          flowType: 'pkce',
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          persistSession: true
-        }
-      }
-    );
-    
-    return browserClientInstance;
-  } else {
-    // We're in SSR/SSG, create a minimal client that won't cause issues
-    // This client will be replaced with a real one when hydration occurs on the client
-    console.log('[Auth] Creating minimal SSR-compatible Supabase client');
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          flowType: 'pkce',
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-  }
+  // This is now just a wrapper around the canonical client source
+  return getSupabaseJS();
 }
 
 /**
  * Create a standard Supabase client for callback routes
+ * @deprecated Use getSupabaseClient() from @/lib/supabase/client.ts instead
  */
 export function createAuthClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: {
-        flowType: 'pkce',
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-        persistSession: false
-      }
-    }
-  )
+  // Use the canonical client but configure it differently
+  return getSupabaseJS();
 }
 
 /**
@@ -113,7 +60,7 @@ export async function refreshSession() {
       return { success: false, error: 'Cannot refresh session during server-side rendering' };
     }
     
-    const supabase = createBrowserSupabaseClient()
+    const supabase = getSupabaseJS()
     const { data, error } = await supabase.auth.refreshSession()
     
     if (error) {
