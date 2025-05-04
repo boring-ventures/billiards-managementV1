@@ -1,13 +1,13 @@
-// Using static generation and dynamic client-side authentication
-// This ensures fast initial page load and prevents Vercel timeouts
+// Using dynamic server-side rendering with authentication
+// This ensures proper authentication checks on each request
 
 import DashboardClient from "@/components/dashboard/dashboard-client";
 
-// Static page that renders a client component to handle authentication and content
+// Dynamic page that properly handles server-side authentication on each request
 export default function DashboardPage() {
   return <DashboardClient />;
 }
 
-// Ensure this page is statically generated but not cached
-export const dynamic = 'force-static';
-export const revalidate = 0; 
+// Switch from static to dynamic to ensure auth checks run on every request
+export const dynamic = 'force-dynamic';
+// Remove the revalidate setting as it's not needed with force-dynamic 
