@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
@@ -11,121 +11,16 @@ import { UserRole } from "@prisma/client";
  */
 export async function GET(request: NextRequest) {
   try {
-    // Add detailed debugging for request headers and cookies
-    console.log('[DEBUG] Request headers:', Object.fromEntries(request.headers.entries()));
-    console.log('[DEBUG] Cookie header:', request.headers.get('cookie'));
-    
-    const cookieStore = cookies();
-    const supabase = createSupabaseRouteHandlerClient();
-    
-    // Log cookies and auth headers for debugging
-    const authHeader = request.headers.get('authorization');
-    console.log('[Profile By-ID API] Auth header present:', !!authHeader);
-    console.log('[Profile By-ID API] Cookie header present:', !!request.headers.get('cookie'));
-    
-    // First, authenticate the requesting user (admin check)
-    let requestingUserId = null;
-    
-    // Try Authorization header first if present (Bearer token)
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const { data, error } = await supabase.auth.getUser(token);
-        if (!error && data.user) {
-          requestingUserId = data.user.id;
-          console.log('[Profile By-ID API] Requester found via token:', requestingUserId);
-        } else {
-          console.warn('[Profile By-ID API] Invalid token in header:', error?.message);
-        }
-      } catch (error) {
-        console.error('[Profile By-ID API] Error verifying token:', error);
-      }
-    }
-    
-    // Fallback to cookies if header auth failed
-    if (!requestingUserId) {
-      try {
-        console.log('[Profile By-ID API] Trying cookies for authentication');
-        const { data, error } = await supabase.auth.getUser();
-        if (error) {
-          console.error('[Profile By-ID API] Cookie auth error:', error.message);
-          
-          // Set explicit headers to avoid content encoding issues
-          const headers = new Headers();
-          headers.set('Content-Type', 'application/json');
-          
-          return new NextResponse(
-            JSON.stringify({ error: error?.message || "Not authenticated" }),
-            { 
-              status: 401,
-              headers: headers
-            }
-          );
-        }
-        
-        if (!data?.user) {
-          console.error('[Profile By-ID API] No user found in cookie auth');
-          
-          // Set explicit headers to avoid content encoding issues
-          const headers = new Headers();
-          headers.set('Content-Type', 'application/json');
-          
-          return new NextResponse(
-            JSON.stringify({ error: "User not found" }),
-            { 
-              status: 401,
-              headers: headers
-            }
-          );
-        }
-        
-        requestingUserId = data.user.id;
-        console.log('[Profile By-ID API] Requester found via cookies:', requestingUserId);
-      } catch (error) {
-        console.error('[Profile By-ID API] Supabase getUser error:', error);
-        
-        // Set explicit headers to avoid content encoding issues
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ error: "Authentication error" }),
-          { 
-            status: 401,
-            headers: headers
-          }
-        );
-      }
-    }
-    
-    // If we still can't identify the requesting user, they're not authenticated
-    if (!requestingUserId) {
-      console.error('[Profile By-ID API] Could not authenticate requesting user');
-      
-      // Set explicit headers to avoid content encoding issues
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Not authenticated" }),
-        { 
-          status: 401,
-          headers: headers
-        }
-      );
-    }
-    
-    // Get the target user ID from query parameters
+    // Get the userId from the query parameter
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get("userId");
     
     if (!targetUserId) {
-      // Set explicit headers to avoid content encoding issues
       const headers = new Headers();
       headers.set('Content-Type', 'application/json');
       
       return new NextResponse(
-        JSON.stringify({ error: "User ID is required" }),
+        JSON.stringify({ error: "Missing userId parameter" }),
         { 
           status: 400,
           headers: headers
@@ -133,39 +28,91 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    console.log(`[Profile By-ID API] Looking up profile for user: ${targetUserId}`);
+    // Initialize Supabase client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     
-    // Check if requesting user is authorized to access the target profile
-    // This requires either being the same user or having admin privileges
+    // Create server client with proper cookies handling
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          get(name: string) {
+            const cookieStore = cookies();
+            return cookieStore.get(name)?.value;
+          },
+          set() {
+            // Not setting cookies in API routes
+          },
+          remove() {
+            // Not removing cookies in API routes
+          }
+        }
+      }
+    );
+    
+    // Get authenticated user session - using getUser() for reliable authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    // Store the authenticated user ID for access control checks
+    let requestingUserId = null;
+    
+    if (user) {
+      requestingUserId = user.id;
+      console.log(`[Profile By-ID API] Authenticated user: ${requestingUserId.slice(0, 6)}...`);
+    } else {
+      console.warn('[Profile By-ID API] Cookie auth error:', authError?.message || 'Auth session missing!');
+      
+      // Set explicit headers to avoid content encoding issues
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
+        { 
+          status: 401,
+          headers: headers
+        }
+      );
+    }
+    
+    // If the user is not looking up their own profile, check permissions
     if (targetUserId !== requestingUserId) {
-      // Check if the requesting user has admin privileges
-      const requestingProfile = await prisma.profile.findUnique({
+      console.log('[Profile By-ID API] User requesting another profile, checking permissions');
+      
+      // Get the requester's profile to check role
+      const requesterProfile = await prisma.profile.findUnique({
         where: { userId: requestingUserId },
+        select: { role: true }
       });
       
-      const isAdmin = requestingProfile?.role === UserRole.ADMIN || 
-                     requestingProfile?.role === UserRole.SUPERADMIN;
+      // Only superadmins and admins can view other profiles
+      const isSuperAdmin = requesterProfile?.role === UserRole.SUPERADMIN;
+      const isAdmin = requesterProfile?.role === UserRole.ADMIN;
       
-      if (!isAdmin) {
-        console.error('[Profile By-ID API] Unauthorized access attempt');
+      if (!isSuperAdmin && !isAdmin) {
+        console.warn('[Profile By-ID API] Access denied - only admins and superadmins can view other profiles');
         
         // Set explicit headers to avoid content encoding issues
         const headers = new Headers();
         headers.set('Content-Type', 'application/json');
         
         return new NextResponse(
-          JSON.stringify({ error: "You are not authorized to access this profile" }),
+          JSON.stringify({ error: "Forbidden", detail: "Insufficient permissions to view this profile" }),
           { 
             status: 403,
             headers: headers
           }
         );
       }
+      
+      console.log('[Profile By-ID API] Permission granted to view profile');
     }
     
-    // Fetch the target user's profile
+    // Check if the profile exists
     const profile = await prisma.profile.findUnique({
-      where: { userId: targetUserId },
+      where: { userId: targetUserId }
     });
     
     if (!profile) {
@@ -263,7 +210,10 @@ export async function GET(request: NextRequest) {
     headers.set('Content-Type', 'application/json');
     
     return new NextResponse(
-      JSON.stringify({ error: "Failed to fetch profile" }),
+      JSON.stringify({ 
+        error: "Internal server error", 
+        detail: error instanceof Error ? error.message : String(error)
+      }),
       { 
         status: 500,
         headers: headers

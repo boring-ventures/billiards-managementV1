@@ -19,14 +19,26 @@ const PUBLIC_PATHS = [
 
 // Helper to check if a path starts with any of the public paths
 function isPublicPath(path: string): boolean {
-  // Use exact matching for API routes to ensure /api/profile paths aren't mistakenly matched by /api/auth
+  // Critical bug fix: API paths like /api/profile were being mistakenly matched by /api/auth
+  // We need to ensure exact matching for API routes
   if (path.startsWith('/api/')) {
+    // Only match exact API paths or explicit API paths with subpaths
     return PUBLIC_PATHS.some(publicPath => 
-      publicPath.startsWith('/api/') && path.startsWith(publicPath)
+      publicPath === path || // Exact match
+      (publicPath.startsWith('/api/') && path.startsWith(publicPath + '/')) // Match /api/auth/something
     );
   }
-  // For non-API paths, use the original logic
-  return PUBLIC_PATHS.some((publicPath) => path.startsWith(publicPath))
+  
+  // Handle dashboard and other protected paths - explicitly exclude them from public paths
+  if (path.startsWith('/dashboard') || 
+      path.startsWith('/profile') || 
+      path.startsWith('/admin') || 
+      path.startsWith('/company-selection')) {
+    return false;
+  }
+  
+  // For non-API paths, check if it starts with any public path
+  return PUBLIC_PATHS.some((publicPath) => path === publicPath || path.startsWith(publicPath + '/'))
 }
 
 // Helper to check if path is a static asset
@@ -45,38 +57,24 @@ function isStaticAsset(path: string): boolean {
 }
 
 /**
- * Log detailed cookie information for debugging
+ * Helper function for logging cookie information during debugging
  */
 function logCookieDetails(request: NextRequest) {
   try {
-    // Get all cookies
-    const allCookies = request.cookies.getAll();
-    console.log(`[Cookie Debug] Found ${allCookies.length} cookies in request`);
+    const cookies = request.cookies.getAll();
+    const cookieNames = cookies.map(c => c.name);
+    const hasAuthCookie = cookieNames.some(name => name.includes(AUTH_TOKEN_KEY));
     
-    // Check for auth cookie specifically
-    const authCookie = request.cookies.get(AUTH_TOKEN_KEY);
+    console.log(`[Middleware] Cookies: count=${cookies.length}, hasAuthCookie=${hasAuthCookie}`);
     
-    if (authCookie) {
-      console.log(`[Cookie Debug] Auth cookie found with name: ${AUTH_TOKEN_KEY}`);
-      console.log(`[Cookie Debug] Auth cookie length: ${authCookie.value.length}`);
-      console.log(`[Cookie Debug] Auth cookie first 10 chars: ${authCookie.value.substring(0, 10)}...`);
-    } else {
-      console.log(`[Cookie Debug] Auth cookie NOT found with name: ${AUTH_TOKEN_KEY}`);
-      
-      // List all cookies for debugging
-      allCookies.forEach(cookie => {
-        console.log(`[Cookie Debug] Found cookie: ${cookie.name}, length: ${cookie.value.length}`);
+    // Log individual cookies for deeper debugging
+    if (process.env.NODE_ENV === 'development') {
+      cookieNames.forEach(name => {
+        console.log(`[Middleware] Cookie: ${name}`);
       });
     }
-    
-    // Check raw cookie header
-    const cookieHeader = request.headers.get('cookie');
-    console.log(`[Cookie Debug] Raw cookie header length: ${cookieHeader?.length || 0}`);
-    if (cookieHeader) {
-      console.log(`[Cookie Debug] Raw cookie header contains auth cookie name: ${cookieHeader.includes(AUTH_TOKEN_KEY)}`);
-    }
   } catch (error) {
-    console.error('[Cookie Debug] Error analyzing cookies:', error);
+    console.error(`[Middleware] Error logging cookies:`, error);
   }
 }
 
@@ -96,6 +94,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
   
+  console.log('[Middleware] Running auth middleware for protected path:', pathname);
+  
   // Use the updateSession helper to refresh tokens and update cookies
   // This uses Supabase's recommended pattern for Next.js App Router
   return await updateSession(request)
@@ -104,12 +104,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match specific path patterns instead of using negative lookaheads
+     * Match all paths except static files
      */
-    '/',
-    '/dashboard/:path*',
-    '/api/:path*',
-    '/profile/:path*',
-    '/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }

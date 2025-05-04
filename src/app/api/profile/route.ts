@@ -37,46 +37,52 @@ export async function GET(request: NextRequest) {
         });
       } catch (fetchError) {
         console.error(`[API:profile] Error proxying to by-id endpoint: ${fetchError}`);
-        return NextResponse.json(
-          { error: "Failed to fetch profile", detail: "Internal routing error" },
-          { status: 500 }
+        
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "Failed to fetch profile", detail: "Internal routing error" }),
+          { 
+            status: 500,
+            headers: headers
+          }
         );
       }
     }
     
-    // Initialize the Supabase client with cookie handling for Next.js 14
+    // Create a Supabase client with server-side cookie handling
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            // For Next.js 14
-            return cookies().get(name)?.value;
+            const cookieStore = cookies();
+            return cookieStore.get(name)?.value;
           },
-          set(name, value, options) {
-            // For Next.js 14 - don't try to set cookies in API routes,
-            // as cookies() returns a read-only object in server actions and API routes
+          set() {
+            // Not setting cookies in API routes
           },
-          remove(name, options) {
-            // For Next.js 14 - don't try to remove cookies in API routes
+          remove() {
+            // Not removing cookies in API routes
           }
         }
       }
     );
     
-    // Get the authenticated user - ALWAYS use getUser() for reliable server-side auth
+    // Get authenticated user using getUser() instead of getSession()
+    // This ensures the token is validated against Supabase
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      console.error(`[API:profile] Authentication error: ${authError?.message || 'No active session'}`);
+      console.error(`[API:profile] ${authError?.message || 'No active session found'}`);
       
-      // Set proper headers to prevent encoding issues
       const headers = new Headers();
       headers.set('Content-Type', 'application/json');
       
       return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: authError?.message || "Auth session missing!" }),
+        JSON.stringify({ error: 'Not authenticated', detail: authError?.message || 'Auth session missing!' }),
         { 
           status: 401,
           headers: headers
@@ -84,11 +90,9 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    console.log(`[API:profile] Authenticated user ID: ${user.id}`);
-    
-    // Fetch the user's profile
+    // Get the profile from the database
     const profile = await prisma.profile.findUnique({
-      where: { userId: user.id },
+      where: { userId: user.id }
     });
     
     if (!profile) {
@@ -121,7 +125,26 @@ export async function GET(request: NextRequest) {
             emailNameParts[1].charAt(0).toUpperCase() + emailNameParts[1].slice(1) : 
             "");
         
-        console.log(`[API:profile] Creating new profile for user ${user.id}`);
+        // Check for role in metadata
+        const role = (() => {
+          // Check for role in metadata - with fallbacks
+          const metadataRole = 
+            userMetadata.role || 
+            userMetadata.userRole || 
+            userMetadata.user_role;
+          
+          // Check if superadmin is specified
+          if (metadataRole === 'SUPERADMIN' || 
+              userMetadata.isSuperAdmin === true || 
+              userMetadata.is_superadmin === true) {
+            return UserRole.SUPERADMIN;
+          }
+          
+          // Default to USER role
+          return UserRole.USER;
+        })();
+        
+        console.log(`[API:profile] Creating new profile for user ${user.id} with role ${role}`);
         
         const newProfile = await prisma.profile.create({
           data: {
@@ -129,54 +152,68 @@ export async function GET(request: NextRequest) {
             firstName,
             lastName,
             avatarUrl: userMetadata.avatarUrl || userMetadata.avatar_url || null,
-            role: UserRole.USER, // Default role for new users
+            role,
             active: true,
             companyId: null
           },
         });
         
         console.log(`[API:profile] New profile created successfully`);
-        return NextResponse.json({ profile: newProfile });
-      } catch (createError: any) {
-        // Unique constraint error means someone else created the profile (race condition)
-        if (createError.code === 'P2002') {
-          const existingProfile = await prisma.profile.findUnique({
-            where: { userId: user.id },
-          });
-          
-          if (existingProfile) {
-            return NextResponse.json({ profile: existingProfile });
-          }
-        }
         
-        console.error(`[API:profile] Error creating profile: ${createError}`);
-        return NextResponse.json(
-          { error: "Failed to create profile", detail: createError.message },
-          { status: 500 }
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        headers.set('X-Profile-Created', 'true');
+        
+        return new NextResponse(
+          JSON.stringify({ profile: newProfile }), 
+          {
+            status: 200,
+            headers: headers
+          }
+        );
+      } catch (createError) {
+        console.error(`[API:profile] Failed to create profile:`, createError);
+        
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ 
+            error: "Failed to create profile", 
+            detail: createError instanceof Error ? createError.message : String(createError)
+          }),
+          { 
+            status: 500,
+            headers: headers
+          }
         );
       }
     }
     
-    // Return the profile with proper headers to prevent encoding issues
+    // Profile found, return it
+    console.log(`[API:profile] Profile found for user ${user.id}`);
+    
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
     
     return new NextResponse(
       JSON.stringify({ profile }),
-      { 
+      {
         status: 200,
         headers: headers
       }
     );
-  } catch (error: any) {
-    console.error(`[API:profile] Unexpected error: ${error}`);
+  } catch (error) {
+    console.error(`[API:profile] Unexpected error:`, error);
     
-    // Set proper headers to prevent encoding issues
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
     
     return new NextResponse(
-      JSON.stringify({ error: "Internal server error", detail: error.message }),
+      JSON.stringify({ 
+        error: "Internal server error", 
+        detail: error instanceof Error ? error.message : String(error) 
+      }),
       { 
         status: 500,
         headers: headers

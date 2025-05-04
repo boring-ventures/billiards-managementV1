@@ -120,6 +120,11 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
+    // For API routes, ensure proper Content-Type header is set to avoid content encoding issues
+    if (pathname.startsWith('/api/')) {
+      response.headers.set('Content-Type', 'application/json');
+    }
+
     return response
   } catch (error) {
     console.error(`[Middleware] Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
@@ -131,6 +136,16 @@ export async function updateSession(request: NextRequest) {
  * Helper function to determine if a route requires authentication
  */
 function isProtectedRoute(pathname: string): boolean {
+  // API routes that require authentication
+  if (pathname.startsWith('/api/')) {
+    // Exclude public API routes
+    return !(
+      pathname.startsWith('/api/auth') ||
+      pathname === '/api/health'
+    );
+  }
+
+  // Dashboard and other protected front-end routes
   return (
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/profile') ||
