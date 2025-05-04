@@ -89,8 +89,35 @@ export async function updateSession(request: NextRequest) {
     if (error) {
       console.error(`[Middleware] Error getting user: ${error.message}`)
       
+      // Check if the error is due to an expired token
+      const isExpiredTokenError = error.message.includes('expired') || 
+                                error.message.includes('JWT') || 
+                                error.message.includes('token');
+      
+      // Try to refresh the session on token expiration
+      if (isExpiredTokenError && hasSbAuthCookie) {
+        try {
+          console.log(`[Middleware] Attempting to refresh expired token`);
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            console.error(`[Middleware] Failed to refresh token: ${refreshError.message}`);
+          } else if (refreshData?.session) {
+            console.log(`[Middleware] Successfully refreshed token`);
+            
+            // If refresh succeeded for a protected route, allow the request to continue
+            if (isProtectedRoute(pathname)) {
+              return response;
+            }
+          }
+        } catch (refreshException) {
+          console.error(`[Middleware] Exception during token refresh: ${refreshException}`);
+        }
+      }
+      
       // For protected routes, redirect to login on error
       if (isProtectedRoute(pathname)) {
+        console.log(`[Middleware] Redirecting to sign-in due to auth error on protected route: ${pathname}`);
         return NextResponse.redirect(new URL('/sign-in', request.url))
       }
       

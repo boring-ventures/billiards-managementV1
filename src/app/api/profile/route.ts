@@ -5,6 +5,28 @@ import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
 
+// Helper function to create a Supabase client with correct cookie handling for Next.js 14
+function createSupabaseClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name) {
+          // In Next.js 14, cookies() is still synchronous
+          return cookies().get(name)?.value;
+        },
+        set() {
+          // Not setting cookies in API routes
+        },
+        remove() {
+          // Not removing cookies in API routes
+        }
+      }
+    }
+  );
+}
+
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -12,77 +34,97 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
     
+    // Initialize Supabase client using our helper
+    const supabase = createSupabaseClient();
+    
     if (userIdParam) {
-      // Redirect to the by-id endpoint
-      const byIdEndpoint = '/api/profile/by-id';
-      try {
-        const response = await fetch(`${new URL(request.url).origin}${byIdEndpoint}?userId=${userIdParam}`, {
-          headers: {
-            cookie: request.headers.get('cookie') || '',
-            authorization: request.headers.get('authorization') || ''
-          }
-        });
+      // Don't redirect or proxy - it causes content-type issues
+      // Instead, fetch the profile directly with correct content type handling
+      
+      // Get user from auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
         
-        // Read the response body as text first to avoid decoding issues
-        const responseText = await response.text();
-        
-        // Set proper content type without encoding to prevent ERR_CONTENT_DECODING_FAILED
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        // Return the response with proper headers
-        return new NextResponse(responseText, {
-          status: response.status,
-          headers: headers
-        });
-      } catch (fetchError) {
-        console.error(`[API:profile] Error proxying to by-id endpoint: ${fetchError}`);
-        
+        // Set explicit content-type header
         const headers = new Headers();
         headers.set('Content-Type', 'application/json');
         
         return new NextResponse(
-          JSON.stringify({ error: "Failed to fetch profile", detail: "Internal routing error" }),
+          JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
           { 
-            status: 500,
+            status: 401,
             headers: headers
           }
         );
       }
-    }
-    
-    // Create a Supabase client with server-side cookie handling
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name) {
-            const cookieStore = cookies();
-            return cookieStore.get(name)?.value;
-          },
-          set() {
-            // Not setting cookies in API routes
-          },
-          remove() {
-            // Not removing cookies in API routes
-          }
+      
+      // Check if the user is requesting their own profile or has admin permission
+      if (userIdParam !== user.id) {
+        // Fetch requester's profile to check role
+        const requesterProfile = await prisma.profile.findUnique({
+          where: { userId: user.id },
+          select: { role: true }
+        });
+        
+        const isSuperAdmin = requesterProfile?.role === UserRole.SUPERADMIN;
+        const isAdmin = requesterProfile?.role === UserRole.ADMIN;
+        
+        if (!isSuperAdmin && !isAdmin) {
+          const headers = new Headers();
+          headers.set('Content-Type', 'application/json');
+          
+          return new NextResponse(
+            JSON.stringify({ error: "Forbidden", detail: "Insufficient permissions to view this profile" }),
+            { 
+              status: 403,
+              headers: headers
+            }
+          );
         }
       }
-    );
+      
+      // Fetch the profile for the requested userId
+      const profile = await prisma.profile.findUnique({
+        where: { userId: userIdParam }
+      });
+      
+      // Set proper content-type header
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      if (!profile) {
+        return new NextResponse(
+          JSON.stringify({ error: "Profile not found" }),
+          { 
+            status: 404,
+            headers: headers
+          }
+        );
+      }
+      
+      return new NextResponse(
+        JSON.stringify({ profile }),
+        { 
+          status: 200,
+          headers: headers
+        }
+      );
+    }
     
-    // Get authenticated user using getUser() instead of getSession()
-    // This ensures the token is validated against Supabase
+    // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      console.error(`[API:profile] ${authError?.message || 'No active session found'}`);
+      console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
       
+      // Set explicit content-type header
       const headers = new Headers();
       headers.set('Content-Type', 'application/json');
       
       return new NextResponse(
-        JSON.stringify({ error: 'Not authenticated', detail: authError?.message || 'Auth session missing!' }),
+        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
         { 
           status: 401,
           headers: headers
@@ -90,7 +132,9 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Get the profile from the database
+    console.log(`[API:profile] Authenticated user: ${user.id}`);
+    
+    // Get the user's profile from the database
     const profile = await prisma.profile.findUnique({
       where: { userId: user.id }
     });
@@ -204,7 +248,7 @@ export async function GET(request: NextRequest) {
       }
     );
   } catch (error) {
-    console.error(`[API:profile] Unexpected error:`, error);
+    console.error("Error in profile GET endpoint:", error);
     
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
@@ -212,7 +256,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(
       JSON.stringify({ 
         error: "Internal server error", 
-        detail: error instanceof Error ? error.message : String(error) 
+        detail: error instanceof Error ? error.message : String(error)
       }),
       { 
         status: 500,
@@ -225,54 +269,30 @@ export async function GET(request: NextRequest) {
 // PUT: Update profile for the current authenticated user
 export async function PUT(request: NextRequest) {
   try {
-    // Create Supabase client with the new SSR package
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            const cookie = request.cookies.get(name);
-            return cookie?.value || null;
-          },
-          set() {
-            // Can't set cookies in API routes
-          },
-          remove() {
-            // Can't remove cookies in API routes
-          }
-        }
-      }
-    );
-
-    // Try to extract bearer token from Authorization header
-    const authHeader = request.headers.get('authorization');
-    let userId = null;
+    // Get the profile data from the request body
+    const data = await request.json();
+    const { firstName, lastName, avatarUrl, active } = data;
     
-    // First try Authorization header if present
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      try {
-        const { data, error } = await supabase.auth.getUser(token);
-        if (!error && data.user) {
-          userId = data.user.id;
+    // Initialize Supabase client using our helper
+    const supabase = createSupabaseClient();
+    
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'No user found' }),
+        { 
+          status: 401,
+          headers: headers
         }
-      } catch (error) {
-        console.error('Error verifying token:', error);
-      }
+      );
     }
     
-    // Fallback to cookies if header auth failed
-    if (!userId) {
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data.user) {
-        return NextResponse.json({ error: "Not authenticated", detail: "No active session" }, { status: 401 });
-      }
-      userId = data.user.id;
-    }
-
-    const requestData = await request.json();
-    const { firstName, lastName, avatarUrl, active } = requestData;
+    const userId = user.id;
 
     // Update the profile directly
     try {
@@ -293,7 +313,17 @@ export async function PUT(request: NextRequest) {
             role: UserRole.USER  // Default role
           }
         });
-        return NextResponse.json(newProfile);
+        
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify(newProfile),
+          { 
+            status: 201,
+            headers: headers
+          }
+        );
       }
       
       // Update the existing profile
@@ -307,19 +337,42 @@ export async function PUT(request: NextRequest) {
         }
       });
       
-      return NextResponse.json(updatedProfile);
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify(updatedProfile),
+        { 
+          status: 200,
+          headers: headers
+        }
+      );
     } catch (error) {
       console.error("Error updating profile:", error);
-      return NextResponse.json(
-        { error: "Failed to update profile" },
-        { status: 500 }
+      
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Failed to update profile" }),
+        { 
+          status: 500,
+          headers: headers
+        }
       );
     }
   } catch (error) {
-    console.error("Error updating profile:", error);
-    return NextResponse.json(
-      { error: "Failed to update profile" },
-      { status: 500 }
+    console.error("Error in profile PUT endpoint:", error);
+    
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Failed to update profile" }),
+      { 
+        status: 500,
+        headers: headers
+      }
     );
   }
 }
@@ -331,9 +384,15 @@ export async function POST(request: NextRequest) {
     const { userId, firstName, lastName, avatarUrl, role } = data;
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "User ID is required" }),
+        { 
+          status: 400,
+          headers: headers
+        }
       );
     }
 
@@ -344,9 +403,15 @@ export async function POST(request: NextRequest) {
       });
 
       if (existingProfile) {
-        return NextResponse.json(
-          { error: "Profile already exists" },
-          { status: 409 }
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json');
+        
+        return new NextResponse(
+          JSON.stringify({ error: "Profile already exists" }),
+          { 
+            status: 409,
+            headers: headers
+          }
         );
       }
 
@@ -362,22 +427,46 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      return NextResponse.json(newProfile, { status: 201 });
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify(newProfile),
+        { 
+          status: 201,
+          headers: headers
+        }
+      );
     } catch (error) {
       console.error("Database error creating profile:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      return NextResponse.json(
-        { error: "Database error creating profile", details: errorMessage },
-        { status: 500 }
+      
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Database error creating profile", details: errorMessage }),
+        { 
+          status: 500,
+          headers: headers
+        }
       );
     }
   } catch (error) {
     console.error("Error in profile creation endpoint:", error);
+    
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      { error: "Failed to create profile", details: errorMessage },
-      { status: 500 }
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Failed to create profile", details: errorMessage }),
+      { 
+        status: 500,
+        headers: headers
+      }
     );
   }
 }

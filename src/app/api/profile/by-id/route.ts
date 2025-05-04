@@ -4,6 +4,28 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 
+// Helper function for creating Supabase client with proper cookie handling
+function createSupabaseClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name) {
+          // In Next.js 14, cookies() is synchronous
+          return cookies().get(name)?.value;
+        },
+        set() {
+          // Not needed in API routes
+        },
+        remove() {
+          // Not needed in API routes
+        },
+      },
+    }
+  );
+}
+
 /**
  * GET: Fetch a user's profile by userId
  * Endpoint: /api/profile/by-id?userId={userId}
@@ -28,48 +50,20 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Initialize Supabase client
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    // Create Supabase client using our helper function
+    const supabase = createSupabaseClient();
     
-    // Create server client with proper cookies handling
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        cookies: {
-          get(name: string) {
-            const cookieStore = cookies();
-            return cookieStore.get(name)?.value;
-          },
-          set() {
-            // Not setting cookies in API routes
-          },
-          remove() {
-            // Not removing cookies in API routes
-          }
-        }
-      }
-    );
-    
-    // Get authenticated user session - using getUser() for reliable authentication
+    // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    // Store the authenticated user ID for access control checks
-    let requestingUserId = null;
-    
-    if (user) {
-      requestingUserId = user.id;
-      console.log(`[Profile By-ID API] Authenticated user: ${requestingUserId.slice(0, 6)}...`);
-    } else {
-      console.warn('[Profile By-ID API] Cookie auth error:', authError?.message || 'Auth session missing!');
+    if (authError || !user) {
+      console.error("[Profile By-ID API] Cookie auth error:", authError?.message || "Auth session missing!");
       
-      // Set explicit headers to avoid content encoding issues
       const headers = new Headers();
       headers.set('Content-Type', 'application/json');
       
       return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
+        JSON.stringify({ error: "Not authenticated", detail: authError?.message || "Auth session missing!" }),
         { 
           status: 401,
           headers: headers
@@ -77,24 +71,24 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // If the user is not looking up their own profile, check permissions
-    if (targetUserId !== requestingUserId) {
-      console.log('[Profile By-ID API] User requesting another profile, checking permissions');
-      
-      // Get the requester's profile to check role
+    console.log("[Profile By-ID API] Authenticated user:", user.id);
+    
+    // Check user permissions - users can only view:
+    // 1. Their own profile
+    // 2. If they have ADMIN or SUPERADMIN role, they can view any profile
+    if (targetUserId !== user.id) {
+      // Get user's profile to check role
       const requesterProfile = await prisma.profile.findUnique({
-        where: { userId: requestingUserId },
-        select: { role: true }
+        where: { userId: user.id },
+        select: { role: true },
       });
       
-      // Only superadmins and admins can view other profiles
       const isSuperAdmin = requesterProfile?.role === UserRole.SUPERADMIN;
       const isAdmin = requesterProfile?.role === UserRole.ADMIN;
       
       if (!isSuperAdmin && !isAdmin) {
-        console.warn('[Profile By-ID API] Access denied - only admins and superadmins can view other profiles');
+        console.log(`[Profile By-ID API] User ${user.id} attempted to access profile ${targetUserId} without permission`);
         
-        // Set explicit headers to avoid content encoding issues
         const headers = new Headers();
         headers.set('Content-Type', 'application/json');
         
@@ -106,94 +100,31 @@ export async function GET(request: NextRequest) {
           }
         );
       }
-      
-      console.log('[Profile By-ID API] Permission granted to view profile');
     }
     
-    // Check if the profile exists
+    // Fetch the profile data
     const profile = await prisma.profile.findUnique({
-      where: { userId: targetUserId }
+      where: { userId: targetUserId },
     });
     
     if (!profile) {
-      console.log(`[Profile By-ID API] Profile not found for user: ${targetUserId}`);
+      console.log(`[Profile By-ID API] Profile not found for user ${targetUserId}`);
       
-      // Get user info from Supabase to create a skeleton profile
-      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(targetUserId);
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
       
-      if (userError || !userData?.user) {
-        console.error('[Profile By-ID API] User not found in Supabase:', userError?.message);
-        
-        // Set explicit headers to avoid content encoding issues
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ error: "Profile not found" }),
-          { 
-            status: 404,
-            headers: headers
-          }
-        );
-      }
-      
-      // Extract user metadata and create a basic profile
-      const metadata = userData.user.user_metadata as Record<string, any> || {};
-      const isSuperAdmin = 
-        metadata.role === 'SUPERADMIN' || 
-        metadata.isSuperAdmin === true || 
-        metadata.is_superadmin === true;
-      
-      try {
-        // Create a new profile
-        const newProfile = await prisma.profile.create({
-          data: {
-            userId: targetUserId,
-            firstName: metadata.firstName || metadata.first_name || null,
-            lastName: metadata.lastName || metadata.last_name || null,
-            avatarUrl: metadata.avatarUrl || metadata.avatar_url || null,
-            role: isSuperAdmin ? UserRole.SUPERADMIN : UserRole.USER,
-            active: true
-          }
-        });
-        
-        console.log('[Profile By-ID API] Created new profile for user');
-        
-        // Set explicit headers for response
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        headers.set('X-Profile-Created', 'true');
-        
-        return new NextResponse(
-          JSON.stringify({ profile: newProfile }),
-          { 
-            status: 200,
-            headers: headers
-          }
-        );
-      } catch (error) {
-        console.error('[Profile By-ID API] Error creating profile:', error);
-        
-        // Set explicit headers to avoid content encoding issues
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ error: "Failed to create profile" }),
-          { 
-            status: 500,
-            headers: headers
-          }
-        );
-      }
+      return new NextResponse(
+        JSON.stringify({ error: "Profile not found" }),
+        { 
+          status: 404,
+          headers: headers
+        }
+      );
     }
     
-    console.log('[Profile By-ID API] Retrieved profile successfully');
-    
-    // Set explicit headers for response
+    // Set proper content-type header
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
-    headers.set('X-Auth-Method', requestingUserId ? 'success' : 'none');
     
     return new NextResponse(
       JSON.stringify({ profile }),
@@ -203,9 +134,8 @@ export async function GET(request: NextRequest) {
       }
     );
   } catch (error) {
-    console.error('[Profile By-ID API] Unexpected error:', error);
+    console.error("[Profile By-ID API] Error:", error);
     
-    // Set explicit headers to avoid content encoding issues
     const headers = new Headers();
     headers.set('Content-Type', 'application/json');
     
@@ -226,7 +156,24 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const cookieStore = cookies();
-    const supabase = createSupabaseRouteHandlerClient();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            // In Next.js 14, cookies() is synchronous
+            return cookies().get(name)?.value;
+          },
+          set() {
+            // Not needed in API routes
+          },
+          remove() {
+            // Not needed in API routes
+          },
+        },
+      }
+    );
     
     // Authenticate the requesting user
     let requestingUserId = null;

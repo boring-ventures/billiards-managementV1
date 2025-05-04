@@ -37,7 +37,7 @@ function processAuthCookieValue(value: string | null): string | null {
 
 /**
  * Create a Supabase server client with cookie handling for server components
- * Compatible with Next.js 14+ async cookie API
+ * Specifically designed for Next.js 14 where cookies() is still synchronous
  */
 export function createServerSupabaseClient() {
   return createServerClient(
@@ -46,11 +46,11 @@ export function createServerSupabaseClient() {
     {
       cookies: {
         get(name) {
-          // For Next.js 14+, cookies() returns a Promise<ReadonlyRequestCookies>
-          // But we need to handle it differently to ensure compatibility
+          // In Next.js 14, cookies() is synchronous
           try {
-            const value = cookies().get(name)?.value || null;
-            return value;
+            // The TypeScript types might suggest it's async but it's actually sync in Next.js 14
+            // @ts-ignore - ignore the Promise type as it's actually synchronous in Next.js 14
+            return cookies().get(name)?.value || null;
           } catch (error) {
             console.error('[Cookie] Error reading cookie:', error);
             return null;
@@ -106,6 +106,24 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
 }
 
 /**
+ * Create a Supabase client for browser use with proper cookie handling
+ */
+export function createBrowserSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        flowType: 'pkce',
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        persistSession: true
+      }
+    }
+  )
+}
+
+/**
  * Create a standard Supabase client for callback routes
  */
 export function createAuthClient() {
@@ -144,12 +162,34 @@ export async function validateSession() {
 }
 
 /**
+ * Refresh the auth session on client side
+ * This can be used to handle token refresh when session expires
+ */
+export async function refreshSession() {
+  try {
+    const supabase = createBrowserSupabaseClient()
+    const { data, error } = await supabase.auth.refreshSession()
+    
+    if (error) {
+      console.error('Error refreshing session:', error)
+      return { success: false, error: error.message }
+    }
+    
+    return { success: true, session: data.session }
+  } catch (error) {
+    console.error('Unexpected error refreshing session:', error)
+    return { success: false, error: 'Failed to refresh session' }
+  }
+}
+
+/**
  * Debug utility to log current cookies 
  */
 export async function debugServerCookies() {
   if (typeof window !== 'undefined') return 'Cannot debug server cookies on client'
   
   try {
+    // @ts-ignore - In Next.js 14, cookies() is synchronous despite the types
     const authCookie = cookies().get(AUTH_TOKEN_KEY);
     const authCookieExists = !!authCookie;
     

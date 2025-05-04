@@ -1,16 +1,47 @@
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { db } from "@/lib/db";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { db } from "@/lib/db";
+import { z } from "zod";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-// Schema for company creation/update
+// Company schema for validation
 const companySchema = z.object({
-  name: z.string().min(1, "Company name is required"),
+  name: z.string().min(1, { message: "Company name is required" }),
   address: z.string().optional(),
   phone: z.string().optional(),
 });
+
+// Company update schema
+const companyUpdateSchema = z.object({
+  name: z.string().min(1, { message: "Company name is required" }).optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  active: z.boolean().optional(),
+});
+
+// Helper function for creating Supabase client with proper cookie handling
+function createSupabaseClient() {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name) {
+          // In Next.js 14, cookies() is synchronous
+          return cookies().get(name)?.value;
+        },
+        set() {
+          // Not needed in API routes
+        },
+        remove() {
+          // Not needed in API routes
+        },
+      },
+    }
+  );
+}
 
 // Function to check if user has super admin role
 async function checkSuperAdminRole(userId: string) {
@@ -40,21 +71,48 @@ async function checkSuperAdminRole(userId: string) {
 }
 
 // GET: Fetch all companies for superadmin
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createSupabaseRouteHandlerClient();
+    const supabase = createSupabaseClient();
 
-    // Get the current user's session
+    // Get the current user's session using the more reliable getUser method
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    if (userError) {
+      console.error("API:companies:GET - Auth error:", userError.message);
+      
+      // Don't log a removal message as it can be confusing - just return the error
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated", detail: userError.message }),
+        { 
+          status: 401,
+          headers: headers
+        }
+      );
     }
 
-    const userId = session.user.id;
+    if (!user) {
+      console.error("API:companies:GET - No user found in session");
+      
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Not authenticated", detail: "No user found in session" }),
+        { 
+          status: 401,
+          headers: headers
+        }
+      );
+    }
+
+    const userId = user.id;
 
     // Fetch user profile to check role
     const profile = await prisma.profile.findUnique({
@@ -68,7 +126,7 @@ export async function GET(_request: NextRequest) {
 
     // Check if user is a superadmin
     const isSuperAdmin = profile && (
-      profile.role === "SUPERADMIN" || 
+      profile.role === UserRole.SUPERADMIN || 
       String(profile.role).toUpperCase() === "SUPERADMIN"
     );
 
@@ -76,9 +134,15 @@ export async function GET(_request: NextRequest) {
 
     // Only superadmin can see all companies
     if (!profile || !isSuperAdmin) {
-      return NextResponse.json(
-        { error: "Unauthorized: Only superadmins can access all companies" },
-        { status: 403 }
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Unauthorized: Only superadmins can access all companies" }),
+        { 
+          status: 403,
+          headers: headers
+        }
       );
     }
 
@@ -96,33 +160,66 @@ export async function GET(_request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ companies });
+    // Set proper content type
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ companies }),
+      { 
+        status: 200,
+        headers: headers
+      }
+    );
   } catch (error) {
     console.error("Error fetching companies:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch companies" },
-      { status: 500 }
+    
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Failed to fetch companies" }),
+      { 
+        status: 500,
+        headers: headers
+      }
     );
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createSupabaseRouteHandlerClient();
+    const supabase = createSupabaseClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (userError || !user) {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Unauthorized", detail: userError?.message || "No user found" }),
+        { 
+          status: 401,
+          headers: headers
+        }
+      );
     }
 
     // Check if user has super admin role
-    const isSuperAdmin = await checkSuperAdminRole(session.user.id);
+    const isSuperAdmin = await checkSuperAdminRole(user.id);
     if (!isSuperAdmin) {
-      return NextResponse.json(
-        { error: "Forbidden: Requires super admin access" },
-        { status: 403 }
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: "Forbidden: Requires super admin access" }),
+        { 
+          status: 403,
+          headers: headers
+        }
       );
     }
 
@@ -143,25 +240,63 @@ export async function POST(req: NextRequest) {
     if (assignToCreator) {
       // Update the superadmin's profile with the new company ID
       await db.profile.update({
-        where: { userId: session.user.id },
+        where: { userId: user.id },
         data: { companyId: company.id },
       });
       
+      // Set proper content type
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
       // Indicate that the company was assigned
-      return NextResponse.json({ 
-        ...company, 
-        assigned: true,
-        message: "Company created and assigned to your profile" 
-      });
+      return new NextResponse(
+        JSON.stringify({ 
+          ...company, 
+          assigned: true,
+          message: "Company created and assigned to your profile" 
+        }),
+        { 
+          status: 201,
+          headers: headers
+        }
+      );
     }
 
-    return NextResponse.json(company);
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify(company),
+      { 
+        status: 201,
+        headers: headers
+      }
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 });
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json');
+      
+      return new NextResponse(
+        JSON.stringify({ error: error.errors }),
+        { 
+          status: 400,
+          headers: headers
+        }
+      );
     }
 
     console.error("[COMPANIES_POST]", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    
+    return new NextResponse(
+      JSON.stringify({ error: "Internal error" }),
+      { 
+        status: 500,
+        headers: headers
+      }
+    );
   }
 }
