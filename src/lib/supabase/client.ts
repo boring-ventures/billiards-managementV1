@@ -1,6 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from "@/types/database.types";
-import { getSupabaseCookiePattern } from '@/lib/auth-server-utils';
 
 // Environment variables for Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -16,6 +15,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * This is the ONLY place in the entire application where Supabase client instances
  * should be created. All other files should import from here.
  */
+
+// Get the base Supabase auth cookie name for the current project
+// Duplicated from auth-server-utils to avoid server-only import issues
+function getSupabaseCookiePattern(): string {
+  const projectRef = supabaseUrl?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
+  return `sb-${projectRef}-auth-token`;
+}
 
 // Create eager instance for the browser
 let browserClientInstance: ReturnType<typeof createBrowserClient> | null = null;
@@ -247,6 +253,9 @@ export const debugCookies = () => {
     return {};
   }
 };
+
+// Export this for use in other modules that need the pattern but can't import from server utils
+export { getSupabaseCookiePattern };
 
 // Backward compatibility
 export const getSupabase = getSupabaseClient;

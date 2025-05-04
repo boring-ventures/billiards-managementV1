@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getSupabaseCookiePattern } from '@/lib/auth-server-utils'
+import { getSupabaseCookiePattern } from '@/lib/supabase/client'
 
 /**
  * Find any auth-related cookies in the request

@@ -1,6 +1,10 @@
 /**
  * Authentication utilities for server-side code
+ * 
+ * IMPORTANT: This file is SERVER-ONLY and should NEVER be imported in client components.
+ * Instead, use the client-safe functions from supabase/client.ts
  */
+import 'server-only'; // Mark this module as server-only
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { type NextRequest, type NextResponse } from 'next/server'
