@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState, useCallback, createContext, useContext, useMemo } from 'react';
 import { createBrowserSupabaseClient, refreshSession } from '@/lib/auth-client-utils';
 import type { User, Session } from '@supabase/supabase-js';
@@ -324,8 +326,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Listen for auth changes
+  // Listen for auth changes only on the client side
   useEffect(() => {
+    // Skip initialization in SSR
+    if (typeof window === 'undefined') return;
+    
     // Initial auth check
     checkAuth();
     

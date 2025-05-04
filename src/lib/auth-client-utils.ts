@@ -37,31 +37,51 @@ export function processAuthCookieValue(value: string | null): string | null {
 /**
  * Create a Supabase client for browser use with proper cookie handling
  * Implements singleton pattern to ensure only one instance exists
+ * 
+ * During SSR, returns a minimal client that won't throw errors
  */
 export function createBrowserSupabaseClient() {
+  // If we already have an instance, return it
   if (browserClientInstance) {
     return browserClientInstance;
   }
 
-  if (typeof window === 'undefined') {
-    throw new Error('createBrowserSupabaseClient should only be called in browser context');
-  }
-
-  console.log('[Auth] Creating singleton Supabase browser client instance');
-  browserClientInstance = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: {
-        flowType: 'pkce',
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        persistSession: true
-      }
-    }
-  );
+  // Check if we're in a browser context
+  const isBrowser = typeof window !== 'undefined';
   
-  return browserClientInstance;
+  if (isBrowser) {
+    // We're in the browser, create a real client
+    console.log('[Auth] Creating singleton Supabase browser client instance');
+    browserClientInstance = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          flowType: 'pkce',
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          persistSession: true
+        }
+      }
+    );
+    
+    return browserClientInstance;
+  } else {
+    // We're in SSR/SSG, create a minimal client that won't cause issues
+    // This client will be replaced with a real one when hydration occurs on the client
+    console.log('[Auth] Creating minimal SSR-compatible Supabase client');
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          flowType: 'pkce',
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+  }
 }
 
 /**
@@ -88,6 +108,11 @@ export function createAuthClient() {
  */
 export async function refreshSession() {
   try {
+    // Don't attempt to refresh in SSR context
+    if (typeof window === 'undefined') {
+      return { success: false, error: 'Cannot refresh session during server-side rendering' };
+    }
+    
     const supabase = createBrowserSupabaseClient()
     const { data, error } = await supabase.auth.refreshSession()
     

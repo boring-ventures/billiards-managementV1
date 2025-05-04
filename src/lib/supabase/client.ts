@@ -13,24 +13,33 @@ let globalInstance: ReturnType<typeof createBrowserClient> | null = null;
 
 /**
  * Get a singleton instance of Supabase client to ensure consistent auth state
- * This is the preferred way to access the Supabase client in browser context
+ * This is the preferred way to access the Supabase client in any context
+ * 
+ * In SSR context, this returns a placeholder client that will be replaced during hydration
  */
 export const getSupabase = () => {
-  if (typeof window === 'undefined') {
-    throw new Error("getSupabase should only be called in browser context");
-  }
-
-  if (globalInstance) {
+  // On the browser, use/create the singleton instance
+  if (typeof window !== 'undefined') {
+    if (globalInstance) {
+      return globalInstance;
+    }
+    
+    console.log('[Browser] Creating new Supabase client instance');
+    globalInstance = createBrowserClient<Database>(
+      supabaseUrl,
+      supabaseAnonKey
+    );
+    
     return globalInstance;
   }
   
-  console.log('[Browser] Creating new Supabase client instance');
-  globalInstance = createBrowserClient<Database>(
+  // In SSR context, return a new instance each time
+  // This won't persist sessions but works for SSR without errors
+  console.log('[SSR] Creating placeholder Supabase client');
+  return createBrowserClient<Database>(
     supabaseUrl,
     supabaseAnonKey
   );
-  
-  return globalInstance;
 };
 
 // Export a function that always returns the singleton instance
