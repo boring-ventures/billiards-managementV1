@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/auth-server-utils";
 import { z } from "zod";
+import { createServerClient } from "@supabase/ssr";
+import { AUTH_TOKEN_KEY } from "@/lib/auth-utils";
 
 // Schema for sign-in validation
 const signInSchema = z.object({
@@ -16,8 +17,42 @@ export async function POST(req: NextRequest) {
     // Validate input
     const { email, password } = signInSchema.parse(body);
     
-    // Create Supabase client with cookie handling
-    const supabase = createServerSupabaseClient();
+    // Create a redirect response we'll modify with cookies
+    const response = NextResponse.redirect(new URL('/dashboard', req.url), { 
+      status: 303 // 303 See Other is appropriate for form submissions that should redirect
+    });
+    
+    // Create a Supabase client
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return req.cookies.get(name)?.value;
+          },
+          set(name, value, options) {
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+              sameSite: "lax",
+              path: "/",
+              secure: process.env.NODE_ENV === "production",
+            });
+          },
+          remove(name, options) {
+            response.cookies.set({
+              name,
+              value: "",
+              ...options,
+              maxAge: 0,
+              path: "/",
+            });
+          },
+        },
+      }
+    );
     
     // Sign in the user
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -35,15 +70,43 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Return the session
-    return NextResponse.json(
-      { 
-        success: true, 
-        data,
-        message: "Signed in successfully"
-      },
-      { status: 200 }
-    );
+    // Extract session data to manually set the auth cookie
+    const { access_token, refresh_token, expires_at, expires_in } = data.session;
+    
+    // Sanitize the user object to include only necessary fields
+    const sanitizedUser = {
+      id: data.user.id,
+      email: data.user.email,
+      role: data.user.role,
+      app_metadata: data.user.app_metadata,
+      user_metadata: data.user.user_metadata,
+      aud: data.user.aud
+    };
+    
+    // Create the auth cookie value
+    const authCookieValue = JSON.stringify({
+      access_token,
+      refresh_token,
+      expires_at,
+      expires_in,
+      token_type: 'bearer',
+      type: 'access',
+      provider: 'email',
+      user: sanitizedUser
+    });
+    
+    // Set the auth cookie that Supabase uses for session management
+    response.cookies.set({
+      name: AUTH_TOKEN_KEY,
+      value: authCookieValue,
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true
+    });
+    
+    return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
