@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
 
-// Helper function to create a Supabase client with correct cookie handling for Next.js 14
-function createSupabaseClient() {
+// Helper function to create a Supabase client with correct cookie handling for API routes
+function createSupabaseClient(request: NextRequest) {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name) {
-          // In Next.js 14, cookies() is still synchronous
-          return cookies().get(name)?.value;
+          // Get cookie directly from the request
+          const cookie = request.cookies.get(name);
+          
+          // Debug logging for auth cookies
+          if (name.includes('auth') || name.includes('supabase')) {
+            console.log(`[API:profile] Reading cookie: ${name} = ${cookie ? 'present' : 'not found'}`);
+          }
+          
+          return cookie?.value || null;
         },
         set() {
           // Not setting cookies in API routes
@@ -27,6 +33,20 @@ function createSupabaseClient() {
   );
 }
 
+// Common function to create a JSON response with proper headers
+function createJsonResponse(data: any, status: number = 200) {
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  
+  return new NextResponse(
+    JSON.stringify(data),
+    { 
+      status,
+      headers
+    }
+  );
+}
+
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
   try {
@@ -34,30 +54,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
     
-    // Initialize Supabase client using our helper
-    const supabase = createSupabaseClient();
+    // Initialize Supabase client using our helper with the request object
+    const supabase = createSupabaseClient(request);
     
     if (userIdParam) {
-      // Don't redirect or proxy - it causes content-type issues
-      // Instead, fetch the profile directly with correct content type handling
-      
       // Get user from auth
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
         console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
-        
-        // Set explicit content-type header
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
-          { 
-            status: 401,
-            headers: headers
-          }
-        );
+        return createJsonResponse({ 
+          error: "Not authenticated", 
+          detail: authError?.message || 'Auth session missing!' 
+        }, 401);
       }
       
       // Check if the user is requesting their own profile or has admin permission
@@ -72,16 +81,10 @@ export async function GET(request: NextRequest) {
         const isAdmin = requesterProfile?.role === UserRole.ADMIN;
         
         if (!isSuperAdmin && !isAdmin) {
-          const headers = new Headers();
-          headers.set('Content-Type', 'application/json');
-          
-          return new NextResponse(
-            JSON.stringify({ error: "Forbidden", detail: "Insufficient permissions to view this profile" }),
-            { 
-              status: 403,
-              headers: headers
-            }
-          );
+          return createJsonResponse({ 
+            error: "Forbidden", 
+            detail: "Insufficient permissions to view this profile" 
+          }, 403);
         }
       }
       
@@ -90,27 +93,11 @@ export async function GET(request: NextRequest) {
         where: { userId: userIdParam }
       });
       
-      // Set proper content-type header
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
       if (!profile) {
-        return new NextResponse(
-          JSON.stringify({ error: "Profile not found" }),
-          { 
-            status: 404,
-            headers: headers
-          }
-        );
+        return createJsonResponse({ error: "Profile not found" }, 404);
       }
       
-      return new NextResponse(
-        JSON.stringify({ profile }),
-        { 
-          status: 200,
-          headers: headers
-        }
-      );
+      return createJsonResponse({ profile });
     }
     
     // Get authenticated user
@@ -118,18 +105,10 @@ export async function GET(request: NextRequest) {
     
     if (authError || !user) {
       console.error(`[API:profile] Auth error: ${authError?.message || 'No user found'}`);
-      
-      // Set explicit content-type header
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: authError?.message || 'Auth session missing!' }),
-        { 
-          status: 401,
-          headers: headers
-        }
-      );
+      return createJsonResponse({ 
+        error: "Not authenticated", 
+        detail: authError?.message || 'Auth session missing!' 
+      }, 401);
     }
     
     console.log(`[API:profile] Authenticated user: ${user.id}`);
@@ -217,52 +196,23 @@ export async function GET(request: NextRequest) {
         );
       } catch (createError) {
         console.error(`[API:profile] Failed to create profile:`, createError);
-        
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json');
-        
-        return new NextResponse(
-          JSON.stringify({ 
-            error: "Failed to create profile", 
-            detail: createError instanceof Error ? createError.message : String(createError)
-          }),
-          { 
-            status: 500,
-            headers: headers
-          }
-        );
+        return createJsonResponse({
+          error: "Failed to create profile", 
+          detail: createError instanceof Error ? createError.message : String(createError)
+        }, 500);
       }
     }
     
     // Profile found, return it
     console.log(`[API:profile] Profile found for user ${user.id}`);
+    return createJsonResponse({ profile });
     
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ profile }),
-      {
-        status: 200,
-        headers: headers
-      }
-    );
   } catch (error) {
-    console.error("Error in profile GET endpoint:", error);
-    
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ 
-        error: "Internal server error", 
-        detail: error instanceof Error ? error.message : String(error)
-      }),
-      { 
-        status: 500,
-        headers: headers
-      }
-    );
+    console.error(`[API:profile] Unexpected error:`, error);
+    return createJsonResponse({
+      error: "Server error", 
+      detail: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 }
 
@@ -274,7 +224,7 @@ export async function PUT(request: NextRequest) {
     const { firstName, lastName, avatarUrl, active } = data;
     
     // Initialize Supabase client using our helper
-    const supabase = createSupabaseClient();
+    const supabase = createSupabaseClient(request);
     
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();

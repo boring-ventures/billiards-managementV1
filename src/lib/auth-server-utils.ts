@@ -19,9 +19,16 @@ export function createServerSupabaseClient() {
         get(name) {
           // In Next.js 14, cookies() is synchronous
           try {
-            // The TypeScript types might suggest it's async but it's actually sync in Next.js 14
-            // @ts-ignore - ignore the Promise type as it's actually synchronous in Next.js 14
-            return cookies().get(name)?.value || null;
+            // Access cookies directly, ensuring we don't treat it as a Promise
+            const cookieStore = cookies();
+            const cookie = cookieStore.get(name);
+            
+            // Debug logging
+            if (name.includes('auth') || name.includes('supabase')) {
+              console.log(`[Server] Reading auth cookie: ${name} = ${cookie ? 'present' : 'not found'}`);
+            }
+            
+            return cookie?.value || null;
           } catch (error) {
             console.error('[Cookie] Error reading cookie:', error);
             return null;
@@ -41,6 +48,41 @@ export function createServerSupabaseClient() {
 }
 
 /**
+ * Create a Supabase server client with explicit cookie access for API routes
+ * This version is optimized for API routes where cookie access is different
+ * @param request The NextRequest object from the API route
+ */
+export function createAPIRouteClient(request: NextRequest) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name) {
+          // Get cookie directly from the request
+          const cookie = request.cookies.get(name);
+          
+          // Debug logging
+          if (name.includes('auth') || name.includes('supabase')) {
+            console.log(`[API] Reading auth cookie: ${name} = ${cookie ? 'present' : 'not found'}`);
+          }
+          
+          return cookie?.value || null;
+        },
+        set() {
+          // API routes should return cookies in the response
+          // but we can't set them in this callback
+        },
+        remove() {
+          // API routes should return cookies in the response
+          // but we can't remove them in this callback
+        }
+      }
+    }
+  )
+}
+
+/**
  * Create a Supabase server client for use in middleware
  */
 export function createMiddlewareClient(request: NextRequest, response: NextResponse) {
@@ -51,6 +93,11 @@ export function createMiddlewareClient(request: NextRequest, response: NextRespo
       cookies: {
         get(name: string) {
           const cookie = request.cookies.get(name);
+          // Debug logging
+          if (name.includes('auth') || name.includes('supabase')) {
+            console.log(`[Middleware] Reading auth cookie: ${name} = ${cookie ? 'present' : 'not found'}`);
+          }
+          
           return cookie?.value;
         },
         set(name: string, value: string, options: any) {
@@ -103,8 +150,8 @@ export async function debugServerCookies() {
   if (typeof window !== 'undefined') return 'Cannot debug server cookies on client'
   
   try {
-    // @ts-ignore - In Next.js 14, cookies() is synchronous despite the types
-    const authCookie = cookies().get(AUTH_TOKEN_KEY);
+    const cookieStore = cookies();
+    const authCookie = cookieStore.get(AUTH_TOKEN_KEY);
     const authCookieExists = !!authCookie;
     
     return {

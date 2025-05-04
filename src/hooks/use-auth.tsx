@@ -29,6 +29,7 @@ type AuthContextType = AuthState & {
   signOut: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
   updateProfile: (profile: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
+  isSuperAdmin: boolean;
 };
 
 // Create context with default values
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   error: null,
+  isSuperAdmin: false,
   signIn: async () => ({ success: false, error: 'Auth context not initialized' }),
   signUp: async () => ({ success: false, error: 'Auth context not initialized' }),
   signOut: async () => {},
@@ -59,18 +61,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profile: null,
     error: null,
   });
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   // Create Supabase client once using the singleton pattern
   // This ensures only one GoTrueClient instance exists throughout the app
-  const supabase = useMemo(() => getSupabaseClient(), []);
+  const supabase = useMemo(() => {
+    try {
+      return getSupabaseClient();
+    } catch (error) {
+      console.error("Failed to initialize Supabase client:", error);
+      // Return a placeholder to prevent errors
+      return null;
+    }
+  }, []);
 
-  // Fetch profile data
+  // Fetch profile data with improved error handling
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const response = await fetch(`/api/profile?userId=${userId}`);
-      if (!response.ok) throw new Error('Failed to fetch profile');
+      // Add a random query parameter to prevent caching
+      const cacheBuster = `cacheBuster=${Date.now()}`;
+      const response = await fetch(`/api/profile?userId=${userId}&${cacheBuster}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
       
-      const data = await response.json();
+      // Parse JSON response
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('Failed to parse profile response:', parseError);
+        const text = await response.text();
+        console.error('Raw response:', text.substring(0, 500));
+        throw new Error('Invalid JSON response from profile API');
+      }
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch profile');
+      }
+      
       return data.profile;
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -78,27 +109,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  // Check current auth status
+  // Check current auth status with improved error handling
   const checkAuth = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, isLoading: true }));
       
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
       
-      const session = data.session;
+      // Try-catch to handle potential errors in getSession
+      let sessionData;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        sessionData = data;
+      } catch (sessionError) {
+        console.error('Session retrieval error:', sessionError);
+        throw new Error('Failed to retrieve session');
+      }
+      
+      const session = sessionData.session;
       
       if (session && session.user) {
-        const profile = await fetchProfile(session.user.id);
-        
-        setState({
-          isLoading: false,
-          isAuthenticated: true,
-          user: session.user,
-          session,
-          profile,
-          error: null,
-        });
+        try {
+          const profile = await fetchProfile(session.user.id);
+          
+          // Determine if user is a SUPERADMIN
+          const superAdminStatus = profile?.role === 'SUPERADMIN';
+          setIsSuperAdmin(superAdminStatus);
+          
+          setState({
+            isLoading: false,
+            isAuthenticated: true,
+            user: session.user,
+            session,
+            profile,
+            error: null,
+          });
+        } catch (profileError) {
+          console.error('Profile fetch error during auth check:', profileError);
+          setState({
+            isLoading: false,
+            isAuthenticated: true,
+            user: session.user,
+            session,
+            profile: null,
+            error: 'Failed to load profile',
+          });
+        }
         
         return true;
       } else {
@@ -110,6 +169,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           profile: null,
           error: null,
         });
+        setIsSuperAdmin(false);
         
         return false;
       }
@@ -124,249 +184,191 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile: null,
         error: error instanceof Error ? error.message : 'Authentication check failed',
       });
+      setIsSuperAdmin(false);
       
       return false;
     }
-  }, [fetchProfile, supabase.auth]);
+  }, [fetchProfile, supabase]);
 
-  // Sign in function
-  const signIn = async (email: string, password: string) => {
-    try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const response = await fetch('/api/auth/signin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Sign in failed');
-      }
-      
-      // Refresh auth state after successful sign-in
-      await checkAuth();
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Sign in error:', error);
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Sign in failed',
-      }));
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Sign in failed'
-      };
-    }
-  };
-
-  // Sign up function
-  const signUp = async (email: string, password: string, firstName?: string, lastName?: string) => {
-    try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, firstName, lastName }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Sign up failed');
-      }
-      
-      // If sign up auto-signs in, refresh auth state
-      if (data.data?.session) {
-        await checkAuth();
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Sign up error:', error);
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Sign up failed',
-      }));
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Sign up failed'
-      };
-    }
-  };
-
-  // Sign out function
-  const signOut = async () => {
-    try {
-      setState(prev => ({ ...prev, isLoading: true }));
-      
-      await fetch('/api/auth/signout', { method: 'POST' });
-      
-      // Reset auth state
-      setState({
-        isLoading: false,
-        isAuthenticated: false,
-        user: null,
-        session: null,
-        profile: null,
-        error: null,
-      });
-      
-      // Redirect to sign-in page (can be handled in UI)
-    } catch (error) {
-      console.error('Sign out error:', error);
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Sign out failed',
-      }));
-    }
-  };
-
-  // Refresh auth session
-  const refreshAuth = async () => {
-    try {
-      setState(prev => ({ ...prev, isLoading: true }));
-      
-      // Try refreshing through our API first
-      const response = await fetch('/api/auth/refresh', { method: 'POST' });
-      
-      if (response.ok) {
-        // Refresh succeeded, now update state
-        await checkAuth();
-        return true;
-      }
-      
-      // If API refresh fails, try client-side refresh
-      const result = await refreshSession();
-      
-      if (result.success) {
-        // Client-side refresh succeeded, update state
-        await checkAuth();
-        return true;
-      }
-      
-      // All refresh attempts failed
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        isAuthenticated: false,
-        error: result.error || 'Session refresh failed',
-      }));
-      
-      return false;
-    } catch (error) {
-      console.error('Auth refresh error:', error);
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        isAuthenticated: false,
-        error: error instanceof Error ? error.message : 'Failed to refresh authentication',
-      }));
-      
-      return false;
-    }
-  };
-
-  // Update profile
-  const updateProfile = async (profileData: Partial<Profile>) => {
-    try {
-      if (!state.user) {
-        throw new Error('User must be authenticated to update profile');
-      }
-      
-      setState(prev => ({ ...prev, isLoading: true }));
-      
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileData),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update profile');
-      }
-      
-      // Update local state with new profile data
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        profile: data,
-      }));
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Profile update error:', error);
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to update profile',
-      }));
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to update profile'
-      };
-    }
-  };
-
-  // Listen for auth changes only on the client side
+  // Initialize auth state and set up listener
   useEffect(() => {
-    // Skip initialization in SSR
-    if (typeof window === 'undefined') return;
-    
-    // Initial auth check
+    // Check auth immediately on mount
     checkAuth();
     
-    // Set up auth state change listener using the singleton client
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log(`[Auth] Auth state changed: ${event}`, session ? 'Session exists' : 'No session');
-        
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    // Set up auth state change listener if Supabase client is available
+    if (supabase) {
+      try {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
           checkAuth();
-        } else if (event === 'SIGNED_OUT') {
-          setState({
-            isLoading: false,
-            isAuthenticated: false,
-            user: null,
-            session: null,
-            profile: null,
-            error: null,
-          });
-        }
+        });
+        
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error('Error setting up auth listener:', error);
       }
-    );
-    
-    // Cleanup
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, [checkAuth, supabase.auth]);
+    }
+  }, [checkAuth, supabase]);
 
-  const value = {
+  // Construct the context value with all state and functions
+  const contextValue = useMemo(() => ({
     ...state,
-    signIn,
-    signUp,
-    signOut,
-    refreshAuth,
-    updateProfile,
-  };
+    isSuperAdmin,
+    signIn: async (email: string, password: string) => {
+      try {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
+        
+        const response = await fetch('/api/auth/signin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Sign in failed');
+        }
+        
+        // Refresh auth state after successful sign-in
+        await checkAuth();
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Sign in error:', error);
+        
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Sign in failed',
+        }));
+        
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Sign in failed'
+        };
+      }
+    },
+    signUp: async (email: string, password: string, firstName?: string, lastName?: string) => {
+      try {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
+        
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, firstName, lastName }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Sign up failed');
+        }
+        
+        // If sign up auto-signs in, refresh auth state
+        if (data.data?.session) {
+          await checkAuth();
+        }
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Sign up error:', error);
+        
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Sign up failed',
+        }));
+        
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Sign up failed'
+        };
+      }
+    },
+    signOut: async () => {
+      try {
+        setState(prev => ({ ...prev, isLoading: true }));
+        
+        await fetch('/api/auth/signout', { method: 'POST' });
+        
+        // Reset auth state
+        setState({
+          isLoading: false,
+          isAuthenticated: false,
+          user: null,
+          session: null,
+          profile: null,
+          error: null,
+        });
+        setIsSuperAdmin(false);
+        
+        // Redirect to sign-in page (can be handled in UI)
+      } catch (error) {
+        console.error('Sign out error:', error);
+        
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Sign out failed',
+        }));
+      }
+    },
+    refreshAuth: checkAuth,
+    updateProfile: async (profileData: Partial<Profile>) => {
+      try {
+        setState(prev => ({ ...prev, isLoading: true }));
+        
+        if (!state.user) {
+          throw new Error('User not authenticated');
+        }
+        
+        const response = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profileData),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to update profile');
+        }
+        
+        // Update profile in state
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          profile: data.profile,
+        }));
+        
+        // Update superadmin status if role changed
+        if (profileData.role) {
+          setIsSuperAdmin(profileData.role === 'SUPERADMIN');
+        }
+        
+        return { success: true };
+      } catch (error) {
+        console.error('Profile update error:', error);
+        
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Profile update failed',
+        }));
+        
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Profile update failed'
+        };
+      }
+    },
+  }), [state, isSuperAdmin, checkAuth]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

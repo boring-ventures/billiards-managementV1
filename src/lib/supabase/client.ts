@@ -7,7 +7,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables");
+  console.error("Missing Supabase environment variables");
 }
 
 /**
@@ -17,11 +17,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * should be created. All other files should import from here.
  */
 
-// Singleton instance for browser - using @supabase/ssr
+// Create eager instance for the browser
 let browserClientInstance: ReturnType<typeof createBrowserClient> | null = null;
 
-// Singleton instance for direct supabase-js usage (if needed)
-let jsClientInstance: ReturnType<typeof createClient> | null = null;
+// Create instance immediately on module load for client environments
+if (typeof window !== 'undefined') {
+  try {
+    console.log('[Browser] Creating Supabase client instance during module initialization');
+    browserClientInstance = createBrowserClient<Database>(
+      supabaseUrl,
+      supabaseAnonKey
+    );
+  } catch (error) {
+    console.error('[Browser] Error creating Supabase client during initialization:', error);
+  }
+}
 
 /**
  * Get a singleton instance of Supabase client using the SSR package
@@ -37,12 +47,18 @@ export const getSupabaseClient = () => {
     }
     
     console.log('[Browser] Creating new Supabase client instance');
-    browserClientInstance = createBrowserClient<Database>(
-      supabaseUrl,
-      supabaseAnonKey
-    );
     
-    return browserClientInstance;
+    try {
+      browserClientInstance = createBrowserClient<Database>(
+        supabaseUrl,
+        supabaseAnonKey
+      );
+      
+      return browserClientInstance;
+    } catch (error) {
+      console.error('[Browser] Error creating Supabase client:', error);
+      throw new Error('Failed to create Supabase client: ' + (error instanceof Error ? error.message : String(error)));
+    }
   }
   
   // In SSR context, return a new instance each time
@@ -54,52 +70,13 @@ export const getSupabaseClient = () => {
   );
 };
 
-/**
- * Get a singleton instance of the direct Supabase JS client
- * Only use this if you specifically need features from the direct JS client
- */
-export const getSupabaseJS = () => {
-  // On the browser, use/create the singleton instance
-  if (typeof window !== 'undefined') {
-    if (jsClientInstance) {
-      return jsClientInstance;
-    }
-    
-    console.log('[Browser] Creating new Supabase JS client instance');
-    jsClientInstance = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        auth: {
-          flowType: 'pkce',
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          persistSession: true
-        }
-      }
-    );
-    
-    return jsClientInstance;
-  }
-  
-  // In SSR context, return a minimal client
-  console.log('[SSR] Creating placeholder Supabase JS client');
-  return createClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      auth: {
-        flowType: 'pkce',
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  );
-};
-
 // Backwards compatibility with existing code
 export const getSupabase = getSupabaseClient;
-export const supabase = () => getSupabaseClient();
+
+// Create eager instance to prevent undefined errors
+export const supabase = typeof window !== 'undefined' 
+  ? () => browserClientInstance || getSupabaseClient() 
+  : getSupabaseClient;
 
 /**
  * Debug function to log all cookies in browser
