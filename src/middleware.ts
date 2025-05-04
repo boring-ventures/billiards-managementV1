@@ -1,16 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@/lib/supabase'
+import { updateSession } from '@/lib/supabase/middleware'
 import { AUTH_TOKEN_KEY } from '@/lib/auth-utils'
-import { refreshSessionWithBackoff } from '@/lib/middleware/sessionRefresh'
-import { checkUserCompanyStatus, UserCompanyStatus } from '@/lib/middleware/userCompanyHandler'
-import { getSelectedCompany, SELECTED_COMPANY_COOKIE } from '@/lib/middleware/companySwitcher'
-import { logAuthEvent, AuthEventType } from '@/lib/middleware/authLogger'
-import { 
-  createApiErrorResponse, 
-  createErrorRedirect, 
-  createGracefulDegradation,
-  AuthErrorType 
-} from '@/lib/middleware/errorResponses'
 
 // List of paths that should not check for authentication
 const PUBLIC_PATHS = [
@@ -94,33 +84,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
   
-  // Create a response to modify
-  const response = NextResponse.next()
-  
-  // Create the Supabase client using our utility function
-  const supabase = createMiddlewareClient(request, response)
-  
-  // Refresh the session - use getUser() as recommended in Supabase docs
-  // getUser() validates the token by calling Supabase Auth server
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    // If requesting API, return 401
-    if (pathname.startsWith('/api/')) {
-      console.error('[Middleware] Auth failed for API route:', pathname);
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-    
-    // Redirect to login for non-API routes
-    console.log('[Middleware] Redirecting to sign-in from protected route:', pathname);
-    return NextResponse.redirect(new URL('/sign-in', request.url))
-  }
-  
-  // User is authenticated - pass request through with session cookies
-  return response
+  // Use the updateSession helper to refresh tokens and update cookies
+  // This uses Supabase's recommended pattern for Next.js App Router
+  return await updateSession(request)
 }
 
 export const config = {

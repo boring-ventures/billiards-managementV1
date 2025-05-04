@@ -36,8 +36,8 @@ function processAuthCookieValue(value: string | null): string | null {
 }
 
 /**
- * Create a Supabase server client with custom cookie handling for server components
- * This implementation handles Next.js 14+ async cookie API
+ * Create a Supabase server client with cookie handling for server components
+ * Compatible with Next.js 14+ async cookie API
  */
 export function createServerSupabaseClient() {
   return createServerClient(
@@ -45,74 +45,25 @@ export function createServerSupabaseClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        async get(name: string) {
-          // For Next.js 14, cookies() returns a Promise<ReadonlyRequestCookies>
+        get(name) {
+          // For Next.js 14+, cookies() returns a Promise<ReadonlyRequestCookies>
+          // But we need to handle it differently to ensure compatibility
           try {
-            // Using the new AsyncLocalStorage solution
-            const cookieStore = cookies();
-            
-            // Use a different approach that's TypeScript-friendly
-            let cookieValue: string | null = null;
-            try {
-              // Await the promise
-              const allCookies = await cookieStore;
-              // Get the specific cookie value
-              cookieValue = allCookies.get(name)?.value || null;
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieValue = cookieStore.get?.(name)?.value || null;
-            }
-            
-            return processAuthCookieValue(cookieValue);
+            const value = cookies().get(name)?.value || null;
+            return value;
           } catch (error) {
             console.error('[Cookie] Error reading cookie:', error);
             return null;
           }
         },
-        async set(name: string, value: string, options: any) {
-          // For Next.js 14, cookies() returns a Promise<ReadonlyRequestCookies>
-          try {
-            // Using the new AsyncLocalStorage solution
-            const cookieStore = cookies();
-            
-            try {
-              // Await the promise and set the cookie
-              const store = await cookieStore;
-              store.set(name, value, options);
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieStore.set?.(name, value, options);
-            }
-          } catch (error) {
-            console.error('[Cookie] Error setting cookie:', error);
-          }
+        set() {
+          // Cannot set cookies in server components
+          // This will be handled by middleware
         },
-        async remove(name: string, options: any) {
-          try {
-            // Using the new AsyncLocalStorage solution
-            const cookieStore = cookies();
-            
-            try {
-              // Await the promise and remove the cookie
-              const store = await cookieStore;
-              store.set(name, '', { ...options, maxAge: 0 });
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieStore.set?.(name, '', { ...options, maxAge: 0 });
-            }
-          } catch (error) {
-            console.error('[Cookie] Error removing cookie:', error);
-          }
+        remove() {
+          // Cannot remove cookies in server components
+          // This will be handled by middleware
         }
-      },
-      auth: {
-        flowType: 'pkce',
-        detectSessionInUrl: false,
-        autoRefreshToken: true,
-        persistSession: true,
       }
     }
   )
@@ -174,6 +125,7 @@ export function createAuthClient() {
 
 /**
  * Validate auth session on the server side
+ * Uses getUser() for reliable authentication validation
  */
 export async function validateSession() {
   try {
@@ -198,22 +150,14 @@ export async function debugServerCookies() {
   if (typeof window !== 'undefined') return 'Cannot debug server cookies on client'
   
   try {
-    // Using the new AsyncLocalStorage solution for Next.js 14
-    const cookieStore = cookies();
-    const store = await cookieStore;
-    
-    // For Next.js 14, use store as ReadonlyRequestCookies
-    const authCookie = store.get(AUTH_TOKEN_KEY);
+    const authCookie = cookies().get(AUTH_TOKEN_KEY);
     const authCookieExists = !!authCookie;
     
     return {
-      cookieCount: 'unknown', // We can't get all cookies easily in Next.js 14
       hasSbAuthCookie: authCookieExists,
       authCookieValue: authCookieExists ? 
-        (authCookie?.value?.startsWith('base64-') ? 'Has base64 prefix' : 'Standard format') : 
-        'missing',
-      authCookieValueSample: authCookieExists && authCookie?.value ? 
-        authCookie.value.substring(0, 15) + '...' : null
+        (authCookie?.value?.substring(0, 15) + '...') : 
+        'missing'
     }
   } catch (error) {
     return { error: 'Error reading cookies' }

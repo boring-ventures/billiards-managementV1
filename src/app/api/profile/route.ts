@@ -4,8 +4,6 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
-import { auth } from "@/lib/auth";
-import { validateSession } from "@/lib/auth-utils";
 
 // GET: Fetch profile for the current authenticated user
 export async function GET(request: NextRequest) {
@@ -27,17 +25,34 @@ export async function GET(request: NextRequest) {
       return response;
     }
     
-    // Log cookies and auth headers for debugging
-    console.log(`[API:profile] Cookie header: ${request.headers.get('cookie')?.substring(0, 50)}...`);
-    console.log(`[API:profile] Auth header present: ${Boolean(request.headers.get('authorization'))}`);
+    // Initialize the Supabase client with cookie handling for Next.js 14
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            // For Next.js 14
+            return cookies().get(name)?.value;
+          },
+          set(name, value, options) {
+            // For Next.js 14 - don't try to set cookies in API routes,
+            // as cookies() returns a read-only object in server actions and API routes
+          },
+          remove(name, options) {
+            // For Next.js 14 - don't try to remove cookies in API routes
+          }
+        }
+      }
+    );
     
-    // ALWAYS use getUser() instead of getSession() for safer server-side auth validation
-    const { user, error } = await validateSession();
+    // Get the authenticated user - ALWAYS use getUser() for reliable server-side auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    if (error || !user) {
-      console.error(`[API:profile] Authentication error: ${error}`);
+    if (authError || !user) {
+      console.error(`[API:profile] Authentication error: ${authError?.message || 'No active session'}`);
       return NextResponse.json(
-        { error: "Not authenticated", detail: error || "No active session" },
+        { error: "Not authenticated", detail: authError?.message || "Auth session missing!" },
         { status: 401 }
       );
     }

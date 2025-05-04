@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, validateSession } from "@/lib/auth-utils";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 
 // Helper function to validate user access to profile
@@ -29,13 +30,32 @@ export async function GET(
   { params }: { params: { userId: string } }
 ) {
   try {
-    // First validate the session - ALWAYS use getUser() over getSession()
-    const { user, error } = await validateSession();
+    // Initialize Supabase client with Next.js 14 cookie handling
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return cookies().get(name)?.value;
+          },
+          set(name, value, options) {
+            // Not setting cookies in API routes
+          },
+          remove(name, options) {
+            // Not removing cookies in API routes
+          }
+        }
+      }
+    );
     
-    if (error || !user) {
-      console.error(`[API:userId] ${error || 'No active session found'}`);
+    // Get authenticated user using getUser
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error(`[API:userId] ${authError?.message || 'No active session found'}`);
       return NextResponse.json(
-        { error: 'Not authenticated', detail: error || 'No active session' },
+        { error: 'Not authenticated', detail: authError?.message || 'Auth session missing!' },
         { status: 401 }
       );
     }
@@ -77,13 +97,32 @@ export async function PATCH(
   { params }: { params: { userId: string } }
 ) {
   try {
-    // First validate the session - ALWAYS use getUser() over getSession()
-    const { user, error } = await validateSession();
+    // Initialize Supabase client with Next.js 14 cookie handling
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return cookies().get(name)?.value;
+          },
+          set(name, value, options) {
+            // Not setting cookies in API routes
+          },
+          remove(name, options) {
+            // Not removing cookies in API routes
+          }
+        }
+      }
+    );
     
-    if (error || !user) {
-      console.error(`[API:userId] ${error || 'No active session found'}`);
+    // Get authenticated user using getUser
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error(`[API:userId] ${authError?.message || 'No active session found'}`);
       return NextResponse.json(
-        { error: 'Not authenticated', detail: error || 'No active session' },
+        { error: 'Not authenticated', detail: authError?.message || 'Auth session missing!' },
         { status: 401 }
       );
     }
