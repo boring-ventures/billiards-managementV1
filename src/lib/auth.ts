@@ -6,10 +6,9 @@
 import 'server-only';
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-utils";
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { z } from 'zod';
 import { initializeUserMetadata, updateUserCompany, updateUserRole, getAuthMetadataFromSession } from './auth-metadata';
@@ -317,8 +316,8 @@ export type AuthToken = z.infer<typeof authTokenSchema>;
  */
 export async function auth(): Promise<Session | null> {
   try {
-    // Use Supabase's recommended client for server components
-    const supabase = createSupabaseRouteHandlerClient();
+    // Use a simple createApiClient instead of createSupabaseRouteHandlerClient
+    const supabase = createApiClient();
     
     // Try to get Supabase auth user - using getUser instead of getSession as recommended by Supabase
     let userId = null;

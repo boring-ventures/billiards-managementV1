@@ -303,6 +303,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Refresh auth state after successful sign-in
         await checkAuth();
         
+        // If the server provides a redirect URL, navigate to it
+        if (data.redirect && typeof window !== 'undefined') {
+          window.location.href = data.redirect;
+        }
+        
         return { success: true };
       } catch (error) {
         console.error('Sign in error:', error);

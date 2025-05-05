@@ -17,10 +17,11 @@ export async function POST(req: NextRequest) {
     // Validate input
     const { email, password } = signInSchema.parse(body);
     
-    // Create a redirect response we'll modify with cookies
-    const response = NextResponse.redirect(new URL('/dashboard', req.url), { 
-      status: 303 // 303 See Other is appropriate for form submissions that should redirect
-    });
+    // Create a JSON response with cookies that we'll modify
+    const response = NextResponse.json(
+      { success: true, redirect: '/dashboard' },
+      { status: 200 }
+    );
     
     // Create a Supabase client
     const supabase = createServerClient(
