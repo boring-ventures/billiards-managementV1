@@ -74,6 +74,77 @@ function initializeBrowserClient() {
     // Check for auth cookies to set proper initialization options
     const hasAuthCookies = findBrowserAuthCookies().length > 0;
     
+    // Setup storage for cookies that's compatible with Supabase expectations
+    const customStorage: Storage = {
+      getItem: (key) => {
+        if (typeof document === 'undefined') return null;
+        
+        // For auth tokens, try to get from cookies directly
+        if (key.includes('supabase.auth.token')) {
+          try {
+            const cookiePattern = getSupabaseCookiePattern();
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            const authCookie = cookies.find(c => c.startsWith(cookiePattern));
+            
+            if (authCookie) {
+              const value = authCookie.split('=')[1];
+              if (value) {
+                return decodeURIComponent(value);
+              }
+            }
+          } catch (e) {
+            console.error('[Browser] Error reading auth cookie:', e);
+          }
+        }
+        
+        // Fallback to localStorage
+        try {
+          return localStorage.getItem(key);
+        } catch (e) {
+          console.warn('[Browser] Error reading from localStorage, falling back to memory:', e);
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        if (typeof document === 'undefined') return;
+        try {
+          localStorage.setItem(key, value);
+        } catch (e) {
+          console.warn('[Browser] Error writing to localStorage:', e);
+        }
+      },
+      removeItem: (key) => {
+        if (typeof document === 'undefined') return;
+        try {
+          localStorage.removeItem(key);
+        } catch (e) {
+          console.warn('[Browser] Error removing from localStorage:', e);
+        }
+      },
+      // Add required properties to satisfy Storage interface
+      length: typeof window !== 'undefined' ? localStorage.length : 0,
+      clear: () => {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.clear();
+          } catch (e) {
+            console.warn('[Browser] Error clearing localStorage:', e);
+          }
+        }
+      },
+      key: (index) => {
+        if (typeof window !== 'undefined') {
+          try {
+            return localStorage.key(index);
+          } catch (e) {
+            console.warn('[Browser] Error getting key from localStorage:', e);
+            return null;
+          }
+        }
+        return null;
+      }
+    };
+    
     browserClientInstance = createBrowserClient<Database>(
       supabaseUrl,
       supabaseAnonKey,
@@ -82,7 +153,9 @@ function initializeBrowserClient() {
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
-          flowType: 'pkce'  // More secure flow type
+          flowType: 'pkce',  // More secure flow type
+          storageKey: 'supabase.auth.token',
+          storage: customStorage
         },
         global: {
           fetch: (...args) => {

@@ -2,6 +2,8 @@
  * Authentication utilities for client-side code
  */
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from './supabase/client';
+import { getSupabaseCookiePattern } from './supabase/client';
 
 // Common token names
 export const AUTH_TOKEN_KEY = getSupabaseAuthCookieName()
@@ -50,27 +52,97 @@ export function createAuthClient() {
 }
 
 /**
- * Refresh the auth session on client side
- * This can be used to handle token refresh when session expires
+ * Store session data in localStorage to help Supabase client access it
+ * This is a helper function to ensure the session is available in localStorage
+ * as Supabase sometimes has issues with cookie-only storage
+ */
+export function storeSessionData(sessionData: any) {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    // Store the session in localStorage in the format Supabase expects
+    const storageKey = 'supabase.auth.token';
+    if (sessionData && sessionData.access_token) {
+      // Create the session object in the format Supabase expects
+      const sessionObj = {
+        access_token: sessionData.access_token,
+        refresh_token: sessionData.refresh_token,
+        expires_at: sessionData.expires_at,
+        expires_in: sessionData.expires_in,
+        token_type: 'bearer',
+        provider: 'email',
+        user: sessionData.user
+      };
+      
+      // Store it in localStorage
+      localStorage.setItem(storageKey, JSON.stringify(sessionObj));
+      console.log('Session data stored in localStorage for Supabase');
+      
+      // Also manually set a flag to indicate we have a session
+      localStorage.setItem('has_session', 'true');
+    }
+  } catch (error) {
+    console.error('Error storing session data in localStorage:', error);
+  }
+}
+
+/**
+ * Check if we have any form of session available
+ */
+export function hasSessionAvailable(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  try {
+    // Check cookies
+    const cookiePattern = getSupabaseCookiePattern();
+    const hasCookie = document.cookie.split(';').some(cookie => 
+      cookie.trim().startsWith(cookiePattern)
+    );
+    
+    // Check localStorage
+    const hasLocalStorage = !!localStorage.getItem('supabase.auth.token');
+    const hasSessionFlag = localStorage.getItem('has_session') === 'true';
+    
+    // Log details for debugging
+    console.log(`Session availability check: cookie=${hasCookie}, localStorage=${hasLocalStorage}, flag=${hasSessionFlag}`);
+    
+    return hasCookie || hasLocalStorage || hasSessionFlag;
+  } catch (error) {
+    console.error('Error checking session availability:', error);
+    return false;
+  }
+}
+
+/**
+ * Refresh the auth session
  */
 export async function refreshSession() {
   try {
-    // Don't attempt to refresh in SSR context
-    if (typeof window === 'undefined') {
-      return { success: false, error: 'Cannot refresh session during server-side rendering' };
+    const client = supabase();
+    if (!client || !client.auth) {
+      console.error('Invalid Supabase client');
+      return false;
     }
     
-    const supabase = getSupabaseClient()
-    const { data, error } = await supabase.auth.refreshSession()
-    
-    if (error) {
-      console.error('Error refreshing session:', error)
-      return { success: false, error: error.message }
+    // If we have a session in localStorage, refresh it
+    if (hasSessionAvailable()) {
+      const { data, error } = await client.auth.refreshSession();
+      
+      if (error) {
+        console.error('Error refreshing session:', error);
+        return false;
+      }
+      
+      if (data && data.session) {
+        // Store the refreshed session data
+        storeSessionData(data.session);
+        return true;
+      }
     }
     
-    return { success: true, session: data.session }
+    return false;
   } catch (error) {
-    console.error('Unexpected error refreshing session:', error)
-    return { success: false, error: 'Failed to refresh session' }
+    console.error('Error in refreshSession:', error);
+    return false;
   }
 } 

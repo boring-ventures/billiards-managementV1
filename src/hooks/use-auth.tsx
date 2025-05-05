@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, createContext, useContext, useMemo } from 'react';
-import { refreshSession } from '@/lib/auth-client-utils';
+import { refreshSession, storeSessionData } from '@/lib/auth-client-utils';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -298,6 +298,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         if (!response.ok) {
           throw new Error(data.error || 'Sign in failed');
+        }
+        
+        // Explicitly store the auth data in localStorage
+        // Extract and store auth tokens from cookies
+        if (typeof window !== 'undefined') {
+          try {
+            // Get the Supabase cookie name
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            const projectRef = supabaseUrl.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown';
+            const cookieName = `sb-${projectRef}-auth-token`;
+            
+            // Try to extract the auth token from cookies
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            const authCookie = cookies.find(c => c.startsWith(cookieName));
+            
+            if (authCookie) {
+              try {
+                const cookieValue = authCookie.split('=')[1];
+                if (cookieValue) {
+                  // Parse the cookie value
+                  const authData = JSON.parse(decodeURIComponent(cookieValue));
+                  // Store in localStorage for Supabase to find
+                  storeSessionData(authData);
+                  console.log('Successfully extracted and stored auth data from cookies');
+                }
+              } catch (e) {
+                console.error('Error parsing auth cookie:', e);
+              }
+            } else {
+              console.warn('Auth cookie not found after sign-in');
+              
+              // Attempt to refresh the session - this might help establish a valid session
+              await refreshSession();
+            }
+          } catch (e) {
+            console.error('Error processing auth cookies:', e);
+          }
         }
         
         // Refresh auth state after successful sign-in

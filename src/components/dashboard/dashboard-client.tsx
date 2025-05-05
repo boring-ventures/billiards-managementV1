@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { UserRole } from "@prisma/client";
 import DashboardContent from "@/components/dashboard/dashboard-content";
 import { supabase } from "@/lib/supabase/client";
+import { hasSessionAvailable } from "@/lib/auth-client-utils";
 
 // Type interfaces to match useCurrentUser
 interface InternalProfile {
@@ -28,10 +29,44 @@ export default function DashboardClient() {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [sessionCheckAttempts, setSessionCheckAttempts] = useState(0);
   
+  // Debug session state on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Debug available auth state
+      console.log('Dashboard mounting - checking session availability');
+      const sessionAvailable = hasSessionAvailable();
+      console.log(`Session available according to utility: ${sessionAvailable}`);
+      
+      // Debug localStorage state
+      try {
+        const sessionData = localStorage.getItem('supabase.auth.token');
+        if (sessionData) {
+          console.log('Found session data in localStorage');
+        } else {
+          console.log('No session data in localStorage');
+        }
+      } catch (e) {
+        console.error('Error checking localStorage:', e);
+      }
+    }
+  }, []);
+  
   // First, very quick check for authentication
   useEffect(() => {
     const checkSession = async () => {
       try {
+        console.log(`[Dashboard] Starting session check attempt ${sessionCheckAttempts + 1}`);
+        
+        // Check if we have any session data available first
+        const sessionAvailable = hasSessionAvailable();
+        console.log(`[Dashboard] Session availability: ${sessionAvailable}`);
+        
+        // If session check utility says we have a session, don't immediately redirect,
+        // but continue with Supabase check to verify it's valid
+        if (!sessionAvailable && sessionCheckAttempts > 1) {
+          console.warn("[Dashboard] No session available according to utility");
+        }
+        
         // If we've already checked multiple times and still have issues, 
         // we might need to redirect
         if (sessionCheckAttempts > 3) {
@@ -57,6 +92,14 @@ export default function DashboardClient() {
         }
         
         const { data, error } = await client.auth.getSession();
+        
+        // Log session check results for debugging
+        if (data && data.session) {
+          console.log("[Dashboard] Valid session found:", { 
+            userId: data.session.user.id,
+            expiresAt: new Date(data.session.expires_at! * 1000).toISOString()
+          });
+        }
         
         if (error) {
           console.error("Error getting session:", error);
