@@ -3,6 +3,11 @@ import { createMiddlewareClient } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/auth-server-utils'
 import { AUTH_TOKEN_KEY } from '@/lib/auth-client-utils'
 
+// Base URL for redirects - use the environment variable or default to the request origin
+const getBaseUrl = (request: NextRequest) => {
+  return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+};
+
 // Add timing utilities for performance monitoring that work in all environments
 const startTimer = () => {
   return Date.now();
@@ -231,16 +236,15 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
       logWithPerformance('No auth cookie found, skipping session check');
       
       // Redirect to sign-in (allowing public paths to be handled earlier in middleware)
-      const url = request.nextUrl.clone();
+      const url = new URL('/sign-in', getBaseUrl(request));
       
-      if (url.pathname.startsWith('/api/')) {
+      if (request.nextUrl.pathname.startsWith('/api/')) {
         return NextResponse.json({ 
           error: 'Authentication required',
           message: 'No session cookie found. Please sign in again.'
         }, { status: 401 });
       }
       
-      url.pathname = '/sign-in';
       url.searchParams.set('redirectTo', request.nextUrl.pathname + request.nextUrl.search);
       url.searchParams.set('error', 'session_missing');
       return NextResponse.redirect(url);
@@ -262,16 +266,14 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
         });
         
         // Redirect to sign-in on session error for pages, or return 401 for API routes
-        const url = request.nextUrl.clone();
-        
-        if (url.pathname.startsWith('/api/')) {
+        if (request.nextUrl.pathname.startsWith('/api/')) {
           return NextResponse.json({ 
             error: 'Authentication required',
             message: 'Your session is invalid or has expired. Please sign in again.'
           }, { status: 401 });
         }
         
-        url.pathname = '/sign-in';
+        const url = new URL('/sign-in', getBaseUrl(request));
         // Preserve the original URL to redirect back after authentication
         url.searchParams.set('redirectTo', request.nextUrl.pathname + request.nextUrl.search);
         url.searchParams.set('error', 'invalid_session');
@@ -291,8 +293,7 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
         }
         
         // For page routes, redirect to sign-in
-        const url = request.nextUrl.clone();
-        url.pathname = '/sign-in';
+        const url = new URL('/sign-in', getBaseUrl(request));
         // Preserve the original URL to redirect back after authentication
         url.searchParams.set('redirectTo', request.nextUrl.pathname + request.nextUrl.search);
         return NextResponse.redirect(url);
@@ -324,16 +325,15 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
           } else {
             // Session is expired and refresh failed, redirect to login
             logWithPerformance('Session expired and refresh failed');
-            const url = request.nextUrl.clone();
             
-            if (url.pathname.startsWith('/api/')) {
+            if (request.nextUrl.pathname.startsWith('/api/')) {
               return NextResponse.json({ 
                 error: 'Session expired',
                 message: 'Your session has expired and could not be refreshed. Please sign in again.'
               }, { status: 401 });
             }
             
-            url.pathname = '/sign-in';
+            const url = new URL('/sign-in', getBaseUrl(request));
             url.searchParams.set('error', 'session_expired');
             url.searchParams.set('redirectTo', request.nextUrl.pathname + request.nextUrl.search);
             return NextResponse.redirect(url);
@@ -347,8 +347,7 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
           logWithPerformance('Continuing with existing valid session despite refresh error');
         } else {
           // Only redirect if the session is definitely invalid
-          const url = request.nextUrl.clone();
-          url.pathname = '/sign-in';
+          const url = new URL('/sign-in', getBaseUrl(request));
           url.searchParams.set('error', 'refresh_error');
           url.searchParams.set('redirectTo', request.nextUrl.pathname);
           return NextResponse.redirect(url);
@@ -366,16 +365,14 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
     console.error('[Middleware] Unexpected error in updateSessionAndCookies:', error);
     
     // Fall back to redirect for safety
-    const url = request.nextUrl.clone();
-    
-    if (url.pathname.startsWith('/api/')) {
+    if (request.nextUrl.pathname.startsWith('/api/')) {
       return NextResponse.json({ 
         error: 'Internal server error',
         message: 'An unexpected error occurred while processing your request.'
       }, { status: 500 });
     }
     
-    url.pathname = '/sign-in';
+    const url = new URL('/sign-in', getBaseUrl(request));
     url.searchParams.set('error', 'auth_error');
     return NextResponse.redirect(url);
   }
@@ -420,9 +417,8 @@ export async function middleware(request: NextRequest) {
     logWithPerformance(`Middleware failed for ${pathname}`, totalMs, { error: String(error) });
     
     // Last resort error handling - redirect to error page for non-API routes
-    const url = request.nextUrl.clone();
-    if (!url.pathname.startsWith('/api/')) {
-      url.pathname = '/error';
+    if (!request.nextUrl.pathname.startsWith('/api/')) {
+      const url = new URL('/error', getBaseUrl(request));
       url.searchParams.set('code', '500');
       url.searchParams.set('message', 'An unexpected error occurred');
       return NextResponse.redirect(url);
