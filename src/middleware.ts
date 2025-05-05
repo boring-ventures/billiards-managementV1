@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@/lib/supabase'
-import * as authServerUtils from '@/lib/auth-server-utils'
+import { createServerClient } from '@supabase/ssr'
 import { AUTH_TOKEN_KEY } from '@/lib/auth-client-utils'
+
+// Function to get the Supabase cookie pattern
+function getSupabaseCookiePattern(): string {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const projectRef = supabaseUrl?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
+  return `sb-${projectRef}-auth-token`;
+}
 
 // Base URL for redirects - use the environment variable or default to the request origin
 const getBaseUrl = (request: NextRequest) => {
@@ -251,8 +257,25 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
     }
     
     try {
-      // Use our standardized server-side Supabase client
-      const supabase = authServerUtils.createSupabaseServerClient(request);
+      // Use Supabase client directly to avoid bundling issues
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name) {
+              return request.cookies.get(name)?.value;
+            },
+            set(name, value, options) {
+              // This is a middleware context, so we don't need to set cookies
+              // as they'll be included in the eventual response
+            },
+            remove(name, options) {
+              // This is a middleware context, so we don't need to remove cookies
+            },
+          },
+        }
+      );
       
       // Get the current session with timing
       getSessionTimer = startTimer();
@@ -436,4 +459,4 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
-}
+} 
