@@ -398,7 +398,7 @@ export async function hasApiPermission(
  * Check if a user has permission to perform a specific action on a section
  * Enhanced with detailed logging, timing metrics, and fallbacks
  */
-export async function hasPermission(
+export async function hasPermissionAsync(
   userId: string | null | undefined,
   section: string,
   action: string = 'view',
