@@ -2,14 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/auth-server-utils'
 import { AUTH_TOKEN_KEY } from '@/lib/auth-client-utils'
 
-// Add timing utilities for performance monitoring
+// Add timing utilities for performance monitoring that work in all environments
 const startTimer = () => {
-  return process.hrtime();
+  return Date.now();
 };
 
-const endTimer = (start: [number, number]) => {
-  const diff = process.hrtime(start);
-  return (diff[0] * 1e9 + diff[1]) / 1e6; // Return time in milliseconds
+const endTimer = (start: number) => {
+  return Date.now() - start; // Return elapsed time in milliseconds
 };
 
 // Enhance logging with performance context
@@ -217,8 +216,8 @@ function isSessionValid(session: any): boolean {
  */
 async function updateSessionAndCookies(request: NextRequest): Promise<NextResponse> {
   const overallTimer = startTimer();
-  let getSessionTimer: [number, number] | null = null;
-  let refreshSessionTimer: [number, number] | null = null;
+  let getSessionTimer: number | null = null;
+  let refreshSessionTimer: number | null = null;
   
   try {
     // Create a response that we'll modify with cookies and return

@@ -68,17 +68,17 @@ export function logError(
 
 /**
  * Start a timer for performance measurement
+ * Returns milliseconds timestamp that works in all environments including Vercel
  */
-export function startTimer(): [number, number] {
-  return process.hrtime();
+export function startTimer(): number {
+  return Date.now();
 }
 
 /**
  * End a timer and return duration in milliseconds
  */
-export function endTimer(start: [number, number]): number {
-  const diff = process.hrtime(start);
-  return (diff[0] * 1e9 + diff[1]) / 1e6; // Convert to milliseconds
+export function endTimer(start: number): number {
+  return Date.now() - start;
 }
 
 /**

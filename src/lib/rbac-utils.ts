@@ -181,17 +181,17 @@ function logPermissionCheck(
 
 /**
  * Get the current time in microseconds for performance measurement
+ * Using Date.now() for compatibility with all environments including Vercel
  */
 function getTime() {
-  return process.hrtime();
+  return Date.now();
 }
 
 /**
  * Calculate the elapsed time in milliseconds
  */
-function getElapsedTime(start: [number, number]) {
-  const diff = process.hrtime(start);
-  return (diff[0] * 1e9 + diff[1]) / 1e6; // Convert to milliseconds
+function getElapsedTime(start: number) {
+  return Date.now() - start;
 }
 
 /**
