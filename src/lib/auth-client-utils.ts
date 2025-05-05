@@ -1,7 +1,7 @@
 /**
  * Authentication utilities for client-side code
  */
-import { getSupabaseJS } from '@/lib/supabase/client';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 // Common token names
 export const AUTH_TOKEN_KEY = getSupabaseAuthCookieName()
@@ -37,7 +37,7 @@ export function processAuthCookieValue(value: string | null): string | null {
  */
 export function createBrowserSupabaseClient() {
   // This is now just a wrapper around the canonical client source
-  return getSupabaseJS();
+  return getSupabaseClient();
 }
 
 /**
@@ -46,7 +46,7 @@ export function createBrowserSupabaseClient() {
  */
 export function createAuthClient() {
   // Use the canonical client but configure it differently
-  return getSupabaseJS();
+  return getSupabaseClient();
 }
 
 /**
@@ -60,7 +60,7 @@ export async function refreshSession() {
       return { success: false, error: 'Cannot refresh session during server-side rendering' };
     }
     
-    const supabase = getSupabaseJS()
+    const supabase = getSupabaseClient()
     const { data, error } = await supabase.auth.refreshSession()
     
     if (error) {
