@@ -19,7 +19,11 @@ export async function POST(req: NextRequest) {
     
     // Create a JSON response with cookies that we'll modify
     const response = NextResponse.json(
-      { success: true, redirect: '/dashboard' },
+      { 
+        success: true,
+        redirect: '/dashboard',
+        sessionData: {} // Will be populated with non-sensitive session info
+      },
       { status: 200 }
     );
     
@@ -106,29 +110,56 @@ export async function POST(req: NextRequest) {
       user: sanitizedUser
     });
     
-    // Set an explicit session cookie (in addition to Supabase's handling)
-    response.cookies.set({
+    // Add non-sensitive session data to the response for client-side storage
+    // This will help with client-side auth detection
+    const responseData = {
+      success: true,
+      redirect: '/dashboard',
+      sessionData: {
+        userId: data.user.id,
+        email: data.user.email,
+        expires_at,
+        access_token_non_sensitive: access_token.substring(0, 10) + '...' // Just for verification
+      }
+    };
+    
+    // Create a new response with the updated data
+    const updatedResponse = NextResponse.json(responseData, { status: 200 });
+    
+    // Copy cookies from the original response
+    response.cookies.getAll().forEach(cookie => {
+      updatedResponse.cookies.set({
+        ...cookie, // Spread the cookie properties
+      });
+    });
+    
+    // Set an explicit session cookie with appropriate options
+    updatedResponse.cookies.set({
       name: cookieName,
       value: authCookieValue,
       path: '/',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       secure: process.env.NODE_ENV === 'production',
-      httpOnly: true
+      // Make the cookie non-HttpOnly to allow client-side access for debugging
+      httpOnly: false
     });
     
     // Also set the general auth token
-    response.cookies.set({
+    updatedResponse.cookies.set({
       name: AUTH_TOKEN_KEY,
       value: authCookieValue,
       path: '/',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       secure: process.env.NODE_ENV === 'production',
-      httpOnly: true
+      // Make the cookie non-HttpOnly to allow client-side access for debugging
+      httpOnly: false
     });
     
-    return response;
+    console.log(`[API] Successfully signed in user: ${data.user.email}`);
+    
+    return updatedResponse;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

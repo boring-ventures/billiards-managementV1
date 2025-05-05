@@ -2,7 +2,7 @@
  * @deprecated Use src/lib/supabase/client.ts instead 
  * This file is maintained for backward compatibility only
  */
-import { getSupabaseClient, getSupabaseJS } from '@/lib/supabase/client';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 // Re-export the client from the canonical source
 export const supabase = () => getSupabaseClient();

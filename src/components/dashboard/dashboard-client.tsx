@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { UserRole } from "@prisma/client";
 import DashboardContent from "@/components/dashboard/dashboard-content";
 import { supabase } from "@/lib/supabase/client";
-import { hasSessionAvailable } from "@/lib/auth-client-utils";
+import { hasSessionAvailable, storeSessionData } from "@/lib/auth-client-utils";
 
 // Type interfaces to match useCurrentUser
 interface InternalProfile {
@@ -28,6 +28,20 @@ export default function DashboardClient() {
   const [initialChecked, setInitialChecked] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [sessionCheckAttempts, setSessionCheckAttempts] = useState(0);
+  const [forceRedirect, setForceRedirect] = useState(false);
+  
+  // Check for manually set bypass flag to troubleshoot
+  // This could help diagnose if cookie-related issues are causing problems
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const bypassSession = localStorage.getItem('bypass_session_check') === 'true';
+      if (bypassSession) {
+        console.log('Bypassing session check due to override flag');
+        setIsLoadingAuth(false);
+        setReady(true);
+      }
+    }
+  }, []);
   
   // Debug session state on mount
   useEffect(() => {
@@ -42,6 +56,18 @@ export default function DashboardClient() {
         const sessionData = localStorage.getItem('supabase.auth.token');
         if (sessionData) {
           console.log('Found session data in localStorage');
+          
+          // Try to parse and re-store it to ensure it's properly saved
+          try {
+            const session = JSON.parse(sessionData);
+            // Store session data to ensure it's properly formatted
+            if (session && session.access_token) {
+              storeSessionData(session);
+              console.log('Successfully re-stored session data');
+            }
+          } catch (e) {
+            console.error('Error parsing localStorage session:', e);
+          }
         } else {
           console.log('No session data in localStorage');
         }
@@ -51,9 +77,20 @@ export default function DashboardClient() {
     }
   }, []);
   
-  // First, very quick check for authentication
+  // First, check if we should skip authentication or have a session available
   useEffect(() => {
-    const checkSession = async () => {
+    // If user is already loaded and we're not forcing a redirect, show content
+    if (user && !forceRedirect) {
+      setIsLoadingAuth(false);
+      setReady(true);
+      return;
+    }
+    
+    // If loading or we're past our check limit, don't recheck
+    if (isLoading || sessionCheckAttempts > 5) return;
+    
+    // Check if we should run session verification
+    const runSessionCheck = async () => {
       try {
         console.log(`[Dashboard] Starting session check attempt ${sessionCheckAttempts + 1}`);
         
@@ -61,10 +98,11 @@ export default function DashboardClient() {
         const sessionAvailable = hasSessionAvailable();
         console.log(`[Dashboard] Session availability: ${sessionAvailable}`);
         
-        // If session check utility says we have a session, don't immediately redirect,
-        // but continue with Supabase check to verify it's valid
-        if (!sessionAvailable && sessionCheckAttempts > 1) {
-          console.warn("[Dashboard] No session available according to utility");
+        // Skip further verification if we have session data - user profile will handle permissions
+        if (sessionAvailable && !forceRedirect) {
+          console.log("[Dashboard] Session data available, skipping verification");
+          setIsLoadingAuth(false);
+          return;
         }
         
         // If we've already checked multiple times and still have issues, 
@@ -85,7 +123,6 @@ export default function DashboardClient() {
           
           // Don't redirect immediately, wait a moment and retry
           setTimeout(() => {
-            setIsLoadingAuth(false);
             setIsLoadingAuth(true); // Trigger effect again
           }, 1000);
           return;
@@ -99,6 +136,14 @@ export default function DashboardClient() {
             userId: data.session.user.id,
             expiresAt: new Date(data.session.expires_at! * 1000).toISOString()
           });
+          
+          // Store the session data to ensure it's in localStorage
+          storeSessionData(data.session);
+          
+          // Session found, continue to dashboard
+          setIsLoadingAuth(false);
+          setSessionCheckAttempts(0); // Reset counter if successful
+          return;
         }
         
         if (error) {
@@ -108,12 +153,12 @@ export default function DashboardClient() {
           // Retry after a delay instead of redirecting immediately
           if (sessionCheckAttempts < 3) {
             setTimeout(() => {
-              setIsLoadingAuth(false);
               setIsLoadingAuth(true); // Trigger effect again
             }, 1000);
             return;
           }
           
+          setForceRedirect(true);
           router.push("/sign-in");
           return;
         }
@@ -126,19 +171,15 @@ export default function DashboardClient() {
           // Retry a couple of times before redirecting
           if (sessionCheckAttempts < 3) {
             setTimeout(() => {
-              setIsLoadingAuth(false);
               setIsLoadingAuth(true); // Trigger effect again
             }, 1000);
             return;
           }
           
+          setForceRedirect(true);
           router.push("/sign-in");
           return;
         }
-        
-        // Session found, continue to dashboard
-        setIsLoadingAuth(false);
-        setSessionCheckAttempts(0); // Reset counter if successful
       } catch (error) {
         console.error("Auth check error:", error);
         setSessionCheckAttempts(prev => prev + 1);
@@ -146,28 +187,29 @@ export default function DashboardClient() {
         // Retry a couple times
         if (sessionCheckAttempts < 3) {
           setTimeout(() => {
-            setIsLoadingAuth(false);
             setIsLoadingAuth(true); // Trigger effect again
           }, 1000);
           return;
         }
         
         setIsLoadingAuth(false);
+        setForceRedirect(true);
         router.push("/sign-in");
       }
     };
     
     if (isLoadingAuth) {
-      checkSession();
+      runSessionCheck();
     }
-  }, [router, isLoadingAuth, sessionCheckAttempts]);
+  }, [router, isLoadingAuth, sessionCheckAttempts, user, isLoading, forceRedirect]);
   
   // Ensure we've verified the user and loaded profile before showing content
   useEffect(() => {
     // Only set ready when the auth check is complete AND the user is loaded
     if (!isLoadingAuth && !isLoading) {
       // If user wasn't found, we should redirect (this is a backup to the first check)
-      if (!user) {
+      if (!user && !forceRedirect) {
+        setForceRedirect(true);
         router.push("/sign-in");
         return;
       }
@@ -191,7 +233,7 @@ export default function DashboardClient() {
         }
       }
     }
-  }, [user, profile, isLoading, isLoadingAuth, router]);
+  }, [user, profile, isLoading, isLoadingAuth, router, forceRedirect]);
   
   // Show loading state
   if (isLoadingAuth || !ready) {

@@ -23,19 +23,19 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   // Enable faster builds with SWC
-  experimental: {
-    forceSwcTransforms: true,
-    serverActions: {
-      bodySizeLimit: '2mb',
-      allowedOrigins: [
-        'localhost:3000', 
-        'billiards-management-v1.vercel.app', 
-        'billiards-management-v1-7q7ypbvoo.vercel.app',
-        'billiards-management-v1-7rneq5217.vercel.app',
-        '*.vercel.app'
-      ]
-    }
-  },
+  // experimental: {
+  //   forceSwcTransforms: true,
+  //   serverActions: {
+  //     bodySizeLimit: '2mb',
+  //     allowedOrigins: [
+  //       'localhost:3000', 
+  //       'billiards-management-v1.vercel.app', 
+  //       'billiards-management-v1-7q7ypbvoo.vercel.app',
+  //       'billiards-management-v1-7rneq5217.vercel.app',
+  //       '*.vercel.app'
+  //     ]
+  //   }
+  // },
   // Improve response to timeouts in serverless environments
   serverRuntimeConfig: {
     // Increase function timeouts as a fallback

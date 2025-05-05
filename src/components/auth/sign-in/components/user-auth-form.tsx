@@ -21,6 +21,8 @@ import type { SignInFormData, UserAuthFormProps } from "@/types/auth/sign-in";
 import { signInFormSchema } from "@/types/auth/sign-in";
 import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import { storeSessionData } from "@/lib/auth-client-utils";
 
 export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -38,13 +40,50 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
   async function onSubmit(data: SignInFormData) {
     try {
       setIsLoading(true);
+      
+      // First, try direct Supabase auth to ensure session cookies are set properly
+      const supabaseClient = supabase();
+      if (supabaseClient && supabaseClient.auth) {
+        const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
+          email: data.email,
+          password: data.password
+        });
+        
+        if (authError) {
+          throw authError;
+        }
+        
+        // If we have auth data, manually store it
+        if (authData && authData.session) {
+          console.log("Successful Supabase direct login, storing session data");
+          storeSessionData(authData.session);
+          
+          // Set a flag to indicate we have an active session
+          localStorage.setItem('has_session', 'true');
+          
+          // For debugging
+          console.log("Session stored successfully:", {
+            hasLocalStorage: !!localStorage.getItem('supabase.auth.token'),
+            hasSessionFlag: localStorage.getItem('has_session') === 'true'
+          });
+        }
+      }
+      
+      // Then also use our custom sign-in implementation as a backup
       await signIn(data.email, data.password);
+      
       toast({
         title: "Success",
         description: "You have been signed in.",
       });
+      
+      // Add a small delay to ensure cookies/storage is set before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Navigate to dashboard
       router.push("/dashboard");
-    } catch {
+    } catch (error) {
+      console.error("Sign-in error:", error);
       toast({
         title: "Error",
         description: "Invalid email or password.",
