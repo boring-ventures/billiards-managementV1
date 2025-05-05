@@ -3,6 +3,22 @@ import { refreshSession } from '@/lib/auth-client-utils';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
+// Type definitions for permissions structure (client-side version)
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete';
+
+export interface SectionPermission {
+  view?: boolean;
+  create?: boolean;
+  edit?: boolean;
+  delete?: boolean;
+}
+
+export interface Permissions {
+  sections: {
+    [sectionKey: string]: SectionPermission;
+  };
+}
+
 export type Profile = {
   id: string;
   userId: string;
@@ -20,6 +36,7 @@ type AuthState = {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  permissions: Permissions | null;
   error: string | null;
 };
 
@@ -30,6 +47,7 @@ type AuthContextType = AuthState & {
   refreshAuth: () => Promise<boolean>;
   updateProfile: (profile: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
   isSuperAdmin: boolean;
+  hasPermissionClient: (sectionKey: string, action: PermissionAction) => boolean;
 };
 
 // Create context with default values
@@ -39,6 +57,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   profile: null,
+  permissions: null,
   error: null,
   isSuperAdmin: false,
   signIn: async () => ({ success: false, error: 'Auth context not initialized' }),
@@ -46,10 +65,16 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
   refreshAuth: async () => false,
   updateProfile: async () => ({ success: false, error: 'Auth context not initialized' }),
+  hasPermissionClient: () => false,
 });
 
 // Hook to use the authentication context
 export const useAuth = () => useContext(AuthContext);
+
+// Client-side version of isSuperAdmin function
+function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === 'SUPERADMIN';
+}
 
 // Provider component
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -59,6 +84,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     user: null,
     session: null,
     profile: null,
+    permissions: null,
     error: null,
   });
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -102,12 +128,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw new Error(data.error || 'Failed to fetch profile');
       }
       
-      return data.profile;
+      return {
+        profile: data.profile,
+        permissions: data.permissions || null
+      };
     } catch (error) {
       console.error('Error fetching profile:', error);
-      return null;
+      return { profile: null, permissions: null };
     }
   }, []);
+
+  // Client-side permission check function
+  const hasPermissionClient = useCallback((sectionKey: string, action: PermissionAction): boolean => {
+    // Superadmin bypass - always grant access
+    if (isSuperAdmin) {
+      return true;
+    }
+    
+    // If no permissions or invalid structure, deny access
+    if (!state.permissions || !state.permissions.sections) {
+      return false;
+    }
+    
+    // Check if section exists in permissions
+    const sectionPermissions = state.permissions.sections[sectionKey];
+    if (!sectionPermissions) {
+      return false;
+    }
+    
+    // Check if action is allowed
+    return !!sectionPermissions[action];
+  }, [isSuperAdmin, state.permissions]);
 
   // Check current auth status with improved error handling
   const checkAuth = useCallback(async () => {
@@ -133,10 +184,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (session && session.user) {
         try {
-          const profile = await fetchProfile(session.user.id);
+          const { profile, permissions } = await fetchProfile(session.user.id);
           
           // Determine if user is a SUPERADMIN
-          const superAdminStatus = profile?.role === 'SUPERADMIN';
+          const superAdminStatus = isSuperAdminRole(profile?.role);
           setIsSuperAdmin(superAdminStatus);
           
           setState({
@@ -145,6 +196,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             user: session.user,
             session,
             profile,
+            permissions,
             error: null,
           });
         } catch (profileError) {
@@ -155,6 +207,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             user: session.user,
             session,
             profile: null,
+            permissions: null,
             error: 'Failed to load profile',
           });
         }
@@ -167,6 +220,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           user: null,
           session: null,
           profile: null,
+          permissions: null,
           error: null,
         });
         setIsSuperAdmin(false);
@@ -182,6 +236,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         user: null,
         session: null,
         profile: null,
+        permissions: null,
         error: error instanceof Error ? error.message : 'Authentication check failed',
       });
       setIsSuperAdmin(false);
@@ -215,6 +270,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const contextValue = useMemo(() => ({
     ...state,
     isSuperAdmin,
+    hasPermissionClient,
     signIn: async (email: string, password: string) => {
       try {
         setState(prev => ({ ...prev, isLoading: true, error: null }));
@@ -300,6 +356,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           user: null,
           session: null,
           profile: null,
+          permissions: null,
           error: null,
         });
         setIsSuperAdmin(false);
@@ -364,7 +421,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         };
       }
     },
-  }), [state, isSuperAdmin, checkAuth]);
+  }), [state, isSuperAdmin, hasPermissionClient, checkAuth]);
 
   return (
     <AuthContext.Provider value={contextValue}>

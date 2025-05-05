@@ -7,60 +7,273 @@ import {
 
 const prisma = new PrismaClient();
 
+// Define dashboard sections with their respective titles and descriptions
+const dashboardSections = [
+  {
+    key: "dashboard",
+    title: "Dashboard",
+    description: "Main overview dashboard",
+    icon: "layout-dashboard",
+    order: 10,
+  },
+  {
+    key: "inventory",
+    title: "Inventory",
+    description: "Manage inventory items and categories",
+    icon: "package",
+    order: 20,
+  },
+  {
+    key: "tables",
+    title: "Tables",
+    description: "Manage billiard tables and reservations",
+    icon: "table-2",
+    order: 30,
+  },
+  {
+    key: "finance",
+    title: "Finance",
+    description: "Track financial transactions",
+    icon: "dollar-sign",
+    order: 40,
+  },
+  {
+    key: "reports",
+    title: "Reports",
+    description: "Generate and view reports",
+    icon: "bar-chart",
+    order: 50,
+  },
+  {
+    key: "admin",
+    title: "Admin",
+    description: "Admin settings",
+    icon: "settings",
+    order: 60,
+  },
+  {
+    key: "admin.users",
+    title: "Users",
+    description: "Manage users",
+    icon: "users",
+    order: 61,
+  },
+  {
+    key: "admin.roles",
+    title: "Roles",
+    description: "Manage roles and permissions",
+    icon: "shield",
+    order: 62,
+  },
+  {
+    key: "admin.companies",
+    title: "Companies",
+    description: "Manage companies",
+    icon: "building",
+    order: 63,
+  },
+];
+
+// Permission structures for different roles
+const rolePermissions = {
+  SUPERADMIN: {
+    sections: {
+      dashboard: { view: true, create: true, edit: true, delete: true },
+      inventory: { view: true, create: true, edit: true, delete: true },
+      tables: { view: true, create: true, edit: true, delete: true },
+      finance: { view: true, create: true, edit: true, delete: true },
+      reports: { view: true, create: true, edit: true, delete: true },
+      admin: { view: true, create: true, edit: true, delete: true },
+      "admin.users": { view: true, create: true, edit: true, delete: true },
+      "admin.roles": { view: true, create: true, edit: true, delete: true },
+      "admin.companies": { view: true, create: true, edit: true, delete: true },
+    },
+  },
+  ADMIN: {
+    sections: {
+      dashboard: { view: true, create: true, edit: true, delete: true },
+      inventory: { view: true, create: true, edit: true, delete: true },
+      tables: { view: true, create: true, edit: true, delete: true },
+      finance: { view: true, create: true, edit: true, delete: true },
+      reports: { view: true, create: true, edit: true, delete: true },
+      admin: { view: true },
+      "admin.users": { view: true, create: true, edit: true, delete: true },
+    },
+  },
+  SELLER: {
+    sections: {
+      dashboard: { view: true },
+      inventory: { view: true },
+      tables: { view: true, create: true, edit: true },
+      finance: { view: true, create: true },
+      reports: { view: true },
+    },
+  },
+  USER: {
+    sections: {
+      dashboard: { view: true },
+      tables: { view: true },
+    },
+  },
+};
+
 async function main() {
   console.log("Starting seed process...");
 
   // Clean up existing data to prevent duplicates
   await cleanupData();
 
+  // Seed dashboard sections
+  console.log("Creating dashboard sections...");
+  for (const section of dashboardSections) {
+    await prisma.dashboardSection.upsert({
+      where: { key: section.key },
+      update: section,
+      create: section,
+    });
+  }
+  console.log("Dashboard sections created");
+
+  // Create roles if they don't exist yet
+  console.log("Creating roles...");
+  const roles = {
+    SUPERADMIN: await prisma.role.upsert({
+      where: { name: "SUPERADMIN" },
+      update: { permissions: rolePermissions.SUPERADMIN },
+      create: {
+        name: "SUPERADMIN",
+        description: "Super Administrator with full access",
+        permissions: rolePermissions.SUPERADMIN,
+      },
+    }),
+    ADMIN: await prisma.role.upsert({
+      where: { name: "ADMIN" },
+      update: { permissions: rolePermissions.ADMIN },
+      create: {
+        name: "ADMIN",
+        description: "Administrator with company-wide access",
+        permissions: rolePermissions.ADMIN,
+      },
+    }),
+    SELLER: await prisma.role.upsert({
+      where: { name: "SELLER" },
+      update: { permissions: rolePermissions.SELLER },
+      create: {
+        name: "SELLER",
+        description: "Sales staff with limited access",
+        permissions: rolePermissions.SELLER,
+      },
+    }),
+    USER: await prisma.role.upsert({
+      where: { name: "USER" },
+      update: { permissions: rolePermissions.USER },
+      create: {
+        name: "USER",
+        description: "Basic user with minimal access",
+        permissions: rolePermissions.USER,
+      },
+    }),
+  };
+  console.log("Roles created");
+
+  // Migrate existing profiles to use new role IDs
+  console.log("Migrating existing profiles to use new roles...");
+  const profiles = await prisma.profile.findMany();
+  for (const profile of profiles) {
+    // Map old enum role to new role ID
+    const roleKey = profile.role as keyof typeof roles;
+    const roleId = roles[roleKey]?.id;
+    
+    if (roleId) {
+      await prisma.profile.update({
+        where: { id: profile.id },
+        data: { roleId },
+      });
+      console.log(`Updated profile ${profile.id} with role ${roleKey}`);
+    }
+  }
+
+  // Continue with the rest of the seeding process...
   // Create a superadmin user without company association
-  const superadmin = await prisma.profile.create({
-    data: {
+  const superadmin = await prisma.profile.upsert({
+    where: { userId: "00000000-0000-0000-0000-000000000001" },
+    update: {
+      firstName: "Super",
+      lastName: "Admin",
+      role: UserRole.SUPERADMIN,
+      roleId: roles.SUPERADMIN.id,
+      active: true,
+    },
+    create: {
       userId: "00000000-0000-0000-0000-000000000001",
       firstName: "Super",
       lastName: "Admin",
       role: UserRole.SUPERADMIN,
+      roleId: roles.SUPERADMIN.id,
       active: true,
     },
   });
 
-  console.log("Created superadmin:", superadmin);
-
   // Create a company
-  const company = await prisma.company.create({
-    data: {
+  const company = await prisma.company.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000004" },
+    update: {
+      name: "Billiards Alpha",
+      phone: "+59170000000",
+      address: "Av. Libertadores #1000",
+    },
+    create: {
+      id: "00000000-0000-0000-0000-000000000004",
       name: "Billiards Alpha",
       phone: "+59170000000",
       address: "Av. Libertadores #1000",
     },
   });
 
-  console.log("Created company:", company);
-
   // Create admin and staff users linked to the company
-  const alice = await prisma.profile.create({
-    data: {
+  const alice = await prisma.profile.upsert({
+    where: { userId: "00000000-0000-0000-0000-000000000002" },
+    update: {
+      companyId: company.id,
+      firstName: "Alice",
+      lastName: "Johnson",
+      role: UserRole.ADMIN,
+      roleId: roles.ADMIN.id,
+      active: true,
+    },
+    create: {
       userId: "00000000-0000-0000-0000-000000000002",
       companyId: company.id,
       firstName: "Alice",
       lastName: "Johnson",
       role: UserRole.ADMIN,
+      roleId: roles.ADMIN.id,
       active: true,
     },
   });
 
-  const bob = await prisma.profile.create({
-    data: {
+  const bob = await prisma.profile.upsert({
+    where: { userId: "00000000-0000-0000-0000-000000000003" },
+    update: {
+      companyId: company.id,
+      firstName: "Bob",
+      lastName: "Smith",
+      role: UserRole.SELLER,
+      roleId: roles.SELLER.id,
+      active: true,
+    },
+    create: {
       userId: "00000000-0000-0000-0000-000000000003",
       companyId: company.id,
       firstName: "Bob",
       lastName: "Smith",
       role: UserRole.SELLER,
+      roleId: roles.SELLER.id,
       active: true,
     },
   });
 
-  console.log("Created company users:", { alice, bob });
+  console.log("Created or updated company users:", { alice, bob });
 
   // Create tables
   const table1 = await prisma.table.create({
@@ -267,7 +480,7 @@ async function main() {
 
   console.log("Created profiles:", { mockProfile, supabaseProfile });
 
-  console.log("Seed completed successfully!");
+  console.log("Seeding completed successfully!");
 }
 
 // Helper function to clean up existing data to prevent duplicates on re-runs

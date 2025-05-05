@@ -1,125 +1,162 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseCookiePattern } from '@/lib/supabase/client';
 
 /**
- * Process auth cookie value - handles "base64-" prefixed cookies
- * Supabase auth cookie format can change between versions
+ * Finds all authentication-related cookies in a request
  */
-function processAuthCookieValue(value: string | null): string | null {
-  if (!value) return null;
-  
-  // Handle "base64-" prefixed cookies - strip the prefix
-  if (value.startsWith('base64-')) {
-    console.log('[Cookie] Removing base64 prefix from cookie value');
-    return value.substring(7); // Remove 'base64-' prefix
+export function findAuthCookies(request: NextRequest): Array<{ name: string, value: string }> {
+  try {
+    const cookiePattern = getSupabaseCookiePattern();
+    const cookies = request.cookies.getAll();
+    
+    // Filter and map auth cookies
+    const authCookies = cookies
+      .filter(cookie => cookie.name.startsWith(cookiePattern) || cookie.name.includes('auth-token'))
+      .map(cookie => ({
+        name: cookie.name,
+        value: cookie.value
+      }));
+    
+    return authCookies;
+  } catch (error) {
+    console.error(`[Error] Finding auth cookies:`, error);
+    return [];
   }
-  
-  return value;
 }
 
 /**
- * Creates a Supabase server client for API routes using Next.js App Router
- * This handles the correct cookie access pattern for both async and sync contexts
+ * Create a standardized Supabase client for server components and API routes
+ * with consistent, robust cookie handling.
+ * 
+ * This should be the primary way to create a Supabase client on the server.
  */
-export function createSupabaseRouteHandlerClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        async get(name: string) {
-          try {
-            const cookieStore = cookies();
-            let cookieValue: string | null = null;
-            
-            try {
-              // Await the promise
-              const allCookies = await cookieStore;
-              // Get the specific cookie value
-              cookieValue = allCookies.get(name)?.value || null;
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieValue = cookieStore.get?.(name)?.value || null;
+export function createServerSupabaseClient(requestOrResponse?: NextRequest | NextResponse) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+
+  // Handle cases with NextRequest
+  if (requestOrResponse && 'cookies' in requestOrResponse) {
+    const request = requestOrResponse as NextRequest;
+    const authCookies = findAuthCookies(request);
+    
+    return createServerClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        cookies: {
+          get(name: string) {
+            // First try exact cookie match
+            const cookie = request.cookies.get(name);
+            if (cookie?.value) {
+              return cookie.value;
             }
             
-            // Log cookie retrieval
-            console.log(`[RouteHandler] Retrieved cookie ${name}:`, 
-              cookieValue ? (cookieValue.length > 15 ? 
-                cookieValue.substring(0, 10) + '...' : cookieValue) : 'null');
+            // If looking for an auth cookie and not found, try to find an alternative
+            const cookiePattern = getSupabaseCookiePattern();
+            if (name.startsWith(cookiePattern) || name.includes('auth-token')) {
+              // If we have any auth cookie, return the first one's value
+              if (authCookies.length > 0) {
+                return authCookies[0].value;
+              }
+            }
             
-            // Process auth cookies to handle base64 prefix
-            return processAuthCookieValue(cookieValue);
+            return null;
+          },
+          set(name: string, value: string, options: any) {
+            // API routes don't need to set cookies in most cases
+            // This is handled by the middleware or specific handlers
+          },
+          remove(name: string, options: any) {
+            // API routes don't need to remove cookies in most cases
+            // This is handled by the middleware or specific handlers
+          }
+        }
+      }
+    );
+  }
+
+  // Handle standard Server Component case using the global cookies()
+  return createServerClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        get(name: string) {
+          try {
+            const cookieStore = cookies();
+            const value = cookieStore.get(name)?.value || null;
+            return value;
           } catch (error) {
-            console.error('[Cookie] Error reading cookie:', error);
+            console.error('[Error] Reading cookie:', error);
             return null;
           }
         },
-        async set(name, value, options) {
+        set(name: string, value: string, options: any) {
           try {
             const cookieStore = cookies();
-            
-            console.log(`[RouteHandler] Setting cookie ${name} with options:`, options);
-            
-            try {
-              // Await the promise and set the cookie
-              const store = await cookieStore;
-              store.set(name, value, {
-                ...options,
-                // Ensure critical attributes are set
-                path: options.path || '/',
-                sameSite: options.sameSite || 'lax'
-              });
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieStore.set?.(name, value, {
-                ...options,
-                // Ensure critical attributes are set
-                path: options.path || '/',
-                sameSite: options.sameSite || 'lax'
-              });
-            }
+            cookieStore.set(name, value, options);
           } catch (error) {
-            console.error('[Cookie] Error setting cookie:', error);
+            console.error('[Error] Setting cookie:', error);
           }
         },
-        async remove(name, options) {
+        remove(name: string, options: any) {
           try {
             const cookieStore = cookies();
-            
-            console.log(`[RouteHandler] Removing cookie ${name}`);
-            
-            try {
-              // Await the promise and remove the cookie
-              const store = await cookieStore;
-              store.set(name, '', { 
-                ...options, 
-                maxAge: 0,
-                path: options.path || '/' 
-              });
-            } catch (err) {
-              // Fallback for sync context
-              // @ts-ignore - Access sync API
-              cookieStore.set?.(name, '', { 
-                ...options, 
-                maxAge: 0,
-                path: options.path || '/' 
-              });
-            }
+            cookieStore.delete(name, options);
           } catch (error) {
-            console.error('[Cookie] Error removing cookie:', error);
+            console.error('[Error] Removing cookie:', error);
           }
         }
-      },
-      auth: {
-        flowType: 'pkce',
-        detectSessionInUrl: false,
-        autoRefreshToken: true,
-        persistSession: true,
       }
     }
   );
+}
+
+/**
+ * Creates a Supabase client specifically for route handlers
+ * with enhanced error logging and robust cookie reading
+ */
+export function createSupabaseRouteHandlerClient(request: NextRequest) {
+  return createServerSupabaseClient(request);
+}
+
+/**
+ * Refresh the user's session in an API route
+ * Returns the updated session if successful
+ */
+export async function refreshSessionInApiRoute(request: NextRequest) {
+  try {
+    const supabase = createServerSupabaseClient(request);
+    const { data, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('[Auth] Error refreshing session:', error);
+      return null;
+    }
+    
+    if (!data.session) {
+      return null;
+    }
+    
+    // Try to refresh if session exists
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    
+    if (refreshError) {
+      console.error('[Auth] Error refreshing token:', refreshError);
+      return data.session; // Return original session if refresh fails
+    }
+    
+    return refreshData.session;
+  } catch (error) {
+    console.error('[Auth] Unexpected error refreshing session:', error);
+    return null;
+  }
 }
 
 /**

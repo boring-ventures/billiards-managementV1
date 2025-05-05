@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useAuth } from "@/hooks/use-auth";
 import { UserRole } from "@prisma/client";
 import type {
   NavCollapsible,
@@ -38,26 +39,47 @@ import type {
   NavGroup as NavGroupType,
 } from "./types";
 
+// Map sidebar navigation items to their corresponding section keys for permissions
+const NAV_ITEM_TO_SECTION_KEY: Record<string, string> = {
+  "Dashboard": "dashboard",
+  "Inventory": "inventory",
+  "POS": "inventory",
+  "Tables": "tables",
+  "Finance": "finance",
+  "Reports": "reports",
+  "Settings": "admin",
+  "Select Workspace": "admin.companies",
+  "Users": "admin.users",
+  "Companies": "admin.companies",
+  "Roles": "admin.roles"
+};
+
 export function NavGroup({ title, items }: NavGroupType) {
   const { state } = useSidebar();
   const pathname = usePathname();
   const { profile } = useCurrentUser();
+  const { hasPermissionClient, isSuperAdmin } = useAuth();
   
-  // Filter items based on user role
+  // Filter items based on user permissions
   const filteredItems = items.filter(item => {
-    // If the item has a 'requiredRole' property, check if user has that role
-    if ('requiredRole' in item) {
-      if (!profile || item.requiredRole === undefined) return true;
-      
-      // Special handling for the Select Workspace item - only show for SUPERADMIN
-      if (item.title === 'Select Workspace') {
-        return profile.role === UserRole.SUPERADMIN;
-      }
-      
-      return item.requiredRole === profile.role;
+    const itemTitle = item.title;
+    
+    // If it's a special "Select Workspace" item, only show for SUPERADMINs
+    if (itemTitle === 'Select Workspace') {
+      return isSuperAdmin;
     }
-    return true;
+    
+    // Get the appropriate section key for this navigation item
+    const sectionKey = NAV_ITEM_TO_SECTION_KEY[itemTitle] || itemTitle.toLowerCase();
+    
+    // Check if user has 'view' permission for this section
+    return hasPermissionClient(sectionKey, 'view');
   });
+
+  // Don't render the group if there are no visible items
+  if (filteredItems.length === 0) {
+    return null;
+  }
 
   return (
     <SidebarGroup>
@@ -130,6 +152,27 @@ const SidebarMenuCollapsible = ({
   pathname: string;
 }) => {
   const { setOpenMobile } = useSidebar();
+  const { hasPermissionClient } = useAuth();
+  
+  // Filter submenu items based on permissions
+  const filteredSubItems = item.items.filter(subItem => {
+    if (isNavLink(subItem)) {
+      const itemTitle = subItem.title;
+      // Map the submenu item to its section key
+      const sectionKey = NAV_ITEM_TO_SECTION_KEY[itemTitle] || 
+                         `${NAV_ITEM_TO_SECTION_KEY[item.title]}.${itemTitle.toLowerCase()}`;
+      
+      // Check if user has 'view' permission for this section
+      return hasPermissionClient(sectionKey, 'view');
+    }
+    return false;
+  });
+  
+  // Don't render the collapsible if there are no visible subitems
+  if (filteredSubItems.length === 0) {
+    return null;
+  }
+  
   return (
     <Collapsible
       asChild
@@ -147,7 +190,7 @@ const SidebarMenuCollapsible = ({
         </CollapsibleTrigger>
         <CollapsibleContent className="CollapsibleContent">
           <SidebarMenuSub>
-            {item.items.map((subItem: NavItem) => {
+            {filteredSubItems.map((subItem: NavItem) => {
               if (isNavLink(subItem)) {
                 return (
                   <SidebarMenuSubItem key={subItem.title}>
@@ -183,6 +226,27 @@ const SidebarMenuCollapsedDropdown = ({
   item: NavCollapsible;
   pathname: string;
 }) => {
+  const { hasPermissionClient } = useAuth();
+  
+  // Filter dropdown items based on permissions
+  const filteredSubItems = item.items.filter(subItem => {
+    if (isNavLink(subItem)) {
+      const itemTitle = subItem.title;
+      // Map the dropdown item to its section key
+      const sectionKey = NAV_ITEM_TO_SECTION_KEY[itemTitle] || 
+                         `${NAV_ITEM_TO_SECTION_KEY[item.title]}.${itemTitle.toLowerCase()}`;
+      
+      // Check if user has 'view' permission for this section
+      return hasPermissionClient(sectionKey, 'view');
+    }
+    return false;
+  });
+  
+  // Don't render the dropdown if there are no visible subitems
+  if (filteredSubItems.length === 0) {
+    return null;
+  }
+  
   return (
     <SidebarMenuItem>
       <DropdownMenu>
@@ -202,7 +266,7 @@ const SidebarMenuCollapsedDropdown = ({
             {item.title} {item.badge ? `(${item.badge})` : ""}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {item.items.map((sub: NavItem) => {
+          {filteredSubItems.map((sub: NavItem) => {
             if (isNavLink(sub)) {
               return (
                 <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>

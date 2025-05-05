@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
 import type { Prisma, Profile } from "@prisma/client";
-import { createAPIRouteClient } from "@/lib/auth-server-utils";
+import { createSupabaseServerClient } from "@/lib/auth-server-utils";
+import { getUserRole } from "@/lib/rbac-utils";
 
 // Common function to create a JSON response with proper headers
 function createJsonResponse(data: any, status: number = 200) {
@@ -34,8 +35,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
     
-    // Initialize Supabase client using our enhanced API Route client
-    const supabase = createAPIRouteClient(request);
+    // Initialize Supabase client using our enhanced standardized client
+    const supabase = createSupabaseServerClient(request);
     
     // Get authenticated user - this is common for both paths
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -75,7 +76,10 @@ export async function GET(request: NextRequest) {
         return createJsonResponse({ error: "Profile not found" }, 404);
       }
       
-      return createJsonResponse({ profile });
+      // Get role and permissions for the requested user
+      const { role, permissions } = await getUserRole(userIdParam);
+      
+      return createJsonResponse({ profile, permissions });
     }
     
     // Get the user's profile from the database
@@ -148,9 +152,13 @@ export async function GET(request: NextRequest) {
         
         console.log(`[API:profile] New profile created successfully`);
         
+        // Get initial permissions for the new user
+        const { permissions } = await getUserRole(user.id);
+        
         // Use our helper to return a consistent JSON response
         return createJsonResponse({ 
           profile: newProfile,
+          permissions,
           created: true
         });
       } catch (createError) {
@@ -162,9 +170,12 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Profile found, return it
+    // Get role and permissions for the user
+    const { permissions } = await getUserRole(user.id);
+    
+    // Profile found, return it with permissions
     console.log(`[API:profile] Profile found for user ${user.id}`);
-    return createJsonResponse({ profile });
+    return createJsonResponse({ profile, permissions });
     
   } catch (error) {
     console.error(`[API:profile] Unexpected error:`, error);
@@ -183,7 +194,7 @@ export async function PUT(request: NextRequest) {
     const { firstName, lastName, avatarUrl, active } = data;
     
     // Initialize Supabase client using our enhanced API Route client
-    const supabase = createAPIRouteClient(request);
+    const supabase = createSupabaseServerClient(request);
     
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -256,7 +267,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize Supabase client and verify authentication for security
-    const supabase = createAPIRouteClient(request);
+    const supabase = createSupabaseServerClient(request);
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
@@ -324,7 +335,7 @@ export async function GETAll(req: Request) {
   try {
     // Initialize Supabase client and verify authentication
     const request = req as unknown as NextRequest;
-    const supabase = createAPIRouteClient(request);
+    const supabase = createSupabaseServerClient(request);
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {

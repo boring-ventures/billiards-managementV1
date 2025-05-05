@@ -1,11 +1,13 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+  schemas   = ["public", "auth"]
 }
 
 model Company {
@@ -29,6 +31,34 @@ model Company {
   joinRequests          CompanyJoinRequest[]
 
   @@map("companies")
+  @@schema("public")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  permissions Json     @default("{\"sections\":{}}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profiles    Profile[]
+
+  @@map("roles")
+  @@schema("public")
+}
+
+model DashboardSection {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  title       String
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("dashboard_sections")
+  @@schema("public")
 }
 
 model Profile {
@@ -38,6 +68,7 @@ model Profile {
   avatarUrl             String?
   firstName             String?                @map("first_name")
   lastName              String?                @map("last_name")
+  roleId                String?                @map("role_id") @db.Uuid
   role                  UserRole               @default(USER)
   active                Boolean                @default(true)
   createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -49,9 +80,11 @@ model Profile {
   activityLogs          TableActivityLog[]
   tableSessions         TableSession[]
   joinRequests          CompanyJoinRequest[]
+  userRole              Role?                  @relation(fields: [roleId], references: [id])
 
   @@index([companyId, userId])
   @@map("profiles")
+  @@schema("public")
 }
 
 model Table {
@@ -68,6 +101,7 @@ model Table {
   company      Company            @relation(fields: [companyId], references: [id])
 
   @@map("tables")
+  @@schema("public")
 }
 
 model TableSession {
@@ -88,6 +122,7 @@ model TableSession {
   table       Table      @relation(fields: [tableId], references: [id])
 
   @@map("table_sessions")
+  @@schema("public")
 }
 
 model TableMaintenance {
@@ -103,6 +138,7 @@ model TableMaintenance {
   table         Table    @relation(fields: [tableId], references: [id])
 
   @@map("table_maintenance")
+  @@schema("public")
 }
 
 model TableReservation {
@@ -120,6 +156,7 @@ model TableReservation {
   table         Table    @relation(fields: [tableId], references: [id])
 
   @@map("table_reservations")
+  @@schema("public")
 }
 
 model TableActivityLog {
@@ -137,6 +174,7 @@ model TableActivityLog {
   @@index([companyId, entityType, entityId])
   @@index([companyId, userId])
   @@map("table_activity_log")
+  @@schema("public")
 }
 
 model InventoryCategory {
@@ -150,6 +188,7 @@ model InventoryCategory {
   items       InventoryItem[]
 
   @@map("inventory_categories")
+  @@schema("public")
 }
 
 model InventoryItem {
@@ -169,6 +208,7 @@ model InventoryItem {
   posOrderItems     PosOrderItem[]
 
   @@map("inventory_items")
+  @@schema("public")
 }
 
 model PosOrder {
@@ -187,6 +227,7 @@ model PosOrder {
 
   @@unique([companyId, orderNumber])
   @@map("pos_orders")
+  @@schema("public")
 }
 
 model PosOrderItem {
@@ -201,6 +242,7 @@ model PosOrderItem {
   order                PosOrder              @relation(fields: [orderId], references: [id])
 
   @@map("pos_order_items")
+  @@schema("public")
 }
 
 model InventoryTransaction {
@@ -219,6 +261,7 @@ model InventoryTransaction {
   staff           Profile?                 @relation(fields: [staffId], references: [id])
 
   @@map("inventory_transactions")
+  @@schema("public")
 }
 
 model FinanceCategory {
@@ -232,6 +275,7 @@ model FinanceCategory {
   transactions FinanceTransaction[]
 
   @@map("finance_categories")
+  @@schema("public")
 }
 
 model FinanceTransaction {
@@ -249,6 +293,7 @@ model FinanceTransaction {
   staff           Profile?        @relation(fields: [staffId], references: [id])
 
   @@map("finance_transactions")
+  @@schema("public")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -269,6 +314,7 @@ model finance_reports {
 
   @@index([company_id])
   @@index([created_by])
+  @@schema("public")
 }
 
 model CompanyJoinRequest {
@@ -286,6 +332,7 @@ model CompanyJoinRequest {
   @@index([companyId, status])
   @@index([profileId])
   @@map("company_join_requests")
+  @@schema("public")
 }
 
 enum UserRole {
@@ -293,21 +340,29 @@ enum UserRole {
   SELLER
   ADMIN
   SUPERADMIN
+
+  @@schema("public")
 }
 
 enum InventoryTransactionType {
   INCOMING
   OUTGOING
   ADJUSTMENT
+
+  @@schema("public")
 }
 
 enum FinanceCategoryType {
   INCOME
   EXPENSE
+
+  @@schema("public")
 }
 
 enum JoinRequestStatus {
   PENDING
   APPROVED
   REJECTED
+
+  @@schema("public")
 }

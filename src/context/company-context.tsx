@@ -21,8 +21,8 @@ const CompanyContext = createContext<CompanyContextType>({
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { profile, isLoading } = useCurrentUser();
-  // Also use the more reliable useAuth hook as backup
-  const { isSuperAdmin: isSuperAdminFromAuth } = useAuth();
+  // Use the updated auth context with reliable permission checks
+  const { isSuperAdmin } = useAuth();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -30,7 +30,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   // First effect: Set up superadmin status and company ID for non-superadmins
   useEffect(() => {
-    // Check if user is superadmin using multiple methods for reliability
+    // Check if user is superadmin using auth context for reliability
     if (!isLoading && profile) {
       console.log("CompanySelection - User profile:", {
         id: profile.id,
@@ -38,31 +38,17 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         companyId: profile.companyId
       });
       
-      const profileIsSuperAdmin = profile && (
-        profile.role === UserRole.SUPERADMIN || 
-        String(profile.role).toUpperCase() === 'SUPERADMIN'
-      );
-      
-      // Use both profile and auth context to determine superadmin status
-      const determinedIsSuperAdmin = profileIsSuperAdmin || isSuperAdminFromAuth;
-      
-      console.log("CompanyContext - Determined superadmin status:", {
-        profileRole: profile.role,
-        profileIsSuperAdmin,
-        isSuperAdminFromAuth,
-        finalDetermination: determinedIsSuperAdmin
-      });
-      
-      setIsSuperadmin(determinedIsSuperAdmin);
+      // Use auth context to determine superadmin status
+      setIsSuperadmin(isSuperAdmin);
       
       // If user has a company assigned and is not a superadmin, use that
-      if (profile.companyId && !determinedIsSuperAdmin) {
+      if (profile.companyId && !isSuperAdmin) {
         setSelectedCompanyId(profile.companyId);
       }
       
       setInitialized(true);
     }
-  }, [isLoading, profile, isSuperAdminFromAuth]);
+  }, [isLoading, profile, isSuperAdmin]);
 
   // Second effect: Handle localStorage for superadmins (client-side only)
   useEffect(() => {

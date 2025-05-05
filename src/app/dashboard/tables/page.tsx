@@ -3,24 +3,29 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Plus, RefreshCw, BarChart3, BookmarkIcon } from "lucide-react";
 import { TableList } from "@/components/views/tables/TableList";
-import { hasAdminPermission } from "@/lib/rbac";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { Profile } from "@/hooks/use-auth";
 import { TableSearch } from "@/components/ui/table-search";
 import { TableStatusFilter } from "@/components/ui/table-status-filter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReservationList } from "@/components/views/tables/ReservationList";
 import { useViewMode } from "@/context/view-mode-context";
+import { Profile as PrismaProfile } from "@prisma/client";
 
 export default function TablesPage() {
   const { profile, isLoading } = useCurrentUser();
   const { viewMode } = useViewMode();
-  const isAdmin = hasAdminPermission(profile, viewMode);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
-
+  
+  // Cast the profile to the appropriate types for each component
+  const authProfile = profile as unknown as Profile | null;
+  const prismaProfile = profile as unknown as PrismaProfile | null;
+  
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
   };
@@ -45,14 +50,16 @@ export default function TablesPage() {
             <RefreshCw className="h-4 w-4" />
           </Button>
           
-          {isAdmin && (
-            <Link href="/dashboard/tables/new" passHref>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Table
-              </Button>
+          <PermissionButton 
+            sectionKey="tables" 
+            action="create"
+            asChild
+          >
+            <Link href="/dashboard/tables/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Table
             </Link>
-          )}
+          </PermissionButton>
         </div>
       </div>
 
@@ -76,7 +83,7 @@ export default function TablesPage() {
           
           {!isLoading && (
             <TableList 
-              profile={profile} 
+              profile={authProfile} 
               searchQuery={searchQuery}
               statusFilter={statusFilter}
               refreshKey={refreshKey}
@@ -95,7 +102,7 @@ export default function TablesPage() {
           
           {!isLoading && profile?.companyId && (
             <ReservationList 
-              profile={profile}
+              profile={prismaProfile}
               refreshKey={refreshKey}
             />
           )}

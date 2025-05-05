@@ -1,38 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withAuth } from "@/lib/auth-server-utils";
 
 /**
  * GET: List all transactions for a company
  */
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, { user, isSuperAdmin, effectiveCompanyId }) => {
   try {
-    const session = await auth();
     const { searchParams } = new URL(req.url);
     const specificCompanyId = searchParams.get("companyId");
     
-    // Check if user is authenticated
-    if (!session || !session.user) {
-      console.log("Finance transactions: Auth failed - No session or user");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
-    // Get user profile with company information
-    const user = await getCurrentUser();
-    
-    if (!user) {
-      console.log("Finance transactions: getCurrentUser returned no user");
-      return NextResponse.json({ error: "User not found" }, { status: 400 });
-    }
-
-    if (!user.id) {
-      console.log("Finance transactions: User has no ID");
-      return NextResponse.json({ error: "User ID not found" }, { status: 400 });
-    }
-    
-    console.log("Finance transactions: Trying to find profile for user ID:", user.id);
-    
-    // Get the profile with role information
+    // Get user profile for additional info
     const profile = await db.profile.findUnique({
       where: { userId: user.id },
     });
@@ -42,63 +20,44 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No profile found for user" }, { status: 400 });
     }
     
-    let companyId: string | null = null;
-    
-    // Check if the user is a SUPERADMIN
-    const isSuperAdmin = profile.role && profile.role.toString() === "SUPERADMIN";
-    
-    if (isSuperAdmin) {
-      // For superadmins, use the company ID from the query params if provided
-      if (specificCompanyId) {
-        companyId = specificCompanyId;
-        console.log("Finance transactions: SUPERADMIN accessing company:", companyId);
-      } else {
-        // Superadmin with no company specified - return all transactions grouped by company
-        console.log("Finance transactions: SUPERADMIN fetching all transactions");
-        
-        const allTransactions = await db.financeTransaction.findMany({
-          include: {
-            category: true,
-            company: {
-              select: {
-                id: true,
-                name: true,
-              }
-            },
-            staff: {
-              select: {
-                firstName: true,
-                lastName: true,
-              }
-            },
+    // For superadmins with no specific company, return all transactions
+    if (isSuperAdmin && !specificCompanyId && !effectiveCompanyId) {
+      console.log("Finance transactions: SUPERADMIN fetching all transactions");
+      
+      const allTransactions = await db.financeTransaction.findMany({
+        include: {
+          category: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            }
           },
-          orderBy: {
-            transactionDate: "desc",
+          staff: {
+            select: {
+              firstName: true,
+              lastName: true,
+            }
           },
-        });
-        
-        return NextResponse.json({ transactions: allTransactions });
-      }
-    } else {
-      // For regular users, use their assigned company
-      if (!profile.companyId) {
-        console.log("Finance transactions: Profile has no companyId:", profile.id);
-        return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
-      }
-      companyId = profile.companyId;
+        },
+        orderBy: {
+          transactionDate: "desc",
+        },
+      });
+      
+      return NextResponse.json({ transactions: allTransactions });
     }
     
-    // Only require companyId for non-superadmins
-    if (!companyId && !isSuperAdmin) {
-      return NextResponse.json({ error: "No company ID available" }, { status: 400 });
+    // For users with a company context, use their effective company ID
+    if (!effectiveCompanyId) {
+      return NextResponse.json({ error: "No company context available" }, { status: 400 });
     }
     
-    console.log("Finance transactions: Using companyId:", companyId);
+    console.log("Finance transactions: Using companyId:", effectiveCompanyId);
     
     // Fetch transactions for this company with related data
-    // If no company ID and superadmin, this will already have returned above
     const transactions = await db.financeTransaction.findMany({
-      where: companyId ? { companyId } : {},
+      where: { companyId: effectiveCompanyId },
       include: {
         category: true,
         company: {
@@ -124,28 +83,14 @@ export async function GET(req: NextRequest) {
     console.error("Failed to fetch transactions:", error);
     return NextResponse.json({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
-}
+}, { requireCompanyId: false }); // Not requiring allows superadmins to fetch all transactions
 
 /**
  * POST: Create a new transaction
  */
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req, { user, isSuperAdmin, effectiveCompanyId }) => {
   try {
-    const session = await auth();
-    
-    // Check if user is authenticated
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    
-    // Get user profile with company information
-    const user = await getCurrentUser();
-    
-    if (!user || !user.id) {
-      return NextResponse.json({ error: "User not found" }, { status: 400 });
-    }
-    
-    // Get the profile with company ID
+    // Get user profile for staff ID reference
     const profile = await db.profile.findUnique({
       where: { userId: user.id },
     });
@@ -163,43 +108,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
     
-    // Determine the company ID to use
-    let companyId: string;
-    
-    if (profile.role && profile.role.toString() === "SUPERADMIN") {
-      // Superadmins must specify a companyId
-      if (!requestCompanyId) {
-        return NextResponse.json({ 
-          error: "Company ID is required for superadmins",
-          isSuperAdmin: true 
-        }, { status: 400 });
-      }
-      
-      // Verify the company exists
-      const companyExists = await db.company.findUnique({
-        where: { id: requestCompanyId },
-      });
-      
-      if (!companyExists) {
-        return NextResponse.json({ 
-          error: "Company not found", 
-          isSuperAdmin: true 
-        }, { status: 404 });
-      }
-      
-      companyId = requestCompanyId;
-    } else {
-      // Regular users must have a company associated with their profile
-      if (!profile.companyId) {
-        return NextResponse.json({ error: "No company associated with user" }, { status: 400 });
-      }
-      companyId = profile.companyId;
+    // Use effective company ID from auth context
+    // For superadmins with a specifically requested company, the effectiveCompanyId
+    // will already be that company if it's valid
+    if (!effectiveCompanyId) {
+      return NextResponse.json({ 
+        error: "No valid company context available",
+        isSuperAdmin 
+      }, { status: 400 });
     }
     
     // Create the transaction
     const transaction = await db.financeTransaction.create({
       data: {
-        companyId,
+        companyId: effectiveCompanyId,
         categoryId,
         amount,
         transactionDate: new Date(transactionDate),
@@ -213,4 +135,100 @@ export async function POST(req: NextRequest) {
     console.error("Failed to create transaction:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-} 
+}, { requireCompanyId: true }); // Requiring ensures a valid company context
+
+/**
+ * PUT: Update an existing transaction
+ */
+export const PUT = withAuth(async (req, { user, isSuperAdmin, effectiveCompanyId }) => {
+  try {
+    // Parse request body
+    const body = await req.json();
+    const { id, categoryId, amount, transactionDate, description } = body;
+    
+    if (!id) {
+      return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 });
+    }
+    
+    // Fetch the transaction to check ownership
+    const transaction = await db.financeTransaction.findUnique({
+      where: { id },
+    });
+    
+    if (!transaction) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+    
+    // Check if user has permission to update this transaction
+    // Either superadmin or belongs to the same company
+    if (!isSuperAdmin && transaction.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: "No permission to update this transaction" }, { status: 403 });
+    }
+    
+    // Prepare update data
+    const updateData: any = {};
+    if (categoryId !== undefined) updateData.categoryId = categoryId;
+    if (amount !== undefined) updateData.amount = amount;
+    if (transactionDate !== undefined) updateData.transactionDate = new Date(transactionDate);
+    if (description !== undefined) updateData.description = description;
+    
+    // Update the transaction
+    const updatedTransaction = await db.financeTransaction.update({
+      where: { id },
+      data: updateData,
+      include: {
+        category: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+      },
+    });
+    
+    return NextResponse.json({ transaction: updatedTransaction });
+  } catch (error) {
+    console.error("Failed to update transaction:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}, { requireCompanyId: true });
+
+/**
+ * DELETE: Remove a transaction
+ */
+export const DELETE = withAuth(async (req, { user, isSuperAdmin, effectiveCompanyId }) => {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    
+    if (!id) {
+      return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 });
+    }
+    
+    // Fetch the transaction to check ownership
+    const transaction = await db.financeTransaction.findUnique({
+      where: { id },
+    });
+    
+    if (!transaction) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+    
+    // Check if user has permission to delete this transaction
+    // Either superadmin or belongs to the same company
+    if (!isSuperAdmin && transaction.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: "No permission to delete this transaction" }, { status: 403 });
+    }
+    
+    // Delete the transaction
+    await db.financeTransaction.delete({
+      where: { id },
+    });
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete transaction:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}, { requireCompanyId: true }); 

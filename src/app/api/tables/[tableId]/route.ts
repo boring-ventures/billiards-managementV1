@@ -1,97 +1,109 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { UserRole } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { getUserRole, hasPermission } from "@/lib/rbac-utils";
+import { createSupabaseServerClient, getEffectiveCompanyId } from "@/lib/auth-server-utils";
+
+// Define the permission action type locally if not exported from rbac-utils
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete';
 
 // GET /api/tables/[tableId] - Get a single table
 export async function GET(
   req: NextRequest,
   { params }: { params: { tableId: string } }
 ) {
+  console.log(`[API] /tables/${params.tableId} - GET request received`);
+  
   try {
     const { tableId } = params;
-
-    // Get the current user's session
-    const session = await auth();
-    if (!session?.user?.id) {
+    
+    // Initialize supabase client with standardized utility
+    const supabase = createSupabaseServerClient(req);
+    
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error(`[API] /tables/${tableId} - Authentication failed:`, authError?.message || "No user found");
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: "Authentication required" },
         { status: 401 }
       );
     }
-
-    // Get the user profile
-    const profile = await db.profile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!profile) {
+    
+    console.log(`[API] /tables/${tableId} - Authenticated user: ${user.id}`);
+    
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /tables/${tableId} - No role or permissions found for user: ${user.id}`);
       return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
+        { error: "User role not found" },
+        { status: 403 }
+      );
+    }
+    
+    console.log(`[API] /tables/${tableId} - User role: ${role}`);
+    
+    // Check permission for viewing tables
+    const sectionKey = "tables";
+    const action: PermissionAction = "view";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /tables/${tableId} - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
+      return NextResponse.json(
+        { error: "You do not have permission to view tables" },
+        { status: 403 }
       );
     }
 
-    // Get companyId from query params for superadmins, otherwise use profile companyId
+    // Determine effective company ID
     const searchParams = req.nextUrl.searchParams;
-    const requestCompanyId = searchParams.get("companyId");
+    const requestedCompanyId = searchParams.get("companyId");
+    const effectiveCompanyId = await getEffectiveCompanyId(user.id, requestedCompanyId);
     
-    // For superadmins, use the companyId from the request if provided
-    // For regular users, always use their assigned company
-    let effectiveCompanyId: string | null = null;
+    console.log(`[API] /tables/${tableId} - Effective company ID: ${effectiveCompanyId}`);
     
-    if (profile.role === UserRole.SUPERADMIN) {
-      // Superadmin can specify a company ID or use their assigned one
-      effectiveCompanyId = requestCompanyId || profile.companyId;
-    } else {
-      // Regular users must use their assigned company
-      effectiveCompanyId = profile.companyId;
-      
-      // Reject if they're trying to access another company's data
-      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
-        return NextResponse.json(
-          { error: "Unauthorized access to company data" },
-          { status: 403 }
-        );
-      }
+    if (!effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "No valid company context" },
+        { status: 403 }
+      );
     }
 
-    // Get the table with its current sessions
-    const table = await db.table.findUnique({
-      where: { id: tableId },
+    // Get the table with company scope
+    const table = await prisma.table.findUnique({
+      where: { 
+        id: tableId,
+        companyId: effectiveCompanyId // Scope to effective company
+      },
       include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         sessions: {
           where: { endedAt: null },
+          orderBy: { startedAt: "desc" },
         },
       },
     });
 
     if (!table) {
+      console.log(`[API] /tables/${tableId} - Table not found or not accessible to user`);
       return NextResponse.json(
         { error: "Table not found" },
         { status: 404 }
       );
     }
 
-    // For non-superadmins, verify the table belongs to the user's company
-    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to your company" },
-        { status: 403 }
-      );
-    }
-    
-    // For superadmins with a specified company, also verify the table belongs to that company
-    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to the specified company" },
-        { status: 403 }
-      );
-    }
-
+    console.log(`[API] /tables/${tableId} - Successfully retrieved table`);
     return NextResponse.json({ table });
+    
   } catch (error) {
-    console.error("Error fetching table:", error);
+    console.error(`[API] /tables/${params.tableId} - Error:`, error);
     return NextResponse.json(
       { error: "Failed to fetch table" },
       { status: 500 }
@@ -99,145 +111,115 @@ export async function GET(
   }
 }
 
-// PATCH /api/tables/[tableId] - Update a table
-export async function PATCH(
+// PUT /api/tables/[tableId] - Update a table
+export async function PUT(
   req: NextRequest,
   { params }: { params: { tableId: string } }
 ) {
+  console.log(`[API] /tables/${params.tableId} - PUT request received`);
+  
   try {
     const { tableId } = params;
-    const body = await req.json();
-    const { name, hourlyRate, status } = body;
-
-    // Get the current user's session
-    const session = await auth();
-    if (!session?.user?.id) {
+    
+    // Initialize supabase client with standardized utility
+    const supabase = createSupabaseServerClient(req);
+    
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error(`[API] /tables/${tableId} - Authentication failed:`, authError?.message || "No user found");
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: "Authentication required" },
         { status: 401 }
       );
     }
-
-    // Get the user profile with role information
-    const profile = await db.profile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!profile) {
+    
+    console.log(`[API] /tables/${tableId} - Authenticated user: ${user.id}`);
+    
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /tables/${tableId} - No role or permissions found for user: ${user.id}`);
       return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
+        { error: "User role not found" },
+        { status: 403 }
       );
     }
-
-    // Check if the user is an admin or superadmin
-    if (
-      profile.role !== UserRole.ADMIN &&
-      profile.role !== UserRole.SUPERADMIN
-    ) {
+    
+    console.log(`[API] /tables/${tableId} - User role: ${role}`);
+    
+    // Check permission for editing tables
+    const sectionKey = "tables";
+    const action: PermissionAction = "edit";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /tables/${tableId} - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
       return NextResponse.json(
-        { error: "Only admins can update tables" },
+        { error: "You do not have permission to edit tables" },
         { status: 403 }
       );
     }
 
-    // Get companyId from query params for superadmins, otherwise use profile companyId
+    // Determine effective company ID
     const searchParams = req.nextUrl.searchParams;
-    const requestCompanyId = searchParams.get("companyId");
+    const requestedCompanyId = searchParams.get("companyId");
+    const effectiveCompanyId = await getEffectiveCompanyId(user.id, requestedCompanyId);
     
-    // For superadmins, use the companyId from the request if provided
-    // For regular users, always use their assigned company
-    let effectiveCompanyId: string | null = null;
+    console.log(`[API] /tables/${tableId} - Effective company ID: ${effectiveCompanyId}`);
     
-    if (profile.role === UserRole.SUPERADMIN) {
-      // Superadmin can specify a company ID or use their assigned one
-      effectiveCompanyId = requestCompanyId || profile.companyId;
-    } else {
-      // Regular users must use their assigned company
-      effectiveCompanyId = profile.companyId;
-      
-      // Reject if they're trying to access another company's data
-      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
-        return NextResponse.json(
-          { error: "Unauthorized access to company data" },
-          { status: 403 }
-        );
-      }
+    if (!effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "No valid company context" },
+        { status: 403 }
+      );
     }
-
-    // Get the table to verify it exists and belongs to the user's company
-    const table = await db.table.findUnique({
-      where: { id: tableId },
-      include: {
-        sessions: {
-          where: { endedAt: null },
-        },
+    
+    // Ensure table exists and belongs to the effective company
+    const existingTable = await prisma.table.findUnique({
+      where: { 
+        id: tableId,
+        companyId: effectiveCompanyId // Scope to effective company
       },
     });
-
-    if (!table) {
+    
+    if (!existingTable) {
+      console.log(`[API] /tables/${tableId} - Table not found or not accessible to user`);
       return NextResponse.json(
         { error: "Table not found" },
         { status: 404 }
       );
     }
 
-    // For non-superadmins, verify the table belongs to the user's company
-    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to your company" },
-        { status: 403 }
-      );
-    }
+    // Parse the update data from request body
+    const data = await req.json();
     
-    // For superadmins with a specified company, also verify the table belongs to that company
-    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to the specified company" },
-        { status: 403 }
-      );
-    }
-
-    // If the table has an active session, we can't change the status
-    const hasActiveSession = table.sessions.length > 0;
-    
-    // Prepare update data
-    const updateData: any = {};
-    
-    if (name) updateData.name = name;
-    if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate;
-    
-    // Only update status if there's no active session
-    if (status && !hasActiveSession) {
-      updateData.status = status;
-    } else if (status && hasActiveSession && status !== table.status) {
-      return NextResponse.json(
-        { error: "Cannot change status of a table with an active session" },
-        { status: 400 }
-      );
-    }
-
     // Update the table
-    const updatedTable = await db.table.update({
-      where: { id: tableId },
-      data: updateData,
-    });
-
-    // Create an activity log entry
-    await db.tableActivityLog.create({
+    const updatedTable = await prisma.table.update({
+      where: { 
+        id: tableId 
+      },
       data: {
-        companyId: table.companyId,
-        userId: profile.id,
-        action: "UPDATE",
-        entityType: "TABLE",
-        entityId: tableId,
-        metadata: updateData,
+        name: data.name,
+        status: data.status,
+        hourlyRate: data.hourlyRate
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
+    console.log(`[API] /tables/${tableId} - Successfully updated table`);
     return NextResponse.json({ table: updatedTable });
+    
   } catch (error) {
-    console.error("Error updating table:", error);
+    console.error(`[API] /tables/${params.tableId} - Error:`, error);
     return NextResponse.json(
       { error: "Failed to update table" },
       { status: 500 }
@@ -250,133 +232,108 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { tableId: string } }
 ) {
+  console.log(`[API] /tables/${params.tableId} - DELETE request received`);
+  
   try {
     const { tableId } = params;
-
-    // Get the current user's session
-    const session = await auth();
-    if (!session?.user?.id) {
+    
+    // Initialize supabase client with standardized utility
+    const supabase = createSupabaseServerClient(req);
+    
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error(`[API] /tables/${tableId} - Authentication failed:`, authError?.message || "No user found");
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: "Authentication required" },
         { status: 401 }
       );
     }
-
-    // Get the user profile with role information
-    const profile = await db.profile.findUnique({
-      where: { userId: session.user.id },
-    });
-
-    if (!profile) {
+    
+    console.log(`[API] /tables/${tableId} - Authenticated user: ${user.id}`);
+    
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /tables/${tableId} - No role or permissions found for user: ${user.id}`);
       return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
+        { error: "User role not found" },
+        { status: 403 }
       );
     }
-
-    // Check if the user is an admin or superadmin
-    if (
-      profile.role !== UserRole.ADMIN &&
-      profile.role !== UserRole.SUPERADMIN
-    ) {
+    
+    console.log(`[API] /tables/${tableId} - User role: ${role}`);
+    
+    // Check permission for deleting tables
+    const sectionKey = "tables";
+    const action: PermissionAction = "delete";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /tables/${tableId} - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
       return NextResponse.json(
-        { error: "Only admins can delete tables" },
+        { error: "You do not have permission to delete tables" },
         { status: 403 }
       );
     }
 
-    // Get companyId from query params for superadmins, otherwise use profile companyId
+    // Determine effective company ID
     const searchParams = req.nextUrl.searchParams;
-    const requestCompanyId = searchParams.get("companyId");
+    const requestedCompanyId = searchParams.get("companyId");
+    const effectiveCompanyId = await getEffectiveCompanyId(user.id, requestedCompanyId);
     
-    // For superadmins, use the companyId from the request if provided
-    // For regular users, always use their assigned company
-    let effectiveCompanyId: string | null = null;
+    console.log(`[API] /tables/${tableId} - Effective company ID: ${effectiveCompanyId}`);
     
-    if (profile.role === UserRole.SUPERADMIN) {
-      // Superadmin can specify a company ID or use their assigned one
-      effectiveCompanyId = requestCompanyId || profile.companyId;
-    } else {
-      // Regular users must use their assigned company
-      effectiveCompanyId = profile.companyId;
-      
-      // Reject if they're trying to access another company's data
-      if (requestCompanyId && requestCompanyId !== effectiveCompanyId) {
-        return NextResponse.json(
-          { error: "Unauthorized access to company data" },
-          { status: 403 }
-        );
-      }
+    if (!effectiveCompanyId) {
+      return NextResponse.json(
+        { error: "No valid company context" },
+        { status: 403 }
+      );
     }
-
-    // Get the table to verify it exists and belongs to the user's company
-    const table = await db.table.findUnique({
-      where: { id: tableId },
+    
+    // Ensure table exists and belongs to the effective company
+    const existingTable = await prisma.table.findUnique({
+      where: { 
+        id: tableId,
+        companyId: effectiveCompanyId // Scope to effective company
+      },
     });
-
-    if (!table) {
+    
+    if (!existingTable) {
+      console.log(`[API] /tables/${tableId} - Table not found or not accessible to user`);
       return NextResponse.json(
         { error: "Table not found" },
         { status: 404 }
       );
     }
 
-    // For non-superadmins, verify the table belongs to the user's company
-    if (profile.role !== UserRole.SUPERADMIN && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to your company" },
-        { status: 403 }
-      );
-    }
-    
-    // For superadmins with a specified company, also verify the table belongs to that company
-    if (profile.role === UserRole.SUPERADMIN && effectiveCompanyId && table.companyId !== effectiveCompanyId) {
-      return NextResponse.json(
-        { error: "Table does not belong to the specified company" },
-        { status: 403 }
-      );
-    }
-
-    // Check if the table has any active sessions
-    const activeSession = await db.tableSession.findFirst({
+    // Check for active sessions
+    const activeSessions = await prisma.tableSession.count({
       where: {
         tableId,
         endedAt: null,
       },
     });
 
-    if (activeSession) {
+    if (activeSessions > 0) {
+      console.log(`[API] /tables/${tableId} - Cannot delete table with active sessions`);
       return NextResponse.json(
-        { error: "Cannot delete a table with an active session" },
+        { error: "Cannot delete a table with active sessions" },
         { status: 400 }
       );
     }
 
     // Delete the table
-    await db.table.delete({
+    await prisma.table.delete({
       where: { id: tableId },
     });
 
-    // Create an activity log entry
-    await db.tableActivityLog.create({
-      data: {
-        companyId: table.companyId,
-        userId: profile.id,
-        action: "DELETE",
-        entityType: "TABLE",
-        entityId: tableId,
-        metadata: {
-          tableName: table.name,
-        },
-      },
-    });
-
-    return NextResponse.json(
-      { message: "Table deleted successfully" },
-      { status: 200 }
-    );
+    console.log(`[API] /tables/${tableId} - Successfully deleted table`);
+    return NextResponse.json({ success: true });
+    
   } catch (error) {
-    console.error("Error deleting table:", error);
+    console.error(`[API] /tables/${params.tableId} - Error:`, error);
     return NextResponse.json(
       { error: "Failed to delete table" },
       { status: 500 }

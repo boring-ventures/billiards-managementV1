@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { UserRole } from "@prisma/client";
-import { db } from "@/lib/db";
 import { z } from "zod";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { withAuth } from "@/lib/auth-server-utils";
+import { getUserRole, hasPermission } from "@/lib/rbac-utils";
+
+// Define the permission action type locally if not exported from rbac-utils
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete';
 
 // Company schema for validation
 const companySchema = z.object({
@@ -21,128 +22,33 @@ const companyUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-// Helper function for creating Supabase client with proper cookie handling
-function createSupabaseClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name) {
-          // In Next.js 14, cookies() is synchronous
-          return cookies().get(name)?.value;
-        },
-        set() {
-          // Not needed in API routes
-        },
-        remove() {
-          // Not needed in API routes
-        },
-      },
-    }
-  );
-}
-
-// Function to check if user has super admin role
-async function checkSuperAdminRole(userId: string) {
-  try {
-    const profile = await db.profile.findUnique({
-      where: { userId },
-      select: { role: true },
-    });
-    
-    // More robust check for superadmin role
-    const isSuperAdmin = profile && (
-      profile.role === "SUPERADMIN" || 
-      String(profile.role).toUpperCase() === "SUPERADMIN"
-    );
-    
-    console.log("API:companies - Checking superadmin status", {
-      userId,
-      role: profile?.role,
-      isSuperAdmin
-    });
-    
-    return isSuperAdmin;
-  } catch (error) {
-    console.error("Failed to check user role:", error);
-    return false;
-  }
-}
-
 // GET: Fetch all companies for superadmin
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (req, { user, isSuperAdmin }) => {
+  console.log(`[API] /companies GET - Authenticated user: ${user.id}, isSuperAdmin: ${isSuperAdmin}`);
+  
   try {
-    const supabase = createSupabaseClient();
-
-    // Get the current user's session using the more reliable getUser method
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError) {
-      console.error("API:companies:GET - Auth error:", userError.message);
-      
-      // Don't log a removal message as it can be confusing - just return the error
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: userError.message }),
-        { 
-          status: 401,
-          headers: headers
-        }
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /companies GET - No role or permissions found for user: ${user.id}`);
+      return NextResponse.json(
+        { error: "User role not found" },
+        { status: 403 }
       );
     }
-
-    if (!user) {
-      console.error("API:companies:GET - No user found in session");
-      
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Not authenticated", detail: "No user found in session" }),
-        { 
-          status: 401,
-          headers: headers
-        }
-      );
-    }
-
-    const userId = user.id;
-
-    // Fetch user profile to check role
-    const profile = await prisma.profile.findUnique({
-      where: { userId },
-    });
-
-    console.log("API:companies:GET - User profile:", {
-      userId,
-      role: profile?.role
-    });
-
-    // Check if user is a superadmin
-    const isSuperAdmin = profile && (
-      profile.role === UserRole.SUPERADMIN || 
-      String(profile.role).toUpperCase() === "SUPERADMIN"
-    );
-
-    console.log("API:companies:GET - Is superadmin:", isSuperAdmin);
-
-    // Only superadmin can see all companies
-    if (!profile || !isSuperAdmin) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Unauthorized: Only superadmins can access all companies" }),
-        { 
-          status: 403,
-          headers: headers
-        }
+    
+    console.log(`[API] /companies GET - User role: ${role}`);
+    
+    // Check permission for viewing companies
+    const sectionKey = "admin.companies";
+    const action: PermissionAction = "view";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /companies GET - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
+      return NextResponse.json(
+        { error: "You do not have permission to view companies" },
+        { status: 403 }
       );
     }
 
@@ -153,84 +59,69 @@ export async function GET(request: NextRequest) {
         name: true,
         address: true,
         phone: true,
-        createdAt: true,
+        createdAt: true
       },
       orderBy: {
         name: "asc",
       },
     });
 
-    // Set proper content type
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ companies }),
-      { 
-        status: 200,
-        headers: headers
-      }
-    );
+    console.log(`[API] /companies GET - Successfully retrieved ${companies.length} companies`);
+    return NextResponse.json({ companies });
   } catch (error) {
-    console.error("Error fetching companies:", error);
-    
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ error: "Failed to fetch companies" }),
-      { 
-        status: 500,
-        headers: headers
-      }
+    console.error("[API] /companies GET - Error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch companies" },
+      { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+// POST: Create a new company
+export const POST = withAuth(async (req, { user, isSuperAdmin }) => {
+  console.log(`[API] /companies POST - Authenticated user: ${user.id}, isSuperAdmin: ${isSuperAdmin}`);
+  
   try {
-    const supabase = createSupabaseClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Unauthorized", detail: userError?.message || "No user found" }),
-        { 
-          status: 401,
-          headers: headers
-        }
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /companies POST - No role or permissions found for user: ${user.id}`);
+      return NextResponse.json(
+        { error: "User role not found" },
+        { status: 403 }
       );
     }
-
-    // Check if user has super admin role
-    const isSuperAdmin = await checkSuperAdminRole(user.id);
-    if (!isSuperAdmin) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: "Forbidden: Requires super admin access" }),
-        { 
-          status: 403,
-          headers: headers
-        }
+    
+    console.log(`[API] /companies POST - User role: ${role}`);
+    
+    // Check permission for creating companies
+    const sectionKey = "admin.companies";
+    const action: PermissionAction = "create";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /companies POST - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
+      return NextResponse.json(
+        { error: "You do not have permission to create companies" },
+        { status: 403 }
       );
     }
 
     const body = await req.json();
-    const validatedData = companySchema.parse(body);
+    const validationResult = companySchema.safeParse(body);
+    
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: "Invalid data", details: validationResult.error.format() },
+        { status: 400 }
+      );
+    }
 
-    const company = await db.company.create({
+    const company = await prisma.company.create({
       data: {
-        name: validatedData.name,
-        address: validatedData.address,
-        phone: validatedData.phone,
+        name: validationResult.data.name,
+        address: validationResult.data.address,
+        phone: validationResult.data.phone,
       },
     });
 
@@ -239,64 +130,179 @@ export async function POST(req: NextRequest) {
     
     if (assignToCreator) {
       // Update the superadmin's profile with the new company ID
-      await db.profile.update({
+      await prisma.profile.update({
         where: { userId: user.id },
         data: { companyId: company.id },
       });
-      
-      // Set proper content type
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      // Indicate that the company was assigned
-      return new NextResponse(
-        JSON.stringify({ 
-          ...company, 
-          assigned: true,
-          message: "Company created and assigned to your profile" 
-        }),
-        { 
-          status: 201,
-          headers: headers
-        }
-      );
     }
 
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify(company),
-      { 
-        status: 201,
-        headers: headers
-      }
-    );
+    console.log(`[API] /companies POST - Successfully created company: ${company.id}`);
+    return NextResponse.json({ company }, { status: 201 });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json');
-      
-      return new NextResponse(
-        JSON.stringify({ error: error.errors }),
-        { 
-          status: 400,
-          headers: headers
-        }
-      );
-    }
-
-    console.error("[COMPANIES_POST]", error);
-    
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json');
-    
-    return new NextResponse(
-      JSON.stringify({ error: "Internal error" }),
-      { 
-        status: 500,
-        headers: headers
-      }
+    console.error("[API] /companies POST - Error:", error);
+    return NextResponse.json(
+      { error: "Failed to create company" },
+      { status: 500 }
     );
   }
-}
+});
+
+// PUT: Update a company
+export const PUT = withAuth(async (req, { user, isSuperAdmin }) => {
+  console.log(`[API] /companies PUT - Authenticated user: ${user.id}, isSuperAdmin: ${isSuperAdmin}`);
+  
+  try {
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /companies PUT - No role or permissions found for user: ${user.id}`);
+      return NextResponse.json(
+        { error: "User role not found" },
+        { status: 403 }
+      );
+    }
+    
+    console.log(`[API] /companies PUT - User role: ${role}`);
+    
+    // Check permission for editing companies
+    const sectionKey = "admin.companies";
+    const action: PermissionAction = "edit";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /companies PUT - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
+      return NextResponse.json(
+        { error: "You do not have permission to edit companies" },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    const { id, ...updateData } = body;
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
+    }
+    
+    // Validate the update data
+    const validationResult = companyUpdateSchema.safeParse(updateData);
+    
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: "Invalid data", details: validationResult.error.format() },
+        { status: 400 }
+      );
+    }
+    
+    // Check if the company exists
+    const existingCompany = await prisma.company.findUnique({
+      where: { id },
+    });
+    
+    if (!existingCompany) {
+      return NextResponse.json(
+        { error: "Company not found" },
+        { status: 404 }
+      );
+    }
+    
+    // Update the company
+    const updatedCompany = await prisma.company.update({
+      where: { id },
+      data: validationResult.data,
+    });
+    
+    console.log(`[API] /companies PUT - Successfully updated company: ${id}`);
+    return NextResponse.json({ company: updatedCompany });
+  } catch (error) {
+    console.error("[API] /companies PUT - Error:", error);
+    return NextResponse.json(
+      { error: "Failed to update company" },
+      { status: 500 }
+    );
+  }
+});
+
+// DELETE: Delete a company
+export const DELETE = withAuth(async (req, { user, isSuperAdmin }) => {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    
+    console.log(`[API] /companies DELETE - Authenticated user: ${user.id}, isSuperAdmin: ${isSuperAdmin}, companyId: ${id}`);
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: "Company ID is required" },
+        { status: 400 }
+      );
+    }
+    
+    // Get user role and permissions
+    const { role, permissions } = await getUserRole(user.id);
+    
+    if (!role || !permissions) {
+      console.error(`[API] /companies DELETE - No role or permissions found for user: ${user.id}`);
+      return NextResponse.json(
+        { error: "User role not found" },
+        { status: 403 }
+      );
+    }
+    
+    console.log(`[API] /companies DELETE - User role: ${role}`);
+    
+    // Check permission for deleting companies
+    const sectionKey = "admin.companies";
+    const action: PermissionAction = "delete";
+    
+    if (!hasPermission(permissions, role, sectionKey, action)) {
+      console.error(`[API] /companies DELETE - Permission denied for user: ${user.id}, section: ${sectionKey}, action: ${action}`);
+      return NextResponse.json(
+        { error: "You do not have permission to delete companies" },
+        { status: 403 }
+      );
+    }
+    
+    // Check if the company exists
+    const existingCompany = await prisma.company.findUnique({
+      where: { id },
+    });
+    
+    if (!existingCompany) {
+      return NextResponse.json(
+        { error: "Company not found" },
+        { status: 404 }
+      );
+    }
+    
+    // Check if the company has associated users
+    const usersCount = await prisma.profile.count({
+      where: { companyId: id },
+    });
+    
+    if (usersCount > 0) {
+      console.log(`[API] /companies DELETE - Cannot delete company with ${usersCount} associated users`);
+      return NextResponse.json(
+        { error: "Cannot delete company with associated users" },
+        { status: 400 }
+      );
+    }
+    
+    // Delete the company
+    await prisma.company.delete({
+      where: { id },
+    });
+    
+    console.log(`[API] /companies DELETE - Successfully deleted company: ${id}`);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[API] /companies DELETE - Error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete company" },
+      { status: 500 }
+    );
+  }
+});

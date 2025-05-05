@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, isValid } from 'date-fns';
 import { useViewMode } from '@/context/view-mode-context';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Card,
   CardContent,
@@ -49,12 +50,12 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon, Plus, PencilIcon, TrashIcon, SearchIcon, CheckIcon, XIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { hasAdminPermission } from '@/lib/rbac';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { Profile, UserRole } from '@prisma/client';
+import { WithPermission } from '@/components/ui/permission-button';
 
 // Define types
 type Reservation = {
@@ -109,7 +110,10 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { viewMode } = useViewMode();
-  const isAdmin = hasAdminPermission(profile, viewMode);
+  const { hasPermissionClient } = useAuth();
+  
+  // Check permissions for editing and creating reservations
+  const canEditReservations = hasPermissionClient("tables", "edit");
 
   const form = useForm<z.infer<typeof reservationFormSchema>>({
     resolver: zodResolver(reservationFormSchema),
@@ -395,13 +399,17 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-4">
+        <div className="flex justify-between items-center pb-4">
+          <div className="flex items-center space-x-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-auto justify-start text-left font-normal"
+                <Button 
+                  variant="outline" 
+                  className={cn(
+                    "justify-start text-left font-normal",
+                    !filterDate && "text-muted-foreground"
+                  )}
+                  size="sm"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {filterDate ? format(filterDate, 'PPP') : <span>Pick a date</span>}
@@ -416,12 +424,21 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
                 />
               </PopoverContent>
             </Popover>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterDate(undefined)}
+            >
+              Show All
+            </Button>
           </div>
           
-          <Button onClick={() => openReservationDialog()}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Reservation
-          </Button>
+          <WithPermission sectionKey="tables" action="create">
+            <Button onClick={() => openReservationDialog()} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Reservation
+            </Button>
+          </WithPermission>
         </div>
         
         {loading ? (
@@ -470,22 +487,28 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
                       <div className="flex space-x-2">
                         {reservation.status === 'PENDING' && (
                           <>
-                            <Button 
-                              variant="outline" 
-                              size="icon"
-                              title="Confirm"
-                              onClick={() => updateReservationStatus(reservation.id, 'CONFIRMED')}
-                            >
-                              <CheckIcon className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="icon"
-                              title="Cancel"
-                              onClick={() => updateReservationStatus(reservation.id, 'CANCELLED')}
-                            >
-                              <XIcon className="h-4 w-4 text-red-600" />
-                            </Button>
+                            <WithPermission sectionKey="tables" action="edit">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 w-8 p-0" 
+                                onClick={() => updateReservationStatus(reservation.id, 'CONFIRMED')}
+                                disabled={reservation.status === 'CONFIRMED'}
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </Button>
+                            </WithPermission>
+                            <WithPermission sectionKey="tables" action="edit">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 w-8 p-0" 
+                                onClick={() => updateReservationStatus(reservation.id, 'CANCELLED')}
+                                disabled={reservation.status === 'CANCELLED'}
+                              >
+                                <XIcon className="h-4 w-4" />
+                              </Button>
+                            </WithPermission>
                           </>
                         )}
                         <Button 
@@ -496,16 +519,16 @@ export function ReservationList({ profile, refreshKey }: ReservationListProps) {
                         >
                           <PencilIcon className="h-4 w-4" />
                         </Button>
-                        {isAdmin && (
+                        <WithPermission sectionKey="tables" action="delete">
                           <Button 
                             variant="outline" 
-                            size="icon"
-                            title="Delete"
+                            size="sm" 
+                            className="h-8 w-8 p-0 text-red-500" 
                             onClick={() => deleteReservation(reservation.id)}
                           >
-                            <TrashIcon className="h-4 w-4 text-red-600" />
+                            <TrashIcon className="h-4 w-4" />
                           </Button>
-                        )}
+                        </WithPermission>
                       </div>
                     </TableCell>
                   </TableRow>

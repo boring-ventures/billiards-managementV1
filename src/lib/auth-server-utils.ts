@@ -7,8 +7,12 @@
 import 'server-only'; // Mark this module as server-only
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { type NextRequest, type NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { AUTH_TOKEN_KEY } from './auth-client-utils'
+import { Session, User } from '@supabase/supabase-js'
+import { UserRole } from '@prisma/client'
+import prisma from '@/lib/prisma'
+import { RequestCookie, ResponseCookie } from 'next/dist/compiled/@edge-runtime/cookies'
 
 // Define a more specific type for the cookies store
 type CookieStore = {
@@ -24,6 +28,67 @@ export function getSupabaseCookiePattern(): string {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const projectRef = supabaseUrl?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown'
   return `sb-${projectRef}-auth-token`;
+}
+
+/**
+ * Utility to safely get cookie value from the cookie store
+ */
+function getCookieFromStore(name: string): { name: string; value: string } | undefined {
+  try {
+    // Access cookies synchronously
+    const cookieStore = cookies();
+    // @ts-ignore - Access sync API
+    return cookieStore.get?.(name);
+  } catch (error) {
+    console.error(`[Cookie] Error getting cookie from store:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Utility to safely set cookie in the cookie store
+ */
+function setCookieInStore(name: string, value: string, options: any): void {
+  try {
+    // Access cookies synchronously
+    const cookieStore = cookies();
+    // @ts-ignore - Access sync API
+    cookieStore.set?.(name, value, options);
+  } catch (error) {
+    console.error(`[Cookie] Error setting cookie in store:`, error);
+  }
+}
+
+/**
+ * Utility to safely delete cookie from the cookie store
+ */
+function deleteCookieFromStore(name: string, options: any): void {
+  try {
+    // Access cookies synchronously
+    const cookieStore = cookies();
+    // @ts-ignore - Access sync API
+    cookieStore.delete?.(name, options);
+  } catch (error) {
+    console.error(`[Cookie] Error deleting cookie from store:`, error);
+  }
+}
+
+/**
+ * Get all cookies from a cookie store synchronously
+ */
+function getAllCookiesFromStore(): Array<{ name: string; value: string }> {
+  try {
+    const cookieStore = cookies();
+    // @ts-ignore - Access sync API
+    const allCookies = cookieStore.getAll?.() || [];
+    return allCookies.map((cookie: { name: string; value: string }) => ({
+      name: cookie.name,
+      value: cookie.value
+    }));
+  } catch (error) {
+    console.error(`[Cookie] Error getting all cookies:`, error);
+    return [];
+  }
 }
 
 /**
@@ -44,13 +109,8 @@ export function getAllAuthCookies(
       // It's a NextRequest
       allCookies = requestOrStore.cookies.getAll();
     } else {
-      // It's a cookie store from next/headers - treat it as our CookieStore type
-      const cookieStore = requestOrStore as unknown as CookieStore;
-      try {
-        allCookies = cookieStore.getAll();
-      } catch (error) {
-        console.error('[Cookie] Error getting all cookies:', error);
-      }
+      // It's a cookie store from next/headers - get all cookies
+      allCookies = getAllCookiesFromStore();
     }
     
     // Filter to auth cookies and create a standardized format
@@ -74,201 +134,185 @@ export function getAllAuthCookies(
 }
 
 /**
- * Create a Supabase server client with cookie handling for server components
- * Specifically designed for Next.js 14 where cookies() returns the store directly
+ * Determines if the current request path indicates a sign-out operation
+ * Used to prevent accidental cookie removal outside sign-out flows
  */
-export function createServerSupabaseClient() {
-  const cookiePattern = getSupabaseCookiePattern();
-  console.log(`[Server] Creating server client with cookie pattern: ${cookiePattern}`);
+function isSignOutOperation(requestPath?: string): boolean {
+  if (!requestPath) return false;
   
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name) {
-          try {
-            // Cast cookies() to our more specific type
-            const cookieStore = cookies() as unknown as CookieStore;
-            
-            // Log that we're looking for this specific cookie
-            if (name.includes('auth') || name.includes('supabase')) {
-              console.log(`[Server] Looking for cookie: ${name}`);
-            }
-            
-            // First try the exact cookie name
-            const cookie = cookieStore.get(name);
-            if (cookie) {
-              console.log(`[Server] Found exact cookie match: ${name}`);
-              return cookie.value;
-            }
-            
-            // If it's an auth token and not found, try to find any auth token cookie
-            // This helps with versioned cookie names (e.g., sb-xxx-auth-token.4)
-            if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
-              const authCookies = getAllAuthCookies(cookieStore as unknown as ReturnType<typeof cookies>);
-              if (authCookies.length > 0) {
-                console.log(`[Server] Using alternative auth cookie: ${authCookies[0].name}`);
-                return authCookies[0].value;
-              }
-            }
-            
-            console.log(`[Server] Cookie not found: ${name}`);
-            return null;
-          } catch (error) {
-            console.error('[Cookie] Error reading cookie:', error);
-            return null;
-          }
-        },
-        set() {
-          // Cannot set cookies in server components
-          // This will be handled by middleware
-        },
-        remove() {
-          // Cannot remove cookies in server components
-          // This will be handled by middleware
-        }
-      }
-    }
-  )
+  // Check if the request path indicates a sign-out operation
+  return (
+    requestPath.includes('/sign-out') ||
+    requestPath.includes('/signout') ||
+    requestPath.includes('/logout') ||
+    requestPath.includes('/auth/signout') ||
+    requestPath.includes('/api/auth/signout')
+  );
 }
 
 /**
- * Create a Supabase server client with explicit cookie access for API routes
- * This version is optimized for API routes where cookie access is different
- * @param request The NextRequest object from the API route
+ * MAIN STANDARDIZED UTILITY: Create a Supabase server client with consistent cookie handling
+ * Works across all Next.js server contexts: Server Components, API Routes, Middleware
+ * 
+ * This is the SINGLE, DEFINITIVE way to create a server-side Supabase client 
+ * with cookie access in this application.
  */
-export function createAPIRouteClient(request: NextRequest) {
+export function createSupabaseServerClient(
+  requestOrResponse?: NextRequest | NextResponse,
+  options: {
+    isSignOutFlow?: boolean; // Explicitly mark as sign-out flow to allow cookie removal
+  } = {}
+) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const cookiePattern = getSupabaseCookiePattern();
-  console.log(`[API] Creating API route client with cookie pattern: ${cookiePattern}`);
   
-  // Debug all request cookies to identify potential issues
-  const allRequestCookies = request.cookies.getAll();
-  console.log(`[API] All request cookies (${allRequestCookies.length}): ${allRequestCookies.map(c => c.name).join(', ')}`);
+  console.log(`[Supabase] Creating standardized server client with cookie pattern: ${cookiePattern}`);
   
-  // Log specifically auth-related cookies
-  const authCookies = getAllAuthCookies(request);
+  // Detect request context to determine how to handle cookies
+  const isNextRequest = requestOrResponse && 'cookies' in requestOrResponse && typeof (requestOrResponse as any).cookies?.get === 'function';
+  const requestPath = isNextRequest ? (requestOrResponse as NextRequest).nextUrl?.pathname : undefined;
   
-  if (authCookies.length === 0) {
-    console.log(`[API] ⚠️ WARNING: No auth cookies found in request. Authentication will likely fail.`);
-    // Check headers for debug purposes
-    const authHeader = request.headers.get('authorization');
-    if (authHeader) {
-      console.log(`[API] Found Authorization header: ${authHeader.substring(0, 15)}...`);
-    }
-  } else {
-    console.log(`[API] Found ${authCookies.length} auth cookie(s): ${authCookies.map(c => c.name).join(', ')}`);
+  // Explicitly set sign-out flow flag or determine from request path
+  const isSignOutFlow = options.isSignOutFlow || isSignOutOperation(requestPath);
+  
+  if (isSignOutFlow) {
+    console.log(`[Supabase] Creating client for sign-out flow - allowing cookie removal`);
   }
   
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         get(name) {
-          // Log that we're looking for this specific cookie with more details
-          if (name.includes('auth') || name.includes('supabase')) {
-            console.log(`[API] Looking for cookie: ${name}`);
-          }
+          console.log(`[Cookie:GET] Looking for cookie: ${name}`);
           
-          // First try the exact cookie name with more detailed logging
-          const cookie = request.cookies.get(name);
-          if (cookie) {
-            console.log(`[API] Found exact cookie match: ${name} = ${cookie.value.substring(0, 15)}...`);
-            return cookie.value;
-          }
-          
-          // If it's an auth token and not found, try to find any auth token cookie
-          if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
-            // More detailed logging
-            console.log(`[API] Exact cookie not found, looking for alternate auth cookies: ${name}`);
-            
-            // Always look through all cookies rather than using cached results
-            const freshAuthCookies = getAllAuthCookies(request);
-            if (freshAuthCookies.length > 0) {
-              console.log(`[API] Using alternative auth cookie: ${freshAuthCookies[0].name} instead of ${name}`);
-              return freshAuthCookies[0].value;
-            } else {
-              console.log(`[API] ⚠️ No auth cookies found when looking for ${name}`);
+          try {
+            // Handle NextRequest context (API Routes, Middleware)
+            if (isNextRequest) {
+              const request = requestOrResponse as NextRequest;
+              
+              // First try to get the exact cookie
+              const cookie = request.cookies.get(name);
+              if (cookie) {
+                console.log(`[Cookie:GET] Found exact cookie in request: ${name}`);
+                return cookie.value;
+              }
+              
+              // For auth-related cookies, search for alternatives if exact match not found
+              if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
+                const authCookies = getAllAuthCookies(request);
+                if (authCookies.length > 0) {
+                  console.log(`[Cookie:GET] Using alternative auth cookie: ${authCookies[0].name} instead of ${name}`);
+                  return authCookies[0].value;
+                }
+              }
+            } 
+            // Handle Server Component context
+            else {
+              // First try to get the exact cookie
+              const cookie = getCookieFromStore(name);
+              if (cookie) {
+                console.log(`[Cookie:GET] Found exact cookie in cookie store: ${name}`);
+                return cookie.value;
+              }
+              
+              // For auth-related cookies, search for alternatives if exact match not found
+              if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
+                const authCookies = getAllCookiesFromStore()
+                  .filter(cookie => cookie.name.startsWith(cookiePattern));
+                  
+                if (authCookies.length > 0) {
+                  console.log(`[Cookie:GET] Using alternative auth cookie: ${authCookies[0].name} instead of ${name}`);
+                  return authCookies[0].value;
+                }
+              }
             }
+            
+            console.log(`[Cookie:GET] Cookie not found: ${name}`);
+            return null;
+          } catch (error) {
+            console.error(`[Cookie:GET] Error getting cookie ${name}:`, error);
+            return null;
+          }
+        },
+        
+        set(name, value, options) {
+          console.log(`[Cookie:SET] Setting cookie: ${name}`);
+          
+          try {
+            // Handle NextRequest context (middleware)
+            if (requestOrResponse && 'cookies' in requestOrResponse && typeof (requestOrResponse as any).cookies?.set === 'function') {
+              const response = requestOrResponse as any;
+              response.cookies.set(name, value, options);
+              console.log(`[Cookie:SET] Set cookie in response: ${name}`);
+              return;
+            }
+            
+            // Handle Server Component context
+            setCookieInStore(name, value, options);
+            console.log(`[Cookie:SET] Set cookie in cookie store: ${name}`);
+          } catch (error) {
+            console.error(`[Cookie:SET] Error setting cookie ${name}:`, error);
+          }
+        },
+        
+        remove(name, options) {
+          console.log(`[Cookie:REMOVE] Attempt to remove cookie: ${name}`);
+          
+          // CRITICAL: Prevent cookie removal if not in a sign-out flow
+          if (!isSignOutFlow && (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern))) {
+            console.log(`[Cookie:REMOVE] ⚠️ PREVENTED removal of auth cookie ${name} - not in sign-out flow`);
+            return;
           }
           
-          console.log(`[API] Cookie not found: ${name}`);
-          return null;
-        },
-        set() {
-          // API routes should return cookies in the response headers
-          // This will be handled externally
-          console.log(`[API] Attempted to set cookie in API route (will be handled by response)`);
-        },
-        remove() {
-          // API routes should handle cookie removal in response headers
-          // This will be handled externally
-          console.log(`[API] ⚠️ Attempted to remove cookie in API route client. This should only happen during logout.`);
+          try {
+            // Handle NextRequest context (middleware)
+            if (requestOrResponse && 'cookies' in requestOrResponse && typeof (requestOrResponse as any).cookies?.delete === 'function') {
+              const response = requestOrResponse as any;
+              response.cookies.delete(name);
+              console.log(`[Cookie:REMOVE] Removed cookie from response: ${name}`);
+              return;
+            }
+            
+            // Handle Server Component context
+            deleteCookieFromStore(name, options);
+            console.log(`[Cookie:REMOVE] Removed cookie from cookie store: ${name}`);
+          } catch (error) {
+            console.error(`[Cookie:REMOVE] Error removing cookie ${name}:`, error);
+          }
         }
       }
     }
-  )
+  );
 }
 
 /**
- * Create a Supabase server client for use in middleware
+ * @deprecated Use createSupabaseServerClient() instead
+ * This is maintained for backward compatibility during refactoring
+ */
+export function createServerSupabaseClient() {
+  console.log(`[Server] DEPRECATED: Using legacy createServerSupabaseClient. Please migrate to createSupabaseServerClient()`);
+  return createSupabaseServerClient();
+}
+
+/**
+ * @deprecated Use createSupabaseServerClient(request) instead
+ * This is maintained for backward compatibility during refactoring
+ */
+export function createAPIRouteClient(request: NextRequest) {
+  console.log(`[API] DEPRECATED: Using legacy createAPIRouteClient. Please migrate to createSupabaseServerClient(request)`);
+  return createSupabaseServerClient(request);
+}
+
+/**
+ * @deprecated Use createSupabaseServerClient(request, response) instead
+ * This is maintained for backward compatibility during refactoring
  */
 export function createMiddlewareClient(request: NextRequest, response: NextResponse) {
-  const cookiePattern = getSupabaseCookiePattern();
-  console.log(`[Middleware] Creating middleware client with cookie pattern: ${cookiePattern}`);
-  
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          // Log that we're looking for this specific cookie
-          if (name.includes('auth') || name.includes('supabase')) {
-            console.log(`[Middleware] Looking for cookie: ${name}`);
-          }
-          
-          // First try the exact cookie name
-          const cookie = request.cookies.get(name);
-          if (cookie) {
-            console.log(`[Middleware] Found exact cookie match: ${name}`);
-            return cookie.value;
-          }
-          
-          // If it's an auth token and not found, try to find any auth token cookie
-          if (name === AUTH_TOKEN_KEY || name.startsWith(cookiePattern)) {
-            const authCookies = getAllAuthCookies(request);
-            if (authCookies.length > 0) {
-              console.log(`[Middleware] Using alternative auth cookie: ${authCookies[0].name}`);
-              return authCookies[0].value;
-            }
-          }
-          
-          console.log(`[Middleware] Cookie not found: ${name}`);
-          return null;
-        },
-        set(name: string, value: string, options: any) {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-            sameSite: options.sameSite || 'lax',
-            path: options.path || '/',
-          });
-        },
-        remove(name: string, options: any) {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-            path: options.path || '/',
-            maxAge: 0,
-          });
-        }
-      }
-    }
-  )
+  console.log(`[Middleware] DEPRECATED: Using legacy createMiddlewareClient. Please migrate to createSupabaseServerClient(request, response)`);
+  return createSupabaseServerClient(request);
 }
 
 /**
@@ -392,4 +436,184 @@ export async function debugServerCookies() {
   } catch (error) {
     return { error: 'Error reading cookies' }
   }
+}
+
+/**
+ * Type for authenticated API handlers
+ */
+export type AuthenticatedHandler = (
+  req: NextRequest,
+  context: { 
+    user: User; 
+    session: Session;
+    isSuperAdmin: boolean;
+    effectiveCompanyId?: string;
+  }
+) => Promise<NextResponse>;
+
+/**
+ * Check if the user is a SUPERADMIN based on metadata
+ */
+export function isSuperAdmin(user: User | null): boolean {
+  if (!user) return false;
+  
+  // Check in app_metadata first (most reliable)
+  if (user.app_metadata?.role === UserRole.SUPERADMIN) {
+    return true;
+  }
+  
+  // Fallback to user_metadata if needed
+  if (user.user_metadata?.role === UserRole.SUPERADMIN) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Get the effective company ID for a user
+ * SUPERADMINs can use any company ID, others must use their assigned company
+ */
+export async function getEffectiveCompanyId(
+  userId: string,
+  requestedCompanyId?: string | null
+): Promise<string | null> {
+  try {
+    // Get user profile to determine role and assigned company
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { companyId: true, role: true }
+    });
+    
+    if (!profile) {
+      console.log(`[Auth] No profile found for user ${userId}`);
+      return null;
+    }
+    
+    // SUPERADMINs can specify a company ID or fall back to their assigned company
+    if (profile.role === UserRole.SUPERADMIN) {
+      const effectiveId = requestedCompanyId || profile.companyId;
+      
+      if (requestedCompanyId) {
+        console.log(`[Auth] SUPERADMIN ${userId} using specified company ${requestedCompanyId}`);
+      } else if (profile.companyId) {
+        console.log(`[Auth] SUPERADMIN ${userId} using assigned company ${profile.companyId}`);
+      } else {
+        console.log(`[Auth] SUPERADMIN ${userId} has no effective company ID`);
+      }
+      
+      return effectiveId;
+    }
+    
+    // Normal users must use their assigned company
+    if (requestedCompanyId && requestedCompanyId !== profile.companyId) {
+      console.log(`[Auth] User ${userId} cannot access company ${requestedCompanyId}, restricted to ${profile.companyId}`);
+      return null;
+    }
+    
+    console.log(`[Auth] User ${userId} using assigned company ${profile.companyId}`);
+    return profile.companyId;
+  } catch (error) {
+    console.error('[Auth] Error getting effective company ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Wrapper for API route handlers that require authentication
+ * This ensures consistent authentication and authorization handling
+ */
+export function withAuth(handler: AuthenticatedHandler, options: { requireCompanyId?: boolean } = {}) {
+  return async function(req: NextRequest): Promise<NextResponse> {
+    try {
+      // Create a standardized Supabase client
+      const supabase = createServerSupabaseClient(req);
+      
+      // Get and possibly refresh the session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('[Auth] Session error:', sessionError);
+        return NextResponse.json({ error: 'Authentication error', details: sessionError.message }, { status: 401 });
+      }
+      
+      if (!sessionData.session) {
+        console.log('[Auth] No active session found');
+        return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+      }
+      
+      // Try to refresh the token if needed
+      try {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (!refreshError && refreshData.session) {
+          // Use the refreshed session
+          sessionData.session = refreshData.session;
+        }
+      } catch (refreshError) {
+        console.warn('[Auth] Token refresh failed, continuing with existing token:', refreshError);
+        // Continue with the existing token
+      }
+      
+      const { user } = sessionData.session;
+      
+      // Attach SUPERADMIN flag
+      const superAdmin = isSuperAdmin(user);
+      
+      // Get effective company ID if requested in URL
+      const url = new URL(req.url);
+      const requestedCompanyId = url.searchParams.get('companyId');
+      
+      let effectiveCompanyId: string | undefined | null = undefined;
+      
+      // If company ID is required for this endpoint
+      if (options.requireCompanyId) {
+        effectiveCompanyId = await getEffectiveCompanyId(user.id, requestedCompanyId);
+        
+        if (!effectiveCompanyId) {
+          return NextResponse.json({ error: 'No valid company context' }, { status: 403 });
+        }
+      }
+      
+      // Hand off to the actual handler with auth context
+      return handler(req, { 
+        user, 
+        session: sessionData.session,
+        isSuperAdmin: superAdmin,
+        effectiveCompanyId: effectiveCompanyId || undefined
+      });
+      
+    } catch (error) {
+      console.error('[Auth] Unexpected error in auth wrapper:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  };
+}
+
+/**
+ * Function to create server supabase admin client (with service role key)
+ * To be used for operations that need elevated privileges
+ */
+export function createServerSupabaseAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing required environment variables for admin client');
+  }
+  
+  return createServerClient(
+    supabaseUrl, 
+    supabaseServiceKey, 
+    {
+      cookies: {
+        get: () => null, // Admin client doesn't need cookies
+        set: () => {},   // Admin client doesn't set cookies
+        remove: () => {} // Admin client doesn't remove cookies
+      },
+      auth: {
+        persistSession: false // Don't persist admin sessions
+      }
+    }
+  );
 }

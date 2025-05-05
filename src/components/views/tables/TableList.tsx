@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useViewMode } from '@/context/view-mode-context';
+import { useAuth } from '@/hooks/use-auth';
 import { 
   Card, 
   CardContent, 
@@ -26,19 +27,20 @@ import {
   formatPrice, 
   formatDuration 
 } from "@/lib/tableUtils";
-import { hasAdminPermission } from "@/lib/rbac";
+import { WithPermission } from "@/components/ui/permission-button";
 import { StartSessionModal } from "@/components/modals/StartSessionModal";
 import { ConfirmDeleteModal } from "@/components/modals/ConfirmDeleteModal";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { ScheduleMaintenanceForm } from "@/components/views/tables/ScheduleMaintenanceForm";
 import Link from "next/link";
+import { Profile } from "@/hooks/use-auth";
 
 type TableWithSession = Table & {
   sessions: TableSession[];
 };
 
 type TableListProps = {
-  profile: any; // Replace with proper Profile type
+  profile: Profile | null;
   searchQuery?: string;
   statusFilter?: string;
   refreshKey?: number;
@@ -61,7 +63,9 @@ export function TableList({
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   
   const { viewMode } = useViewMode();
-  const isAdmin = hasAdminPermission(profile, viewMode);
+  const { hasPermissionClient } = useAuth();
+  const canEditTables = hasPermissionClient("tables", "edit");
+  const canDeleteTables = hasPermissionClient("tables", "delete");
   
   // Function to fetch tables data
   const fetchTables = async () => {
@@ -250,7 +254,7 @@ export function TableList({
     return (
       <div className="my-8 text-center p-8 border border-dashed rounded-lg">
         <p className="text-muted-foreground mb-4">No tables found.</p>
-        {isAdmin && (
+        {canEditTables && (
           <Link href="/dashboard/tables/new" passHref>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -263,133 +267,105 @@ export function TableList({
   }
 
   return (
-    <div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredTables.map((table) => {
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {loading ? (
+        <p>Loading tables...</p>
+      ) : filteredTables.length === 0 ? (
+        <p>No tables found. Try adjusting your filters or create a new table.</p>
+      ) : (
+        filteredTables.map((table) => {
           const activeSession = getActiveSession(table);
-          const isBusy = table.status === "BUSY" && !!activeSession;
-          
-          let sessionTime = 0;
-          let sessionCost = 0;
-          
-          if (isBusy && activeSession) {
-            sessionTime = calculateSessionDuration(activeSession);
-            sessionCost = calculateSessionCost(activeSession, table);
-          }
+          const isTableActive = !!activeSession;
           
           return (
-            <Card key={table.id} className="overflow-hidden">
-              <CardHeader className={`
-                ${table.status === "AVAILABLE" ? "bg-green-100" : ""}
-                ${table.status === "BUSY" ? "bg-red-100" : ""}
-                ${table.status === "MAINTENANCE" ? "bg-yellow-100" : ""}
-              `}>
+            <Card key={table.id} className={`overflow-hidden ${isTableActive ? 'border-green-400 border-2' : ''}`}>
+              <CardHeader className="pb-2">
                 <CardTitle className="flex justify-between items-center">
                   <span>{table.name}</span>
-                  <span className="text-sm font-normal">
-                    {table.status || "AVAILABLE"}
-                  </span>
+                  {table.status === "MAINTENANCE" && (
+                    <span className="text-xs bg-yellow-200 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded">
+                      Maintenance
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
               
-              <CardContent className="p-4">
-                <div className="text-sm">
-                  <div className="flex justify-between mb-2">
-                    <span>Hourly Rate:</span>
-                    <span>{formatPrice(Number(table.hourlyRate) || 0)}</span>
-                  </div>
-                  
-                  {isBusy && (
-                    <>
-                      <div className="flex justify-between mb-2">
-                        <span>Session Time:</span>
-                        <span>{formatDuration(sessionTime)}</span>
-                      </div>
-                      <div className="flex justify-between font-semibold">
-                        <span>Current Cost:</span>
-                        <span>{formatPrice(sessionCost)}</span>
-                      </div>
-                    </>
+              <CardContent className="pb-2">
+                <div className="text-sm text-muted-foreground">
+                  <div>Type: {table.type}</div>
+                  <div>Rate: {formatPrice(table.hourlyRate)}/hr</div>
+                  {isTableActive && activeSession && (
+                    <div className="mt-2 text-green-600 dark:text-green-400">
+                      <div>Duration: {formatDuration(calculateSessionDuration(activeSession))}</div>
+                      <div>Current Cost: {formatPrice(calculateSessionCost(activeSession, table.hourlyRate))}</div>
+                    </div>
                   )}
                 </div>
               </CardContent>
               
-              <CardFooter className="flex justify-between p-4 pt-0 gap-2">
-                {!isBusy ? (
+              <CardFooter className="flex flex-wrap gap-2 pt-2">
+                {isTableActive ? (
                   <Button 
+                    size="sm" 
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => endSession(table.id)}
+                  >
+                    <StopCircle className="mr-1 h-4 w-4" /> End
+                  </Button>
+                ) : (
+                  <Button 
+                    size="sm" 
+                    variant="default" 
                     className="flex-1"
                     onClick={() => handleStartSession(table)}
                     disabled={table.status === "MAINTENANCE"}
                   >
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Session
-                  </Button>
-                ) : (
-                  <Button 
-                    className="flex-1"
-                    variant="destructive"
-                    onClick={() => endSession(table.id)}
-                  >
-                    <StopCircle className="h-4 w-4 mr-2" />
-                    End Session
+                    <Play className="mr-1 h-4 w-4" /> Start
                   </Button>
                 )}
                 
-                {isAdmin && (
-                  <div className="flex gap-2">
-                    <Dialog open={maintenanceDialogOpen && selectedTable?.id === table.id} onOpenChange={(open) => !open && setMaintenanceDialogOpen(false)}>
-                      <DialogTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          disabled={isBusy}
-                          onClick={() => handleScheduleMaintenance(table)}
-                          title="Schedule Maintenance"
-                        >
-                          <WrenchIcon className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-lg">
-                        {selectedTable && (
-                          <ScheduleMaintenanceForm
-                            tableId={selectedTable.id}
-                            tableName={selectedTable.name}
-                            companyId={selectedTable.companyId}
-                            onSuccess={() => {
-                              setMaintenanceDialogOpen(false);
-                              fetchTables();
-                            }}
-                            onCancel={() => setMaintenanceDialogOpen(false)}
-                          />
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                    
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={() => router.push(`/dashboard/tables/${table.id}`)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      disabled={isBusy}
-                      onClick={() => handleDeleteTable(table)}
-                    >
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                <WithPermission sectionKey="tables" action="edit">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleScheduleMaintenance(table)}
+                  >
+                    <WrenchIcon className="mr-1 h-4 w-4" />
+                    {table.status === "MAINTENANCE" ? "Update" : "Maintain"}
+                  </Button>
+                </WithPermission>
+                
+                <WithPermission sectionKey="tables" action="edit">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    asChild
+                  >
+                    <Link href={`/dashboard/tables/${table.id}/edit`}>
+                      <Edit className="mr-1 h-4 w-4" /> Edit
+                    </Link>
+                  </Button>
+                </WithPermission>
+                
+                <WithPermission sectionKey="tables" action="delete">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleDeleteTable(table)}
+                  >
+                    <Trash className="mr-1 h-4 w-4" /> Delete
+                  </Button>
+                </WithPermission>
               </CardFooter>
             </Card>
           );
-        })}
-      </div>
-
-      {/* Modals */}
+        })
+      )}
+      
       <StartSessionModal
         isOpen={sessionModalOpen}
         onClose={() => setSessionModalOpen(false)}
@@ -402,8 +378,21 @@ export function TableList({
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={deleteTable}
         title="Delete Table"
-        description="Are you sure you want to delete this table? This action cannot be undone and will remove all associated data."
+        message={`Are you sure you want to delete ${selectedTable?.name}? This action cannot be undone.`}
       />
+      
+      <Dialog open={maintenanceDialogOpen} onOpenChange={setMaintenanceDialogOpen}>
+        <DialogContent>
+          <ScheduleMaintenanceForm
+            table={selectedTable}
+            onClose={() => setMaintenanceDialogOpen(false)}
+            onSuccess={() => {
+              setMaintenanceDialogOpen(false);
+              fetchTables();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 
