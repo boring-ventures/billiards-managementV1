@@ -31,10 +31,27 @@ export default function DashboardClient() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        // Ensure we have a valid client before calling getSession
+        const client = supabase();
+        
+        // Check if client has auth property before calling getSession
+        if (!client || !client.auth) {
+          console.error("Supabase client or auth is not available");
+          setIsLoadingAuth(false);
+          router.push("/sign-in");
+          return;
+        }
+        
+        const { data, error } = await client.auth.getSession();
+        
+        if (error) {
+          console.error("Error getting session:", error);
+          router.push("/sign-in");
+        }
         
         // No session, redirect immediately
-        if (!data.session) {
+        if (!data || !data.session) {
+          console.log("No active session found, redirecting to sign-in");
           router.push("/sign-in");
         }
         
@@ -42,6 +59,7 @@ export default function DashboardClient() {
       } catch (error) {
         console.error("Auth check error:", error);
         setIsLoadingAuth(false);
+        router.push("/sign-in");
       }
     };
     

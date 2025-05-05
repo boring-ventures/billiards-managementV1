@@ -200,7 +200,16 @@ export const getSupabaseClient = () => {
 export const supabase = (() => {
   // For client-side
   if (typeof window !== 'undefined') {
-    return () => browserClientInstance || getSupabaseClient();
+    // Return a function that always returns a valid client
+    return () => {
+      // If we already have an instance, return it
+      if (browserClientInstance && browserClientInstance.auth) {
+        return browserClientInstance;
+      }
+      
+      // Otherwise initialize a new instance and return it
+      return getSupabaseClient();
+    };
   }
   
   // For server-side

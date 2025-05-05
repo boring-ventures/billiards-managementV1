@@ -93,7 +93,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // This ensures only one GoTrueClient instance exists throughout the app
   const supabase = useMemo(() => {
     try {
-      return getSupabaseClient();
+      const client = getSupabaseClient();
+      
+      // Verify that the client has auth methods before returning
+      if (!client || !client.auth || typeof client.auth.getSession !== 'function') {
+        console.error("Invalid Supabase client - missing auth methods");
+        return null;
+      }
+      
+      return client;
     } catch (error) {
       console.error("Failed to initialize Supabase client:", error);
       // Return a placeholder to prevent errors
@@ -172,6 +180,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Try-catch to handle potential errors in getSession
       let sessionData;
       try {
+        // Verify auth object exists before calling getSession
+        if (!supabase.auth || typeof supabase.auth.getSession !== 'function') {
+          throw new Error('Auth object missing or invalid');
+        }
+        
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
         sessionData = data;

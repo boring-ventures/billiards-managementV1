@@ -33,7 +33,14 @@ export async function getAuthSession() {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    const { data, error } = await supabase().auth.getSession();
+    // Get supabase client and validate it has auth methods
+    const client = supabase();
+    if (!client || !client.auth || typeof client.auth.getSession !== 'function') {
+      console.error('Invalid Supabase client - missing auth methods');
+      return null;
+    }
+
+    const { data, error } = await client.auth.getSession();
     if (error) {
       console.error('Session error in getAuthSession:', error.message);
       return null;
@@ -151,8 +158,15 @@ export async function getCurrentUser(): Promise<User | null> {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
+    // Get supabase client and validate it has auth methods
+    const client = supabase();
+    if (!client || !client.auth || typeof client.auth.getSession !== 'function') {
+      console.error('Invalid Supabase client - missing auth methods');
+      return null;
+    }
+    
     // Get current session from Supabase
-    const { data, error } = await supabase().auth.getSession();
+    const { data, error } = await client.auth.getSession();
     
     if (error) {
       console.error('Session error:', error.message);
