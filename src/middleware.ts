@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@/lib/supabase'
+import { createSupabaseServerClient } from '@/lib/auth-server-utils'
 import { AUTH_TOKEN_KEY } from '@/lib/auth-client-utils'
 
 // Add timing utilities for performance monitoring that work in all environments
@@ -247,7 +248,7 @@ async function updateSessionAndCookies(request: NextRequest): Promise<NextRespon
     
     try {
       // Use our standardized server-side Supabase client
-      const supabase = createMiddlewareClient(request, response);
+      const supabase = createSupabaseServerClient(request);
       
       // Get the current session with timing
       getSessionTimer = startTimer();
