@@ -26,19 +26,33 @@ export default function DashboardClient() {
   const [ready, setReady] = useState(false);
   const [initialChecked, setInitialChecked] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [sessionCheckAttempts, setSessionCheckAttempts] = useState(0);
   
   // First, very quick check for authentication
   useEffect(() => {
     const checkSession = async () => {
       try {
+        // If we've already checked multiple times and still have issues, 
+        // we might need to redirect
+        if (sessionCheckAttempts > 3) {
+          console.error("Multiple session check attempts failed, redirecting to sign-in");
+          router.push("/sign-in");
+          return;
+        }
+        
         // Ensure we have a valid client before calling getSession
         const client = supabase();
         
         // Check if client has auth property before calling getSession
         if (!client || !client.auth) {
           console.error("Supabase client or auth is not available");
-          setIsLoadingAuth(false);
-          router.push("/sign-in");
+          setSessionCheckAttempts(prev => prev + 1);
+          
+          // Don't redirect immediately, wait a moment and retry
+          setTimeout(() => {
+            setIsLoadingAuth(false);
+            setIsLoadingAuth(true); // Trigger effect again
+          }, 1000);
           return;
         }
         
@@ -46,25 +60,64 @@ export default function DashboardClient() {
         
         if (error) {
           console.error("Error getting session:", error);
+          setSessionCheckAttempts(prev => prev + 1);
+          
+          // Retry after a delay instead of redirecting immediately
+          if (sessionCheckAttempts < 3) {
+            setTimeout(() => {
+              setIsLoadingAuth(false);
+              setIsLoadingAuth(true); // Trigger effect again
+            }, 1000);
+            return;
+          }
+          
           router.push("/sign-in");
+          return;
         }
         
-        // No session, redirect immediately
+        // No session, redirect after multiple attempts
         if (!data || !data.session) {
           console.log("No active session found, redirecting to sign-in");
+          setSessionCheckAttempts(prev => prev + 1);
+          
+          // Retry a couple of times before redirecting
+          if (sessionCheckAttempts < 3) {
+            setTimeout(() => {
+              setIsLoadingAuth(false);
+              setIsLoadingAuth(true); // Trigger effect again
+            }, 1000);
+            return;
+          }
+          
           router.push("/sign-in");
+          return;
         }
         
+        // Session found, continue to dashboard
         setIsLoadingAuth(false);
+        setSessionCheckAttempts(0); // Reset counter if successful
       } catch (error) {
         console.error("Auth check error:", error);
+        setSessionCheckAttempts(prev => prev + 1);
+        
+        // Retry a couple times
+        if (sessionCheckAttempts < 3) {
+          setTimeout(() => {
+            setIsLoadingAuth(false);
+            setIsLoadingAuth(true); // Trigger effect again
+          }, 1000);
+          return;
+        }
+        
         setIsLoadingAuth(false);
         router.push("/sign-in");
       }
     };
     
-    checkSession();
-  }, [router]);
+    if (isLoadingAuth) {
+      checkSession();
+    }
+  }, [router, isLoadingAuth, sessionCheckAttempts]);
   
   // Ensure we've verified the user and loaded profile before showing content
   useEffect(() => {

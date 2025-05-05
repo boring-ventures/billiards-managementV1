@@ -71,8 +71,18 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    // Explicitly set the session in the response with the auth API
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token
+    });
+    
     // Extract session data to manually set the auth cookie
     const { access_token, refresh_token, expires_at, expires_in } = data.session;
+    
+    // Get the Supabase project reference for cookie naming
+    const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/([^/]+)\.supabase\.co/)?.[1] || 'unknown';
+    const cookieName = `sb-${projectRef}-auth-token`;
     
     // Sanitize the user object to include only necessary fields
     const sanitizedUser = {
@@ -96,7 +106,18 @@ export async function POST(req: NextRequest) {
       user: sanitizedUser
     });
     
-    // Set the auth cookie that Supabase uses for session management
+    // Set an explicit session cookie (in addition to Supabase's handling)
+    response.cookies.set({
+      name: cookieName,
+      value: authCookieValue,
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true
+    });
+    
+    // Also set the general auth token
     response.cookies.set({
       name: AUTH_TOKEN_KEY,
       value: authCookieValue,
