@@ -232,7 +232,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
     
-    // Delete the item
+    // First, delete all related inventory transactions
+    await prisma.inventoryTransaction.deleteMany({
+      where: { itemId: id },
+    });
+    
+    // Then delete the item
     await prisma.inventoryItem.delete({
       where: { id },
     });
