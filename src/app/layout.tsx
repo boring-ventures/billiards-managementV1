@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { CompanyProvider } from "@/context/company-context";
 import { ViewModeProvider } from "@/context/view-mode-context";
-import { CookieDebugger } from '@/components/debug/CookieDebugger';
+// import { CookieDebugger } from '@/components/debug/CookieDebugger';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -51,7 +51,7 @@ export default function RootLayout({
               <ViewModeProvider>
                 {children}
                 <Toaster />
-                {process.env.NODE_ENV !== 'production' && <CookieDebugger />}
+                {/* {process.env.NODE_ENV !== 'production' && <CookieDebugger />} */}
               </ViewModeProvider>
             </CompanyProvider>
           </AuthProvider>

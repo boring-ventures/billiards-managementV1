@@ -48,9 +48,9 @@ function findBrowserAuthCookies(): string[] {
       .map(cookie => cookie.split('=')[0]);
     
     if (authCookies.length > 0) {
-      console.log(`[Browser] Found ${authCookies.length} auth cookies: ${authCookies.join(', ')}`);
+      //console.log(`[Browser] Found ${authCookies.length} auth cookies: ${authCookies.join(', ')}`);
     } else {
-      console.log(`[Browser] No auth cookies found with pattern: ${cookiePattern}`);
+      //console.log(`[Browser] No auth cookies found with pattern: ${cookiePattern}`);
     }
     
     return authCookies;
@@ -327,7 +327,7 @@ export const debugCookies = () => {
     
     // Specifically check for auth cookies
     const authCookies = findBrowserAuthCookies();
-    console.log(`[Browser] Auth cookies: ${authCookies.length > 0 ? authCookies.join(', ') : 'none'}`);
+    //console.log(`[Browser] Auth cookies: ${authCookies.length > 0 ? authCookies.join(', ') : 'none'}`);
     
     return cookies;
   } catch (error) {
